@@ -63,7 +63,7 @@ Built, in this order:
   description length, unique rule and skill names, no `allow` matching an organisation `deny`,
   MCP (Model Context Protocol) server URLs on the allowlist, no `CLAUDE.md` inside a plugin.
 - **B2 — The source layout and the merge.** One git repository for the organisation and team
-  levels, a manifest per product repository naming its team and pinned versions, and the merge
+  levels, a manifest per project repository naming its team and pinned versions, and the merge
   rules that say what a lower level may add and never override.
 - **B3 — The compiler, one vendor at a time, Claude Code first.** From the merged source: a
   plugin and marketplace repository for the team level, a `managed-settings.d/` drop-in for
@@ -79,8 +79,9 @@ Not built:
 
 - **N1 — A daemon that pushes.** Vendors pull; the root instruction file is read at launch; a
   process writing into every working tree is a security and support burden.
-- **N2 — A server with registration.** The source is a git repository; registering is cloning.
-- **N3 — An approval workflow.** A pull request with CODEOWNERS on the source repository.
+- **N2 — A server with registration.** The org repository is a git repository; registering is
+  cloning.
+- **N3 — An approval workflow.** A pull request with CODEOWNERS on the org repository.
 - **N4 — Enforcement.** The tool generates the managed settings file; it never pretends to
   enforce. Policy stays in the vendor's lock.
 - **N5 — A marketplace server, an MCP registry, an LLM gateway or an agent runtime.**
@@ -93,7 +94,7 @@ Not built:
 
 - Delivery latency and freshness are the vendor's: a change lands at the next session start or
   the vendor's next poll. The tool has no presence in a running session.
-- The project level is committed in the product repository, so it reaches cloud sessions, CI and
+- The project level is committed in the project repository, so it reaches cloud sessions, CI and
   every clone. Organisation, team and personal overlays are generated into the vendor's
   local-only slots or baked in (B4).
 - Review, history and blame come from git. Ownership of a level is a CODEOWNERS entry.
