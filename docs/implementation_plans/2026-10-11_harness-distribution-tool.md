@@ -29,14 +29,17 @@ committed instead of gitignored (D4).
 
 ## Terms
 
-- **Org repository** (`OrgRepository`): the one git repository per organisation that holds the
-  `declarations/` tree, with the organisation, team, project and user declarations, the labels
-  and the exceptions. People write there; the tool reads it. For the pilot, this repository.
-  The ADR says "the source repository" for the same thing.
-- **Product repository** (`ProductRepository`): any repository that holds software. Each one
-  carries a manifest (organisation, team, project, pinned org-repository version) and the files
-  the tool writes for it. The tool writes there. For the pilot, the siblings under
-  `~/GitHub/dani`.
+- **Product repository** (`ProductRepository`): the repository where this tool's own source lives
+  and is built and released from. Nothing from any organisation ever goes there.
+- **Org repository** (`OrgRepository`): the git repository an organisation links the tool to at
+  setup. It holds the `declarations/` tree, with the organisation, team, project and user
+  declarations, the labels and the exceptions. Every configuration change is pushed there, and
+  the tool checks everything against it. For the pilot, this repository.
+- **Project repository** (`ProjectRepository`): any repository that holds software and has a
+  project record in the org repository. It carries a manifest (organisation, project, pinned
+  org-repository version) and the files the tool writes for it. The agent reads its instructions
+  from this working tree, so the compiled output has to land here (D4). For the pilot, the
+  siblings under `~/GitHub/dani`.
 
 ## Decisions
 
@@ -59,12 +62,12 @@ committed instead of gitignored (D4).
   opens from `harness propose`. Review, history and blame come free; a tool-native workflow
   would re-implement them. The diagram [Propose a change to a level](#propose-a-change-to-a-level)
   shows it.
-- 💬 **D4 — Whether the generated files are committed in the product repository.** Re-opened
+- 💬 **D4 — Whether the generated files are committed in the project repository.** Re-opened
   2026-10-11 (M14). Both options start from one fact: the agent reads its files from the product
   repository's working tree, so the compiler's output must exist there on every machine. What
   is generated per repository is small: the manifest, the project-level output, `.mcp.json` and
   the settings that enable the org plugin. Organisation and team content travels as a plugin
-  through managed settings and needs no commit in any product repository. Options: (a) commit
+  through managed settings and needs no commit in any project repository. Options: (a) commit
   the generated files, marked as generated and with their hash in the manifest; a cloud session,
   a CI agent, a fresh clone and a client outside the organisation all see them without the tool
   ([what reaches a cloud session](#what-reaches-a-cloud-session)); the cost is derived files in
@@ -93,8 +96,9 @@ Decided in the 2026-10-11 discussion unless marked open. The ADR's B1 and B2 are
   two segments are the kind and the id. Ids are lowercase letters, digits and hyphens, so an
   address splits on dots without ambiguity.
 - A **context path** says what to resolve for one repository on one machine: the organisation
-  and the project from the committed manifest, the user from the machine, the teams from the
-  project record. It is assembled at sync time and never committed as a whole.
+  and the project from the nearest manifest, found by walking up from the working directory as
+  git finds `.git`, the user from the machine, the teams from the project record. It is
+  assembled at sync time and never committed as a whole.
 - A **declaration** is the unit: a skill, a rule, an MCP server, a hook, a permission set, a
   label category, an exception, a project record or a user record. Each has an address, a kind
   and a schema; the schema is what the lint checks.
@@ -113,7 +117,7 @@ declarations/
     teams/<team>/
       skills/ ...
     projects/<project>/
-      project.yaml                  the project record: teams, labels, fingerprint
+      project.yaml                  the project record: teams, labels, fingerprint, path
       skills/ ...
   users/<user>/
     user.yaml
@@ -166,8 +170,12 @@ project folder; the tool can emit that file from the records.
   lookup.
 - The fingerprint is the set of root commit hashes reachable from the default branch, sorted.
   It matches a clone that has no manifest yet and feeds the inventory. Several roots occur when
-  unrelated histories were merged; two records with one fingerprint are a lint error, and
-  identity falls back to the manifest.
+  unrelated histories were merged. A project record also carries its `path` inside the
+  repository, `.` for the root, so several projects can share one monorepo: two records with
+  one fingerprint and one path are a lint error, and identity falls back to the manifest.
+- A changed fingerprint, after a merged history or a rewrite, is reported by `sync` as drift
+  with an offer to update the record through `harness propose`. Identity holds through the
+  manifest throughout.
 - `init` refuses a folder without `.git`. It stages only the files it wrote, commits them with a
   fixed message and the command echoed, and offers `--no-commit`. Then it verifies: a new `HEAD`
   exists and `git status --porcelain` lists none of its files. If the commit fails, a pre-commit
@@ -181,7 +189,7 @@ project folder; the tool can emit that file from the records.
 | Store | Holds | Rule |
 |---|---|---|
 | Org repository | every declaration: labels, exceptions, project and user records included | shared truth, reviewed, with history |
-| Product repository | the manifest (organisation, project, pinned org-repository version) and the generated files (D4) | about this repository, so every clone has it |
+| Project repository | the manifest (organisation, project, pinned org-repository version) and the generated files (D4) | about this repository, so every clone has it |
 | Local state on the machine | user identity, clone paths, a cache of the org repository, last sync, drift cache | about this machine; no tokens, git's credential helper does auth |
 
 ### What the lint checks
@@ -191,7 +199,7 @@ Schema per kind; skill name equals folder; description length; unique id within 
 to an address; every skip of a `required` backed by a live exception; no exception without a
 reason, a warning without an end date; no `allow` matching an organisation `deny`; MCP server
 URLs on the allowlist; no `CLAUDE.md` inside a plugin; no personal declaration shadowing a
-`required` one; two project records with one fingerprint.
+`required` one; two project records with one fingerprint and one path.
 
 ## Dependency graph
 
@@ -375,7 +383,8 @@ Gate: the manifest, the merge rules and the slot map are written on this board a
   lists, exceptions and the resolution order in [Design](#design), approved 2026-10-11.
 - 🟢 **P1.3 — The slot map per agent tool is written.** [PENDING]
   Which file each kind lands in, for Claude Code first (the ADR's B3 lists the outputs), then
-  the tools D1 names. Blocked by D4.
+  the tools D1 names. A project may live in a subdirectory of a monorepo: its files go under its
+  `path`, and Claude Code loads a subdirectory's `CLAUDE.md` on demand. Blocked by D4.
 - ✅ **P1.4 — The validation rules are written.** [EXECUTED]
   [What the lint checks](#what-the-lint-checks), approved 2026-10-11.
 
@@ -417,10 +426,14 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
   that order, N1 to N6 not ([ADR](../decisions/2026-10-11_harness-tool-compiler-and-linter.md)).
   The decisions and phases above still carry the pre-ADR wording; aligning them waits for the
   user's go-ahead.
-- (2026-10-11) Terms "org repository" and "product repository" documented and the board's wording
+- (2026-10-11) Terms "org repository" and "project repository" documented and the board's wording
   aligned to them. Label detection parked as F1 in [future-ideas.md](../future-ideas.md).
 - (2026-10-11) Design written: address and context path, storage tree with teams referenced on
   projects, label registry, enforcement, exceptions, resolution order, identity and init with its
   failure path, the three stores, the lint checks. P1.1, P1.2 and P1.4 executed. D1, D2, D3 and
   D5 marked decided per the ADR; D4 re-opened with options; P2 split into the ADR's order.
   Left for the user: D4.
+- (2026-10-11) Terms set to the user's naming: product repository is this tool's own repository,
+  org repository the organisation's, project repository a repository that holds software. The
+  project record gained `path`, the manifest is found by walking up, and the fingerprint rule is
+  fingerprint plus path. The ADR's "source repository" aligned to "org repository".
