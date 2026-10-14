@@ -466,8 +466,18 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
 
 - ⏸️ **P2.1 — `reins init`, `sync`, `validate` and `propose` exist as a Go CLI with tests.**
   [DEFERRED] Split into P2.2 to P2.6 in the ADR's order.
-- 🟢 **P2.2 — The lint (B1) runs against [toolkit/](../../toolkit/) and this repository's
-  `.claude/`.** [PENDING] The declaration checks can start; the plugin checks wait for P1.3.
+- ✅ **P2.2 — The lint (B1) runs against [toolkit/](../../toolkit/) and this repository's
+  `.claude/`.** [EXECUTED] 2026-10-12. Module `github.com/Danidani23/ai-assisted-dev-tool`,
+  binary `cmd/reins`, packages `internal/address`, `declaration`, `lint` and `cli`; cobra and
+  yaml.v3 only; standard `testing`. Checks: the Agent Skills frontmatter fields, name grammar
+  and directory match, description and compatibility lengths, rule `paths` lists, allow rules a
+  deny rule makes dead, skills sharing a name, and the address of every file in a declarations
+  tree. Gate ran green: gofmt, `go vet ./...`, `go test ./...` over four packages;
+  `reins lint toolkit/skills` clean; `reins lint .claude` reports the one real error, the
+  `argument-hint` field in the older `adr` skill; `reins lint .` adds four warnings, `adr` and
+  `commit` existing in both `.claude/` and `toolkit/`. Both are the toolkit board's P2.4, the
+  migration of this repository's `.claude/`, left for the user. The plugin checks wait for P2.5,
+  where plugins first exist.
 - 🟢 **P2.3 — The bake (B4) copies the overlays into a repository that leaves the machine.**
   [PENDING] Closes the toolkit board's D6.
 - 🟢 **P2.4 — The manifest, the label registry and the merge (B2) exist in code, with `init`,
@@ -626,3 +636,6 @@ writes is read from the next session on, not in the same one.
   projects and users; O3 decided; cloud and CI in scope (O2); rollback required (P2.9); release
   and install drafted (P2.8). P3.1 rewritten as the full user experience with rollback.
 - (2026-10-12) The tool is named `reins`; command names on the board renamed. P2.8 approved.
+- (2026-10-12) P2.2 executed: `reins lint` exists with tests, gate green. Its first run found
+  the `argument-hint` field in this repository's older `adr` skill and the `adr` and `commit`
+  duplicates between `.claude/` and `toolkit/`; fixing them is the toolkit board's P2.4 (you).

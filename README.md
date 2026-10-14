@@ -24,6 +24,10 @@ teams? This repository collects the research and the decisions.
 - [docs/implementation_plans/](docs/implementation_plans/) — the live boards.
 - [docs/future-ideas.md](docs/future-ideas.md) — ideas parked on purpose, with what would make
   them current.
+- [cmd/reins/](cmd/reins/) and [internal/](internal/) — reins, the harness distribution tool:
+  a compiler and a linter for agent configuration, in Go. `go vet ./... && go test ./...` is
+  its gate ([ADR](docs/decisions/2026-10-11_harness-tool-compiler-and-linter.md),
+  [board](docs/implementation_plans/2026-10-11_harness-distribution-tool.md)).
 - [toolkit/](toolkit/) — the personal agent toolkit: global instructions and skills, and
   `install.sh`, which links them into `~/.claude/` for every repository on the machine
   ([ADR](docs/decisions/2026-10-10_personal-toolkit-open-formats.md),
