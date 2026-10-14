@@ -52,7 +52,8 @@ committed instead of gitignored (D4).
   [ADR](../decisions/2026-10-11_harness-tool-compiler-and-linter.md): an organisation with many
   teams, with the personal toolkit in this repository as the pilot. The symlinks of
   [install.sh](../../toolkit/install.sh) stay the delivery on this machine; the tool adds the
-  lint (B1) and the bake (B4) for repositories that leave it (the toolkit board's D6).
+  lint (B1) and the bake (B4) for repositories that leave it (the toolkit board's D6). Amended
+  2026-10-14: P2.10 moves the links into `reins config`, which retires `install.sh`.
 - ✅ **D2 — Pull at session start, not push from a daemon.** Decided 2026-10-11 (ADR, N1 and
   N2). A CLI run by a `SessionStart` hook or by hand; the org repository is git and
   "registering" is cloning it. Why: the root `CLAUDE.md` is read at launch and again only after
@@ -262,6 +263,40 @@ Three rules the table implies:
 | Org repository | every declaration: labels, exceptions, project and user records included | shared truth, reviewed, with history |
 | Project repository | committed: the manifest (organisation, project, pinned org-repository version), the `.gitignore` entries and `.claude/settings.json`; present but gitignored: every generated file (D4) | about this repository, so every clone has the committed part and `sync` rebuilds the rest |
 | Local state on the machine | user identity, clone paths, a cache of the org repository, last sync, drift cache | about this machine; no tokens, git's credential helper does auth |
+
+### Commands and local state
+
+Decided 2026-10-14. The verbs of `reins`, and the two files it keeps on a machine.
+
+- `reins config` sets up the machine: the user slug and the first organisation. Every command
+  that acts for a user refuses until it has run, with "run reins config first". Exempt, because
+  they run where no user exists: `lint`, which CI runs on the org repository, and `version`.
+- `reins org create` (interactive, P2.7), `org connect <remote>`, `org list`, `org use <slug>`,
+  `org disconnect`, `org destroy`. Disconnect removes the local registration and clone without
+  touching GitHub; destroy deletes the repository after an explicit confirmation, which only an
+  owner should ever do.
+- The active organisation decides only where commands without a repository context go: `init`
+  for a new project, `propose`, `label`. An initialised project is bound to the organisation its
+  manifest names, so `sync` never depends on which organisation is active.
+- `reins init` binds the current repository to a project: the manifest, the `.gitignore`
+  entries, `.claude/settings.json` with the hook, committed as its own commit, then the first
+  sync.
+- `reins sync` syncs the current repository and is refused with "run reins init" when it has no
+  manifest. `--all` syncs every project registered on this machine; `--project <slug>`,
+  repeatable, a selection; `--report` prints drift. A fresh clone that has a manifest but is not
+  in state is registered on first contact, which is how the inventory fills.
+- `reins lint <path>`, `reins propose`, `reins label create|rename|delete`, `reins uninstall`,
+  `reins reset`, `reins version`, `reins update`.
+
+Two files under `~/.reins/`, the folder overridable with `REINS_HOME`:
+
+- `config.yaml`, what the user chose, small and hand-editable: the user slug, the connected
+  organisations (UUID, slug, git remote) and which one is active. Never a secret: git's
+  credential helper and `gh` hold the tokens.
+- `state.yaml`, what the tool learned and owns: the clone path of each org repository under
+  `~/.reins/orgs/<uuid>/`, the registered project repositories on this machine with clone path,
+  address, fingerprint and last sync, and every link or copy placed into `~/.claude/`, so
+  `reset` removes exactly those.
 
 ### What the lint checks
 
@@ -476,8 +511,16 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
   `reins lint toolkit/skills` clean; `reins lint .claude` reports the one real error, the
   `argument-hint` field in the older `adr` skill; `reins lint .` adds four warnings, `adr` and
   `commit` existing in both `.claude/` and `toolkit/`. Both are the toolkit board's P2.4, the
-  migration of this repository's `.claude/`, left for the user. The plugin checks wait for P2.5,
+  migration of this repository's `.claude/`, done 2026-10-14. The plugin checks wait for P2.5,
   where plugins first exist.
+- 🟢 **P2.10 — `reins config`, the org verbs, and the user level into `~/.claude/`.** [PENDING]
+  Approved 2026-10-14, right after P2.2 because it retires `toolkit/install.sh`. `config`
+  writes `config.yaml`; `org connect`, `list`, `use` and `disconnect` manage the organisations
+  in it and their clones in state; the user level is placed into `~/.claude/` as links on macOS
+  and Linux and copies on Windows, refusing any target that is not its own, with every
+  placement recorded in state. `install.sh` is deleted in the same change and the toolkit
+  board's P2.2 becomes "run reins config". Source of the user level until P3.1: `toolkit/`,
+  given explicitly, never a silent default.
 - 🟢 **P2.3 — The bake (B4) copies the overlays into a repository that leaves the machine.**
   [PENDING] Closes the toolkit board's D6.
 - 🟢 **P2.4 — The manifest, the label registry and the merge (B2) exist in code, with `init`,
@@ -639,3 +682,5 @@ writes is read from the next session on, not in the same one.
 - (2026-10-12) P2.2 executed: `reins lint` exists with tests, gate green. Its first run found
   the `argument-hint` field in this repository's older `adr` skill and the `adr` and `commit`
   duplicates between `.claude/` and `toolkit/`; fixing them is the toolkit board's P2.4 (you).
+- (2026-10-14) Commands and local state decided and written; P2.10 added after P2.2. Parked
+  without recording: a scheduled `sync --all` as the polling form of "push from the top".
