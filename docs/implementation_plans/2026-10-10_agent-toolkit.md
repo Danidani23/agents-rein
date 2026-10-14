@@ -74,11 +74,15 @@ instructions (`/memory`, `/skills`).
   `local-dev` gained "Git in this repo" (branch, versions, scopes, state files). `go-cli`,
   `opentofu`, `cloudflare` stay as project rules: they name this project's files and functions.
   Its `CLAUDE.md` says where the global part comes from. Commit pending (you).
-- 🟢 **P2.4 — This repository's own `.claude/` is migrated.** [PENDING]
-  Delete the rules `communication`, `engineering-principles`, `strict-execution`, `git`,
-  `mermaid-diagrams` and the skills `commit`, `adr` (older copies of the toolkit). Keep the
-  `docs` rule, minus what the `implementation-plan` and `adr` skills now say. Update
-  `CLAUDE.md`.
+- ✅ **P2.4 — This repository's own `.claude/` is migrated.** [EXECUTED] 2026-10-14.
+  Deleted the rules `communication`, `engineering-principles`, `strict-execution`, `git`,
+  `mermaid-diagrams` (byte-identical to the toolkit skill) and the skills `commit`, `adr`
+  (older copies: the repo's `adr` still carried `argument-hint`). The `docs` rule keeps the
+  hierarchy, the reference and citation rules and the post-change checklist, and points at the
+  `adr`, `implementation-plan` and `mermaid-diagrams` skills for the rest. `CLAUDE.md` says
+  where the global part comes from. Gate: `reins lint .` reports 0 errors, 0 warnings;
+  `go test ./...` green. Until P2.2 runs `install.sh`, this repository has no copy of the global
+  policies at all.
 
 ## P3 — Migrate the other repositories
 
@@ -127,3 +131,6 @@ the project-specific lines kept in its own instructions, its `CLAUDE.md` index u
   machine: `install.sh` has not been run, `~/.claude/` holds no `CLAUDE.md` and no skill links,
   so `szlavik-tomi` and `w2going`, whose instructions already point at the toolkit, run without
   the global policies until P2.2 (you).
+- (2026-10-14) P2.4 executed: this repository's `.claude/` holds only the `docs` rule and the
+  permissions. `install.sh` is still not run (checked 2026-10-14), so this repository joins
+  `szlavik-tomi` and `w2going` in running without the global policies until P2.2 (you).
