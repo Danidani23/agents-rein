@@ -527,8 +527,16 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
   placement recorded in state. `install.sh` is deleted in the same change and the toolkit
   board's P2.2 becomes "run reins config". Source of the user level until P3.1: `toolkit/`,
   given explicitly, never a silent default.
-- 🟢 **P2.3 — The bake (B4) copies the overlays into a repository that leaves the machine.**
-  [PENDING] Closes the toolkit board's D6.
+- ⏸️ **P2.3 — The bake (B4) copies the overlays into a repository that leaves the machine.**
+  [DEFERRED] Replaced on 2026-10-15 by P2.11 (export): agent settings are not repository
+  settings, so nothing of them is ever committed into a project repository, not even as a copy
+  for someone who leaves the machine. The toolkit board's D6 is answered by export instead.
+- 💬 **P2.11 — `reins export` writes the agent settings as a zip, so people can hand them to
+  each other.** [PENDING] Decided in substance 2026-10-15; the shape to confirm: the zip holds
+  the Claude home layout, `CLAUDE.md`, `skills/<id>/`, `rules/<id>.md`, so someone without
+  reins unzips it into `~/.claude/` and someone with reins runs `reins import <zip>`, which
+  places it like `config` does and records every placement in state. Today the content is the
+  user level; inside a registered project it is everything the agent would see there.
 - 🟢 **P2.4 — The manifest, the label registry and the merge (B2) exist in code, with `init`,
   `label` and `propose`.** [PENDING]
 - 🟢 **P2.5 — The compiler for Claude Code (B3) emits the plugin and marketplace repository, the
@@ -692,3 +700,6 @@ writes is read from the next session on, not in the same one.
   without recording: a scheduled `sync --all` as the polling form of "push from the top".
 - (2026-10-15) P2.10 executed; the machine is configured and the toolkit is placed by `reins`.
   Left for the user: the commit; `w2going`'s `CLAUDE.md` still names `install.sh`.
+- (2026-10-15) The bake (P2.3) deferred in favour of export (P2.11). Open: whether a project
+  repository carries no reins file at all, which would retire the manifest, the committed
+  `.gitignore` entries and the committed hook (see the discussion of D4).

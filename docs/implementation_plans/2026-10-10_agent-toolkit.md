@@ -30,7 +30,9 @@
 - ✅ **D6 — Copy into repositories that leave the machine** (client repositories, cloud
   sessions). Decided 2026-10-12: the mechanism is the harness tool's bake, B4 in its
   [ADR](../decisions/2026-10-11_harness-tool-compiler-and-linter.md), tracked as P2.3 on the
-  [harness board](2026-10-11_harness-distribution-tool.md). P4.1 moves there.
+  [harness board](2026-10-11_harness-distribution-tool.md). P4.1 moves there. Amended
+  2026-10-15: the bake is deferred; the copy for someone who leaves the machine is
+  `reins export`, P2.11 there.
 
 ## Dependency graph
 

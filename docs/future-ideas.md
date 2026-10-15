@@ -40,3 +40,20 @@ not know which labels to choose. Detection is a convenience on top of it.
 
 **What would make it current.** More projects to label than one person can keep straight, or
 drift between declared labels and repository contents showing up in the inventory report (B5).
+
+## F2 — Chat history kept by reins
+
+Parked 2026-10-15 during the design of `reins export`
+([board](implementation_plans/2026-10-11_harness-distribution-tool.md), P2.11).
+
+**What it is.** Claude Code keeps session transcripts under `~/.claude/projects/<path>/`. The
+idea: reins keeps them too, so a developer's history follows them across machines and an
+organisation keeps a record.
+
+**Why parked, and the constraints already known.** Transcripts hold code, prompts and at times
+secrets, so they are never committed to the org repository, which is shared and reviewed. If
+kept at all, they go to object storage such as S3, encrypted, with access per user. Retention,
+who may read whose history and what the vendor already stores are open.
+
+**What would make it current.** A need to carry a session across machines, or an organisation's
+duty to retain agent interactions.
