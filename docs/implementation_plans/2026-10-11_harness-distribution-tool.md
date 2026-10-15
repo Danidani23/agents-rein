@@ -626,9 +626,10 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
   declarations under `declarations/organizations/dani/projects/w2going/`, and the generated
   files replace the committed ones (D4). Fingerprint today: one root commit, `1febe175`. Work
   inside `w2going` happens from a session there or by the user running the tool, never from a
-  session here. At that point this repository's own harness, `CLAUDE.md`,
-  `.claude/rules/docs.md` and `.claude/settings.json`, is untracked and becomes the project
-  level of `reins` in the org repository, written back by `sync` (decided 2026-10-15).
+  session here. This repository's own harness, `CLAUDE.md`, `.claude/rules/docs.md` and
+  `.claude/settings.json`, was untracked on 2026-10-15, before the first push; at the pilot it
+  becomes the project level of `reins` in the org repository, written back by `sync`. Until
+  then a fresh clone of this repository has no harness.
   Gate: a session in `w2going` lists the same rules and skills as before the
   migration, `sync --report` shows no drift, and the rollback leaves no trace. Blocked by P2.2
   to P2.5, P2.7 and P2.9.
@@ -772,3 +773,7 @@ writes is read from the next session on, not in the same one.
 - (2026-10-15) README: logo, the four-levels diagram. `.gitignore` added for this repository.
   Design: what guarantees non-contradiction between levels, structured policy proven, prose
   ordered with a precedence preamble. P3.1 untracks this repository's own harness.
+- (2026-10-15) Repository renamed to `reins`, module path with it. `CLAUDE.md` and `.claude/`
+  untracked and ignored before the first push; history to be cleaned of them (you). The links
+  in `~/.claude/` still point at the old folder: `reins config` rerun deferred by the user
+  until the collision discussion is settled.

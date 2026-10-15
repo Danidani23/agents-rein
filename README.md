@@ -157,5 +157,6 @@ AI-assisted development across many teams? Six questions, answered with sources 
   into the pilot's org repository when `reins sync` delivers the personal level per project
   ([ADR](docs/decisions/2026-10-10_personal-toolkit-open-formats.md),
   [board](docs/implementation_plans/2026-10-10_agent-toolkit.md)).
-- [CLAUDE.md](CLAUDE.md) and [.claude/](.claude/) — the harness this repository runs with: its
-  own documentation rule and permissions; the generic layer comes from the toolkit.
+- `CLAUDE.md` and `.claude/` — the harness this repository runs with, on each machine and not
+  committed, since agent settings are not repository settings. From the pilot on, `reins sync`
+  writes it; until then it is this machine's copy, and a fresh clone has none.
