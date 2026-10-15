@@ -32,7 +32,7 @@
   [ADR](../decisions/2026-10-11_harness-tool-compiler-and-linter.md), tracked as P2.3 on the
   [harness board](2026-10-11_harness-distribution-tool.md). P4.1 moves there. Amended
   2026-10-15: the bake is deferred; the copy for someone who leaves the machine is
-  `reins export`, P2.11 there.
+  `rein export`, P2.11 there.
 
 ## Dependency graph
 
@@ -71,7 +71,7 @@ instructions (`/memory`, `/skills`).
 - 🟢 **P2.1 — This repository is under git.** [PENDING] (you) `git init`, then the first
   commits.
 - ✅ **P2.2 — The toolkit is installed.** [EXECUTED] 2026-10-15 by
-  `reins config --user danielmolnar --user-level toolkit`, which replaced `install.sh`
+  `rein config --user danielmolnar --user-level toolkit`, which replaced `install.sh`
   (harness board P2.10): `~/.claude/CLAUDE.md` and ten skill links, `synced` and
   `reverse-engineer-anything` untouched, a second run reporting `ok`.
 - ✅ **P2.3 — `szlavik-tomi` is migrated (pilot).** [EXECUTED]
@@ -87,7 +87,7 @@ instructions (`/memory`, `/skills`).
   (older copies: the repo's `adr` still carried `argument-hint`). The `docs` rule keeps the
   hierarchy, the reference and citation rules and the post-change checklist, and points at the
   `adr`, `implementation-plan` and `mermaid-diagrams` skills for the rest. `CLAUDE.md` says
-  where the global part comes from. Gate: `reins lint .` reports 0 errors, 0 warnings;
+  where the global part comes from. Gate: `rein lint .` reports 0 errors, 0 warnings;
   `go test ./...` green. Until P2.2 runs `install.sh`, this repository has no copy of the global
   policies at all.
 
@@ -144,3 +144,5 @@ the project-specific lines kept in its own instructions, its `CLAUDE.md` index u
 - (2026-10-15) D5 decided and P2.2 executed through `reins config`; `install.sh` deleted. This
   repository, `szlavik-tomi` and `w2going` have the global policies again from their next
   session. `w2going`'s `CLAUDE.md` still names `install.sh` (you).
+- (2026-10-15) The harness tool was renamed to Agents Rein, command `rein`; entries above keep
+  the old name.

@@ -1,15 +1,15 @@
 <p>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/reins-logo-dark.svg">
-    <img src="docs/images/reins-logo.svg" alt="reins" width="240">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/rein-mark-dark.svg">
+    <img src="docs/images/rein-mark.svg" alt="Agents Rein" width="72">
   </picture>
 </p>
 
-# Reins
+# Agents Rein
 
-Reins keeps the settings of your AI coding agents in one place and brings them to every project
-you work in, whatever agent tool you use and whichever model provider it talks to. Switching
-tool or provider then changes nothing about how you work.
+Agents Rein keeps the settings of your AI coding agents in one place and brings them to every
+project you work in, whatever agent tool you use and whichever model provider it talks to.
+Switching tool or provider then changes nothing about how you work.
 
 Agent settings are the instructions, rules, skills, tool servers, hooks and permissions an
 agent reads before it does anything. Today they are scattered: copied into every repository,
@@ -27,12 +27,12 @@ drifting apart, written in one vendor's format, and lost when the repository cha
 ## How it works
 
 Settings are declarations in one git repository per organisation, the org repository, at four
-levels: organisation, team, project and user. Reins validates them (`reins lint`), resolves
+levels: organisation, team, project and user. Agents Rein validates them (`rein lint`), resolves
 which apply to a project, and writes them into each clone in the form the agent tool reads.
 
 ### What is what
 
-Engineers write the levels into the org repository; reins turns them into the harness of each
+Engineers write the levels into the org repository; rein turns them into the harness of each
 project clone; the agent reads the harness and works on the software.
 
 ```mermaid
@@ -44,7 +44,7 @@ graph TD
     P["📁 Project levels<br/>one per repository, labels decide what applies"]
     U["👤 User levels<br/>personal preferences, kept here too"]
   end
-  R["reins<br/>lints the declarations, resolves the levels for a project, writes the harness"]
+  R["rein<br/>lints the declarations, resolves the levels for a project, writes the harness"]
   subgraph CLONE["💻 Project repository clone, on each engineer's machine"]
     H["🧰 Harness, generated and never committed<br/>instructions, rules, skills, tool servers, hooks, permissions"]
     S["📄 The software, the only thing committed"]
@@ -56,7 +56,7 @@ graph TD
   T --> R
   P --> R
   U --> R
-  R -->|reins sync, at every session start| H
+  R -->|rein sync, at every session start| H
   H -->|is read by| A
   E -->|work with| A
   A -->|reads and edits| S
@@ -64,15 +64,15 @@ graph TD
 ```
 
 The principle: **agent settings are not repository settings.** A project repository contains
-the software alone. What reins writes into a clone is never committed; the only trace is a
-marked block in `.gitignore`. A fresh clone gets back on track with one `reins sync`. To hand
-your settings to someone, `reins export` makes a zip in reins's own format, and `reins import`
+the software alone. What rein writes into a clone is never committed; the only trace is a
+marked block in `.gitignore`. A fresh clone gets back on track with one `rein sync`. To hand
+your settings to someone, `rein export` makes a zip in rein's own format, and `rein import`
 places it for whatever agent the receiver uses.
 
 Declarations are written in open formats, AGENTS.md, Agent Skills and MCP, so another agent
 is another output of the compiler, not a rewrite of your settings. Which model provider or
-gateway a project talks to is one of the settings reins carries, set at the organisation level
-and overridable by a team or a project; the switch itself happens at the gateway, which reins
+gateway a project talks to is one of the settings rein carries, set at the organisation level
+and overridable by a team or a project; the switch itself happens at the gateway, which rein
 never replaces.
 
 ### The four levels
@@ -87,7 +87,7 @@ graph TD
   T["👥 Team level<br/>owned and reviewed by each team<br/>the team's stack conventions and skills, Go style, testing, deployment"]
   P["📁 Project level<br/>one per repository, owned by the teams on it<br/>what only this repository needs, its API conventions, its tool servers, plus its labels"]
   U["👤 User level<br/>owned by each engineer<br/>personal preferences, how the agent writes to you, your own skills"]
-  H["🧰 Harness of one clone<br/>the four levels resolved for that project and that engineer, written by reins sync"]
+  H["🧰 Harness of one clone<br/>the four levels resolved for that project and that engineer, written by rein sync"]
   O -->|"cascades, required holds below, default may be overridden"| T
   T -->|"cascades the same way"| P
   P -->|"cascades the same way"| U
@@ -99,8 +99,8 @@ graph TD
 ## Supported agents
 
 The agent is the program that reads your settings and acts; the harness is everything it reads
-before acting, which is what Reins manages. Reins is agent-agnostic by design, and the first
-agent is only the first.
+before acting, which is what Agents Rein manages. Agents Rein is agent-agnostic by design, and
+the first agent is only the first.
 
 | Agent | State |
 |---|---|
@@ -113,16 +113,16 @@ What exists today:
 
 | Command | What it does |
 |---|---|
-| `reins config` | Sets up this machine: your user slug, the agent reins writes for, and the folder your global instructions and skills come from, which it places into the agent's home folder. Asks when run in a terminal without flags. Every other command that acts for you refuses until it has run. |
-| `reins org connect <remote>`, `list`, `use <slug>`, `disconnect <slug>` | Clones an org repository and remembers it; lists the connected ones with the active one marked; switches; forgets one and removes its clone without touching the remote. |
-| `reins lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, and skills that share a name. Needs no config, so CI runs it on an org repository. |
-| `reins export [--out <path>]` | Writes your settings as a zip in reins's own exchange format: one level in the declarations layout, with a manifest that hashes every file. |
-| `reins import <zip>` | Verifies and lints an export, then places it for your agent. It never replaces a file it did not place itself. |
-| `reins version` | Prints the version. |
+| `rein config` | Sets up this machine: your user slug, the agent rein writes for, and the folder your global instructions and skills come from, which it places into the agent's home folder. Asks when run in a terminal without flags. Every other command that acts for you refuses until it has run. |
+| `rein org connect <remote>`, `list`, `use <slug>`, `disconnect <slug>` | Clones an org repository and remembers it; lists the connected ones with the active one marked; switches; forgets one and removes its clone without touching the remote. |
+| `rein lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, and skills that share a name. Needs no config, so CI runs it on an org repository. |
+| `rein export [--out <path>]` | Writes your settings as a zip in rein's own exchange format: one level in the declarations layout, with a manifest that hashes every file. |
+| `rein import <zip>` | Verifies and lints an export, then places it for your agent. It never replaces a file it did not place itself. |
+| `rein version` | Prints the version. |
 
-Planned, in the board's order: `reins init` and `reins sync`, which bind a clone to its project
-and write its harness; `reins org create` and `destroy`; `reins propose` and `reins review`;
-`reins label`; `reins reset`; `reins update`.
+Planned, in the board's order: `rein init` and `rein sync`, which bind a clone to its project
+and write its harness; `rein org create` and `destroy`; `rein propose` and `rein review`;
+`rein label`; `rein reset`; `rein update`.
 
 The reasoning is the [ADR](docs/decisions/2026-10-11_harness-tool-compiler-and-linter.md); the
 design, the decisions and what is next are on the
@@ -130,7 +130,7 @@ design, the decisions and what is next are on the
 with cobra and yaml.v3 as the only dependencies:
 
 ```bash
-go build -o reins ./cmd/reins
+go build -o rein ./cmd/rein
 go vet ./... && go test ./...
 ```
 
@@ -150,25 +150,25 @@ AI-assisted development across many teams? Six questions, answered with sources 
   inference.
 - **Q5 — Mixing providers.** Whether cloud and private inference can be mixed.
 - **Q6 — Adopt or build.** What exists, and what to build. The answer, adopt the vendor layers
-  and build only a compiler and a linter, is what Reins is.
+  and build only a compiler and a linter, is what Agents Rein is.
 
 ## Where things are
 
 - [docs/harness-management.md](docs/harness-management.md) — the findings, one section per
   question.
 - [docs/decisions/](docs/decisions/) — Architecture Decision Records, the immutable "why".
-- [docs/implementation_plans/](docs/implementation_plans/) — the live boards: one for Reins,
+- [docs/implementation_plans/](docs/implementation_plans/) — the live boards: one for Agents Rein,
   one for the personal toolkit.
 - [docs/future-ideas.md](docs/future-ideas.md) — ideas parked on purpose, with what would make
   them current.
-- [cmd/reins/](cmd/reins/) and [internal/](internal/) — the tool.
+- [cmd/rein/](cmd/rein/) and [internal/](internal/) — the tool.
 - [toolkit/](toolkit/) — the personal agent toolkit: global instructions and ten skills in open
-  formats, the content of the pilot. Today `reins config` places it into `~/.claude/`; it moves
-  into the pilot's org repository when `reins sync` delivers the personal level per project
+  formats, the content of the pilot. Today `rein config` places it into `~/.claude/`; it moves
+  into the pilot's org repository when `rein sync` delivers the personal level per project
   ([ADR](docs/decisions/2026-10-10_personal-toolkit-open-formats.md),
   [board](docs/implementation_plans/2026-10-10_agent-toolkit.md)).
 - `CLAUDE.md` and `.claude/` — the harness this repository runs with, on each machine and not
-  committed, since agent settings are not repository settings. From the pilot on, `reins sync`
+  committed, since agent settings are not repository settings. From the pilot on, `rein sync`
   writes it; until then it is this machine's copy, and a fresh clone has none.
 
 ## Licence
