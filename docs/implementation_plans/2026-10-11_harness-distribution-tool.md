@@ -368,8 +368,22 @@ Decided 2026-10-14. The verbs of `reins`, and the two files it keeps on a machin
   syncs every project registered on this machine; `--project <slug>`, repeatable, a selection;
   `--report` prints drift. A fresh clone is registered on its first sync, which is how the
   inventory fills.
-- `reins lint <path>`, `reins propose`, `reins label create|rename|delete`, `reins uninstall`,
-  `reins reset`, `reins version`, `reins update`.
+- `reins propose` delivers a change to the org repository as a pull request, which is the
+  proposal itself (D3): its creation time orders proposals, its state is the status, its thread
+  holds the review. Every value has a flag; without flags and with a terminal it asks, in
+  order: the level, listed from the active organisation's clone; the kind; the id, validated
+  and unique at that level; the enforcement and the selectors, chosen from the label registry;
+  the content, in `$EDITOR` on a template with the frontmatter pre-filled, or from `--file`.
+  Then it lints, runs `reins review`, and if nothing blocks: a branch named
+  `propose/<level>/<kind>/<id>-<hash>`, one commit, a push, and the pull request through `gh`,
+  with the lint and review summary in its description. The result is the pull request URL.
+  The hash is the content hash of the declaration. `reins propose list` shows the ledger with
+  each proposal's state read through `gh`. No proposals folder and no status file exist in the
+  org repository: those would be a second pull request system (decided 2026-10-15).
+- `reins review` takes a diff and judges it per the [review design](#review-of-prose-policies);
+  a resolved harness whose hash it already judged is not judged again.
+- `reins lint <path>`, `reins label create|rename|delete`, `reins uninstall`, `reins reset`,
+  `reins version`, `reins update`.
 
 Two files under `~/.reins/`, the folder overridable with `REINS_HOME`:
 
@@ -378,8 +392,9 @@ Two files under `~/.reins/`, the folder overridable with `REINS_HOME`:
   credential helper and `gh` hold the tokens.
 - `state.yaml`, what the tool learned and owns: the clone path of each org repository under
   `~/.reins/orgs/<uuid>/`, the registered project repositories on this machine with clone path,
-  address, fingerprint and last sync, and every link or copy placed into `~/.claude/`, so
-  `reset` removes exactly those.
+  address, fingerprint and last sync, every link or copy placed into `~/.claude/`, so
+  `reset` removes exactly those, and the proposal ledger: branch, content hash, time and pull
+  request URL of every proposal made from this machine.
 
 ### What the lint checks
 
@@ -628,7 +643,13 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
   Approved 2026-10-15, after P2.5 because it needs resolution. Takes a diff, resolves the
   affected projects, builds the judge prompts per the [review design](#review-of-prose-policies),
   prints structured, quoted findings; a contradiction exits 1. Run by `propose` locally and by
-  the org repository's CI as the required check, with the fixture set as its own test.
+  the org repository's CI as the required check, with the fixture set as its own test. The
+  judge is one model call, not an agent loop, reached through one of two backends named in
+  the `providers` declaration: `api`, a Messages-compatible endpoint with the key from the
+  environment or the CI secret, and `agent-cli`, the installed agent in non-interactive mode,
+  `claude -p` first, which uses the developer's own subscription locally. The pilot's default
+  is `agent-cli` locally and `api` in CI. A resolved harness is cached by hash and not judged
+  twice (amended 2026-10-15).
 - 🟢 **P2.4 — The manifest, the label registry and the merge (B2) exist in code, with `init`,
   `label` and `propose`.** [PENDING]
 - 🟢 **P2.5 — The compiler for Claude Code (B3) emits the plugin and marketplace repository, the
@@ -637,8 +658,14 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
 - 🟢 **P2.7 — `org create`, interactive (part of B2).** [PENDING] Approved 2026-10-12. Asks for
   name, description, GitHub owner and visibility; creates the GitHub repository through the `gh`
   CLI; scaffolds `declarations/` with the organisation record (UUID, slug), the seeded label
-  categories, CODEOWNERS and the lint workflow for CI; commits, pushes, and registers the
-  organisation in local state.
+  categories, CODEOWNERS and `.github/workflows/reins.yml`, which installs the pinned reins
+  release and runs `reins lint` and `reins review` on every pull request, posting findings as
+  review comments and a status; sets the judge's key as a repository secret with `gh secret
+  set`, read from the terminal and never stored by reins; writes the `providers` declaration
+  that names the judge's endpoint and model; protects `main` through the GitHub API with the
+  two checks required and a CODEOWNERS review required; commits, pushes, and registers the
+  organisation in local state. `org destroy` removes all of it with the repository (P2.9).
+  Amended 2026-10-15.
 - 🟢 **P2.8 — Release and install on macOS, Linux and Windows.** [PENDING] Approved 2026-10-12:
   GoReleaser builds for the three systems and both architectures, GitHub Releases as the
   source, a Homebrew tap for macOS and Linux, a Scoop bucket for Windows, `go install` for Go
@@ -820,3 +847,7 @@ writes is read from the next session on, not in the same one.
   the compiler. C1 (user level per organisation) and C2 (a clone matching two organisations is
   refused, `init --org` binds) decided. Tension severity taken as advisory, per the
   recommendation, the user having agreed to the design as a whole.
+- (2026-10-15) `propose` designed as an interactive flow that ends in a pull request, with a
+  local ledger instead of a proposals folder; `org create` deploys the workflow, the judge's
+  secret, the providers declaration and branch protection; `review` gains its two backends and
+  the cache by hash.
