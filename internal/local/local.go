@@ -44,9 +44,16 @@ type OrganizationRef struct {
 	Remote string `yaml:"remote"`
 }
 
+// AgentClaudeCode is the one agent this build writes for.
+const AgentClaudeCode = "claude-code"
+
+// SupportedAgents lists the agents reins can write settings for.
+var SupportedAgents = []string{AgentClaudeCode}
+
 // Config is what the user chose.
 type Config struct {
 	User            string            `yaml:"user"`
+	Agent           string            `yaml:"agent,omitempty"`
 	UserLevelSource string            `yaml:"user_level_source,omitempty"`
 	Organizations   []OrganizationRef `yaml:"organizations"`
 	Active          string            `yaml:"active,omitempty"`
@@ -62,11 +69,35 @@ func (config Config) Organization(slug string) (ref OrganizationRef, found bool)
 	return OrganizationRef{}, false
 }
 
-// Placement is one link or copy reins made in the Claude home.
+// Placement is one link or copy reins made in the Claude home. Owner is the
+// command that made it, config or import; a record without one is config's,
+// from before the field existed.
 type Placement struct {
 	Path   string `yaml:"path"`
 	Target string `yaml:"target"`
 	Mode   string `yaml:"mode"`
+	Owner  string `yaml:"owner,omitempty"`
+}
+
+// The commands that place files.
+const (
+	OwnerConfig = "config"
+	OwnerImport = "import"
+)
+
+// OwnedBy maps path to target for the placements of one owner.
+func (state State) OwnedBy(owner string) map[string]string {
+	known := map[string]string{}
+	for _, placed := range state.Placements {
+		recorded := placed.Owner
+		if recorded == "" {
+			recorded = OwnerConfig
+		}
+		if recorded == owner {
+			known[placed.Path] = placed.Target
+		}
+	}
+	return known
 }
 
 // Project is a project repository registered on this machine.
@@ -78,11 +109,20 @@ type Project struct {
 	LastSync     string `yaml:"last_sync,omitempty"`
 }
 
+// Import is an export unpacked on this machine.
+type Import struct {
+	Hash     string `yaml:"hash"`
+	Path     string `yaml:"path"`
+	FromUser string `yaml:"from_user,omitempty"`
+	Imported string `yaml:"imported"`
+}
+
 // State is what the tool learned and owns.
 type State struct {
 	Clones     map[string]string `yaml:"clones"`
 	Projects   []Project         `yaml:"projects"`
 	Placements []Placement       `yaml:"placements"`
+	Imports    []Import          `yaml:"imports,omitempty"`
 }
 
 // LoadConfig reads config.yaml; found is false when it does not exist yet.

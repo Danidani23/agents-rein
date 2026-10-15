@@ -28,10 +28,11 @@ type Status string
 
 // The outcomes of one target.
 const (
-	StatusLinked  Status = "linked"
-	StatusCopied  Status = "copied"
-	StatusOk      Status = "ok"
-	StatusRefused Status = "refused"
+	StatusLinked   Status = "linked"
+	StatusCopied   Status = "copied"
+	StatusReplaced Status = "replaced"
+	StatusOk       Status = "ok"
+	StatusRefused  Status = "refused"
 )
 
 // Pair is one target in the Claude home and the source it stands for.
@@ -100,10 +101,43 @@ func Plan(source string, claudeHome string) ([]Pair, error) {
 	return pairs, nil
 }
 
-// Apply makes each placement. known maps the paths of earlier placements to
-// their targets, so a copy made before is recognised and refreshed and a link
-// to a source that has since moved is re-pointed; anything else at a path is
-// refused, never replaced.
+// PlanLevel lists the pairs a level folder in the declarations layout yields
+// for Claude Code: rules/<id>.md to rules/<id>.md in the Claude home, where a
+// rule without paths loads in every session, and skills/<id> to skills/<id>.
+// CLAUDE.md is never a target.
+func PlanLevel(level string, claudeHome string) ([]Pair, error) {
+	absoluteLevel, err := filepath.Abs(level)
+	if err != nil {
+		return nil, err
+	}
+	var pairs []Pair
+	rules, err := filepath.Glob(filepath.Join(absoluteLevel, "rules", "*.md"))
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(rules)
+	for _, rule := range rules {
+		pairs = append(pairs, Pair{Path: filepath.Join(claudeHome, "rules", filepath.Base(rule)), Target: rule})
+	}
+	skills, err := filepath.Glob(filepath.Join(absoluteLevel, "skills", "*", "SKILL.md"))
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(skills)
+	for _, skillFile := range skills {
+		folder := filepath.Dir(skillFile)
+		pairs = append(pairs, Pair{Path: filepath.Join(claudeHome, "skills", filepath.Base(folder)), Target: folder})
+	}
+	if len(pairs) == 0 {
+		return nil, fmt.Errorf("%s holds no rules/<id>.md and no skills/<id>/SKILL.md", level)
+	}
+	return pairs, nil
+}
+
+// Apply makes each placement. known maps the paths of the placements the
+// calling command made before to their targets: those it may refresh, or
+// replace with a new target, reporting StatusReplaced. Anything else at a
+// path, another command's placement included, is refused, never replaced.
 func Apply(pairs []Pair, mode Mode, known map[string]string) []Outcome {
 	outcomes := make([]Outcome, 0, len(pairs))
 	for _, pair := range pairs {
@@ -115,6 +149,7 @@ func Apply(pairs []Pair, mode Mode, known map[string]string) []Outcome {
 func apply(pair Pair, mode Mode, known map[string]string) Outcome {
 	outcome := Outcome{Pair: pair, Mode: mode}
 	info, err := os.Lstat(pair.Path)
+	ownedTarget, owned := known[pair.Path]
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return outcome.create()
@@ -129,22 +164,34 @@ func apply(pair Pair, mode Mode, known map[string]string) Outcome {
 			outcome.Status = StatusOk
 			return outcome
 		}
-		if existing == known[pair.Path] {
+		if owned && existing == ownedTarget {
 			err = os.Remove(pair.Path)
 			if err != nil {
 				return outcome.refuse(err.Error())
 			}
-			return outcome.create()
+			return outcome.create().replaced()
 		}
-		return outcome.refuse("already a link to " + existing)
-	case mode == ModeCopy && known[pair.Path] == pair.Target:
+		return outcome.refuse("already a link to " + existing + "; not placed by this command")
+	case mode == ModeCopy && owned:
 		err = os.RemoveAll(pair.Path)
 		if err != nil {
 			return outcome.refuse(err.Error())
 		}
-		return outcome.create()
+		created := outcome.create()
+		if ownedTarget != pair.Target {
+			return created.replaced()
+		}
+		return created
 	}
-	return outcome.refuse("already exists and is not reins's own")
+	return outcome.refuse("already exists and was not placed by this command")
+}
+
+// replaced marks a successful placement that stood in for an earlier one.
+func (outcome Outcome) replaced() Outcome {
+	if outcome.Status != StatusRefused {
+		outcome.Status = StatusReplaced
+	}
+	return outcome
 }
 
 func (outcome Outcome) refuse(reason string) Outcome {

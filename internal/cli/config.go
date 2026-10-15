@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -16,7 +17,7 @@ import (
 )
 
 func newConfigCommand(env *environment) *cobra.Command {
-	var user, userLevel string
+	var user, userLevel, agent string
 	command := &cobra.Command{
 		Use:   "config",
 		Short: "Set up this machine: who you are and the source of your global instructions",
@@ -27,15 +28,16 @@ func newConfigCommand(env *environment) *cobra.Command {
 			"acts for a user refuses until config has run. Running it again is safe.",
 		Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			return runConfig(env, user, userLevel)
+			return runConfig(env, user, userLevel, agent)
 		},
 	}
 	command.Flags().StringVar(&user, "user", "", "your user slug: lowercase letters, digits and single hyphens")
+	command.Flags().StringVar(&agent, "agent", "", "the agent reins writes settings for; today only claude-code")
 	command.Flags().StringVar(&userLevel, "user-level", "", "folder holding global/AGENTS.md and skills/, placed into the Claude home")
 	return command
 }
 
-func runConfig(env *environment, user string, userLevel string) error {
+func runConfig(env *environment, user string, userLevel string, agent string) error {
 	home, err := local.Home()
 	if err != nil {
 		return crashedError{cause: err}
@@ -65,6 +67,16 @@ func runConfig(env *environment, user string, userLevel string) error {
 	if !address.IsSlug(user) {
 		return fmt.Errorf("user slug %q may only contain lowercase letters, digits and single hyphens", user)
 	}
+	if agent == "" {
+		agent = config.Agent
+	}
+	if agent == "" {
+		agent = local.AgentClaudeCode
+		fmt.Fprintf(env.out, "agent: %s, the only agent this build writes for\n", agent)
+	}
+	if !slices.Contains(local.SupportedAgents, agent) {
+		return fmt.Errorf("agent %q is not supported; this build writes for %s", agent, strings.Join(local.SupportedAgents, ", "))
+	}
 	claudeHome, err := placement.ClaudeHome()
 	if err != nil {
 		return crashedError{cause: err}
@@ -78,6 +90,7 @@ func runConfig(env *environment, user string, userLevel string) error {
 		return crashedError{cause: err}
 	}
 	config.User = user
+	config.Agent = agent
 	config.UserLevelSource = absoluteSource
 	err = local.SaveConfig(home, config)
 	if err != nil {
@@ -87,19 +100,15 @@ func runConfig(env *environment, user string, userLevel string) error {
 	if err != nil {
 		return crashedError{cause: err}
 	}
-	known := map[string]string{}
-	for _, placed := range state.Placements {
-		known[placed.Path] = placed.Target
-	}
 	refused := 0
-	for _, outcome := range placement.Apply(pairs, placement.ModeForSystem(), known) {
+	for _, outcome := range placement.Apply(pairs, placement.ModeForSystem(), state.OwnedBy(local.OwnerConfig)) {
 		if outcome.Status == placement.StatusRefused {
 			refused++
 			fmt.Fprintf(env.errOut, "refused  %s: %s\n", outcome.Path, outcome.Reason)
 			continue
 		}
 		fmt.Fprintf(env.out, "%-8s %s -> %s\n", outcome.Status, outcome.Path, outcome.Target)
-		state.Placements = recordPlacement(state.Placements, local.Placement{Path: outcome.Path, Target: outcome.Target, Mode: string(outcome.Mode)})
+		state.Placements = recordPlacement(state.Placements, local.Placement{Path: outcome.Path, Target: outcome.Target, Mode: string(outcome.Mode), Owner: local.OwnerConfig})
 	}
 	err = local.SaveState(home, state)
 	if err != nil {

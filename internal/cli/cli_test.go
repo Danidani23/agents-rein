@@ -309,3 +309,105 @@ func TestOrg(t *testing.T) {
 		}
 	})
 }
+
+func TestExportAndImport(t *testing.T) {
+	t.Run("both refuse before config", func(t *testing.T) {
+		isolate(t)
+		for _, arguments := range [][]string{{"export"}, {"import", "x.zip"}} {
+			code, _, errOut := run(arguments...)
+			if code != ExitRefused || !strings.Contains(errOut, "run reins config first") {
+				t.Fatalf("%v: code %d err %q", arguments, code, errOut)
+			}
+		}
+	})
+	t.Run("export writes the default name in the working directory", func(t *testing.T) {
+		isolate(t)
+		configure(t, userLevelSource(t))
+		workingDirectory := t.TempDir()
+		t.Chdir(workingDirectory)
+		code, out, errOut := run("export")
+		if code != ExitWorked || !strings.Contains(out, "1 rules, 1 skills") {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+		matches, _ := filepath.Glob(filepath.Join(workingDirectory, "reins-export-danielmolnar-*.zip"))
+		if len(matches) != 1 {
+			t.Fatalf("zip not written: %v", matches)
+		}
+	})
+	t.Run("export to a path, then import places rules and skills and records them", func(t *testing.T) {
+		reinsHome, claudeHome := isolate(t)
+		configure(t, userLevelSource(t))
+		zipPath := filepath.Join(t.TempDir(), "level.zip")
+		code, _, errOut := run("export", "--out", zipPath)
+		if code != ExitWorked {
+			t.Fatalf("export: code %d err %q", code, errOut)
+		}
+		// the receiver: a second machine with its own homes and a plain config
+		receiverReins := t.TempDir()
+		receiverClaude := filepath.Join(t.TempDir(), ".claude")
+		t.Setenv("REINS_HOME", receiverReins)
+		t.Setenv("CLAUDE_CONFIG_DIR", receiverClaude)
+		configure(t, userLevelSource(t))
+		_ = reinsHome
+		_ = claudeHome
+		code, out, errOut := run("import", zipPath)
+		if code != ExitRefused || !strings.Contains(out, "imported ") {
+			t.Fatalf("import: code %d out %q err %q", code, out, errOut)
+		}
+		resolved, err := os.Readlink(filepath.Join(receiverClaude, "rules", "global.md"))
+		if err != nil || !strings.HasPrefix(resolved, filepath.Join(receiverReins, "imports")) {
+			t.Fatalf("rule link %q err %v", resolved, err)
+		}
+		state, _ := os.ReadFile(filepath.Join(receiverReins, "state.yaml"))
+		if !strings.Contains(string(state), "imports:") || !strings.Contains(string(state), "rules/global.md") {
+			t.Fatalf("state %s", state)
+		}
+		// the receiver's own config already placed skills/commit, so the same skill id is refused
+		if !strings.Contains(errOut, "refused") || !strings.Contains(errOut, "skills/commit") || !strings.Contains(errOut, "1 targets refused") {
+			t.Fatalf("expected the same-named skill to be refused: out %q err %q", out, errOut)
+		}
+		resolved, err = os.Readlink(filepath.Join(receiverClaude, "skills", "commit"))
+		if err != nil || strings.Contains(resolved, "imports") {
+			t.Fatalf("config's skill link was replaced: %q err %v", resolved, err)
+		}
+		code, out, _ = run("import", zipPath)
+		if code != ExitRefused || !strings.Contains(out, "ok ") {
+			t.Fatalf("second import: code %d out %q", code, out)
+		}
+	})
+	t.Run("a zip that is not a reins export is refused", func(t *testing.T) {
+		isolate(t)
+		configure(t, userLevelSource(t))
+		plain := filepath.Join(t.TempDir(), "plain.zip")
+		writeFile(t, filepath.Dir(plain), "plain.zip", "not a zip")
+		code, _, errOut := run("import", plain)
+		if code != ExitRefused || !strings.Contains(errOut, "not a zip") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+	})
+	t.Run("an export with a lint error is refused and nothing is placed", func(t *testing.T) {
+		_, claudeHome := isolate(t)
+		bad := t.TempDir()
+		writeFile(t, bad, "global/AGENTS.md", "# Global\n")
+		writeFile(t, bad, "skills/commit/SKILL.md", "---\nname: commits\ndescription: d\n---\n")
+		configure(t, bad)
+		zipPath := filepath.Join(t.TempDir(), "bad.zip")
+		run("export", "--out", zipPath)
+		receiver := t.TempDir()
+		t.Setenv("REINS_HOME", receiver)
+		t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), ".claude"))
+		configure(t, userLevelSource(t))
+		code, _, errOut := run("import", zipPath)
+		if code != ExitRefused || !strings.Contains(errOut, "lint errors") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+		_ = claudeHome
+	})
+	t.Run("an unsupported agent in config is refused", func(t *testing.T) {
+		isolate(t)
+		code, _, errOut := run("config", "--user", "danielmolnar", "--user-level", userLevelSource(t), "--agent", "codex")
+		if code != ExitRefused || !strings.Contains(errOut, "not supported") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+	})
+}

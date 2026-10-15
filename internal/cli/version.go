@@ -2,9 +2,10 @@ package cli
 
 import (
 	"fmt"
-	"runtime/debug"
 
 	"github.com/spf13/cobra"
+
+	"github.com/Danidani23/reins/internal/version"
 )
 
 func newVersionCommand(env *environment) *cobra.Command {
@@ -13,12 +14,7 @@ func newVersionCommand(env *environment) *cobra.Command {
 		Short: "Print the reins version",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			version := "unknown"
-			info, ok := debug.ReadBuildInfo()
-			if ok && info.Main.Version != "" {
-				version = info.Main.Version
-			}
-			fmt.Fprintf(env.out, "reins %s\n", version)
+			fmt.Fprintf(env.out, "reins %s\n", version.String())
 			return nil
 		},
 	}

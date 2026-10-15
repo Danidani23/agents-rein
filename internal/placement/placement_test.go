@@ -63,6 +63,27 @@ func TestPlan(t *testing.T) {
 	})
 }
 
+func TestPlanLevel(t *testing.T) {
+	t.Run("rules and skills of a level become pairs, CLAUDE.md never", func(t *testing.T) {
+		level := t.TempDir()
+		writeFile(t, filepath.Join(level, "rules", "global.md"), "# Global\n")
+		writeFile(t, filepath.Join(level, "skills", "commit", "SKILL.md"), "---\nname: commit\ndescription: d\n---\n")
+		pairs, err := PlanLevel(level, "/claude")
+		if err != nil || len(pairs) != 2 {
+			t.Fatalf("pairs %v err %v", pairs, err)
+		}
+		if pairs[0].Path != filepath.Join("/claude", "rules", "global.md") || pairs[1].Path != filepath.Join("/claude", "skills", "commit") {
+			t.Fatalf("pairs %v", pairs)
+		}
+	})
+	t.Run("an empty level is refused", func(t *testing.T) {
+		_, err := PlanLevel(t.TempDir(), "/claude")
+		if err == nil {
+			t.Fatalf("expected an error")
+		}
+	})
+}
+
 func TestApply(t *testing.T) {
 	t.Run("links are made, then reported ok on the second run", func(t *testing.T) {
 		claudeHome := t.TempDir()
@@ -88,6 +109,18 @@ func TestApply(t *testing.T) {
 		content, _ := os.ReadFile(filepath.Join(claudeHome, "CLAUDE.md"))
 		if string(content) != "mine\n" {
 			t.Fatalf("file changed: %q", content)
+		}
+	})
+	t.Run("a link placed by another command is refused even though reins knows its target", func(t *testing.T) {
+		claudeHome := t.TempDir()
+		first := source(t)
+		firstPairs, _ := Plan(first, claudeHome)
+		Apply(firstPairs, ModeLink, nil)
+		second := source(t)
+		secondPairs, _ := Plan(second, claudeHome)
+		outcomes := statuses(Apply(secondPairs, ModeLink, nil))
+		if outcomes["CLAUDE.md"] != StatusRefused || outcomes["commit"] != StatusRefused {
+			t.Fatalf("outcomes %v", outcomes)
 		}
 	})
 	t.Run("a link to somewhere else is refused", func(t *testing.T) {
@@ -120,7 +153,7 @@ func TestApply(t *testing.T) {
 		newSource := source(t)
 		newPairs, _ := Plan(newSource, claudeHome)
 		moved := statuses(Apply(newPairs, ModeLink, known))
-		if moved["CLAUDE.md"] != StatusLinked || moved["commit"] != StatusLinked {
+		if moved["CLAUDE.md"] != StatusReplaced || moved["commit"] != StatusReplaced {
 			t.Fatalf("moved %v", moved)
 		}
 		resolved, err := os.Readlink(filepath.Join(claudeHome, "CLAUDE.md"))
@@ -150,6 +183,11 @@ func TestApply(t *testing.T) {
 		refreshed := statuses(Apply(pairs, ModeCopy, known))
 		if refreshed["CLAUDE.md"] != StatusCopied || refreshed["commit"] != StatusCopied {
 			t.Fatalf("refreshed %v", refreshed)
+		}
+		otherPairs, _ := Plan(source(t), claudeHome)
+		replaced := statuses(Apply(otherPairs, ModeCopy, known))
+		if replaced["CLAUDE.md"] != StatusReplaced {
+			t.Fatalf("replaced %v", replaced)
 		}
 	})
 }
