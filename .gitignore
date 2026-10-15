@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# scratch that never ships (docs rule)
+.tmp/
+
+# a local build of the tool, go build -o reins ./cmd/reins
+/reins
+
+# written by reins into a clone, never committed
+.claude/settings.local.json
+CLAUDE.local.md

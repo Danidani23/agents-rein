@@ -29,8 +29,13 @@ committed instead of gitignored (D4).
 
 ## Terms
 
+- **Agent**: the program that reads the settings and acts, Claude Code, Codex and the like.
+  Reins is agent-agnostic; Claude Code is the first agent it writes for.
+- **Harness**: everything an agent reads before it acts, instructions, rules, skills, tool
+  servers, hooks, permissions and provider settings. The harness is what reins manages; the
+  research document defines it the same way.
 - **reins** (`reins`): the tool's name, decided 2026-10-12. The thing you hold to steer a
-  harnessed team. Binary `cmd/reins`, module `github.com/Danidani23/ai-assisted-dev-tool`,
+  harnessed team. Binary `cmd/reins`, module `github.com/Danidani23/reins`,
   manifest and hook command named after it.
 - **Product repository** (`ProductRepository`): the repository where this tool's own source lives
   and is built and released from. Nothing from any organisation ever goes there. Decided
@@ -103,15 +108,17 @@ committed instead of gitignored (D4).
   vendor switch the tool regenerates the guidance into the new tool's format and the policy into
   that tool's equivalent where one exists ([Q4](../harness-management.md#harness-portability-across-tools)
   lists what is portable and what is not).
-- 💬 **D6 — Provider and gateway settings are declarations, not machine config.** Raised
-  2026-10-15. Which provider or gateway a project talks to, the model aliases and the allowed
-  providers are policy of a level, so they belong in the org repository as a `providers`
+- ✅ **D6 — Provider and gateway settings are declarations, not machine config.** Decided
+  2026-10-15: the organisation level sets the default and a team or a project overrides it,
+  unless the organisation marked it `required`. Which provider or gateway a project talks to,
+  the model aliases and the allowed providers are policy of a level, so they belong in the org
+  repository as a `providers`
   declaration kind at organisation, team or project level, `required` or `default` like any
   other, compiled into the vendor's `env` and model keys by P2.5. Never a token: the gateway URL
   travels, the credential stays in the user's keychain or environment. `reins config` holds
   nothing about providers, because a machine is not a level. Switching provider is then one
   change in the org repository that every project receives at its next sync; the routing itself
-  stays the gateway's job (ADR, N5). Recommendation: yes; the address grammar gains `providers`.
+  stays the gateway's job (ADR, N5). The address grammar gains `providers`.
 
 ## Design
 
@@ -203,6 +210,21 @@ project folder; the tool can emit that file from the records.
 - An exception is a declaration at the owner's level, `organizations.{org}.exceptions.{id}`,
   naming the declaration, the grantee, a reason and an optional end date. An expired exception
   is a lint error and the declaration applies again.
+
+Contradictions between levels, and what guarantees what (2026-10-15):
+
+- **Structured policy is proven, not read.** Permissions, hooks, tool servers and providers are
+  data, so the compiler and the lint decide contradictions mechanically: a team `allow` that an
+  organisation `deny` covers, a provider outside the organisation's allowed list, a hook that
+  replaces an organisation hook, a lower redeclaration of a `required` id are all errors, and
+  the harness is not written until they are gone. What the organisation must hold at any price
+  goes into the vendor's own lock, managed settings, where no level below can touch it (D5).
+- **Prose is ordered, not proven.** Two rules in words under different ids can still disagree,
+  and no lint reads meaning. The compiler writes the resolved instructions in level order,
+  organisation first, each level under its own heading, with a generated preamble that tells the
+  agent the precedence: a higher level's `required` rule wins over anything below it. Claude
+  Code's `/doctor prompt-audit`, which looks for contradictory instruction files, is the review
+  tool for the rest, and a model-judged consistency check in CI is a later option (Q6, evals).
 
 ### Resolution order
 
@@ -530,7 +552,7 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
 - ⏸️ **P2.1 — `reins init`, `sync`, `validate` and `propose` exist as a Go CLI with tests.**
   [DEFERRED] Split into P2.2 to P2.6 in the ADR's order.
 - ✅ **P2.2 — The lint (B1) runs against [toolkit/](../../toolkit/) and this repository's
-  `.claude/`.** [EXECUTED] 2026-10-12. Module `github.com/Danidani23/ai-assisted-dev-tool`,
+  `.claude/`.** [EXECUTED] 2026-10-12. Module `github.com/Danidani23/reins`,
   binary `cmd/reins`, packages `internal/address`, `declaration`, `lint` and `cli`; cobra and
   yaml.v3 only; standard `testing`. Checks: the Agent Skills frontmatter fields, name grammar
   and directory match, description and compatibility lengths, rule `paths` lists, allow rules a
@@ -604,7 +626,10 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
   declarations under `declarations/organizations/dani/projects/w2going/`, and the generated
   files replace the committed ones (D4). Fingerprint today: one root commit, `1febe175`. Work
   inside `w2going` happens from a session there or by the user running the tool, never from a
-  session here. Gate: a session in `w2going` lists the same rules and skills as before the
+  session here. At that point this repository's own harness, `CLAUDE.md`,
+  `.claude/rules/docs.md` and `.claude/settings.json`, is untracked and becomes the project
+  level of `reins` in the org repository, written back by `sync` (decided 2026-10-15).
+  Gate: a session in `w2going` lists the same rules and skills as before the
   migration, `sync --report` shows no drift, and the rollback leaves no trace. Blocked by P2.2
   to P2.5, P2.7 and P2.9.
 
@@ -741,3 +766,9 @@ writes is read from the next session on, not in the same one.
 - (2026-10-15) The `.gitignore` block carries a comment naming reins and asking for a commit;
   D6 raised: provider and gateway settings as a `providers` declaration kind. README reframed
   around Reins for one developer up to an organisation.
+- (2026-10-15) D6 decided with the cascade: organisation default, team and project override
+  unless required. README made agent-agnostic with a supported and planned agents table; agent
+  and harness defined in Terms.
+- (2026-10-15) README: logo, the four-levels diagram. `.gitignore` added for this repository.
+  Design: what guarantees non-contradiction between levels, structured policy proven, prose
+  ordered with a precedence preamble. P3.1 untracks this repository's own harness.
