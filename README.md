@@ -170,3 +170,7 @@ AI-assisted development across many teams? Six questions, answered with sources 
 - `CLAUDE.md` and `.claude/` — the harness this repository runs with, on each machine and not
   committed, since agent settings are not repository settings. From the pilot on, `reins sync`
   writes it; until then it is this machine's copy, and a fresh clone has none.
+
+## Licence
+
+Apache-2.0, see [LICENSE](LICENSE).

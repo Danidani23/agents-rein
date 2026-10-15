@@ -119,6 +119,11 @@ committed instead of gitignored (D4).
   nothing about providers, because a machine is not a level. Switching provider is then one
   change in the org repository that every project receives at its next sync; the routing itself
   stays the gateway's job (ADR, N5). The address grammar gains `providers`.
+- ✅ **D7 — Public repository under Apache-2.0.** Decided 2026-10-15. The source is public so
+  that the tap, the bucket, the install scripts and `go install` all point at one place and
+  companies can adopt it without legal friction; `LICENSE` holds the Apache-2.0 text. Timing:
+  after the pilot's first end-to-end run, so the first visitor sees something that works.
+  Until then the repository stays private and `go install` serves its one user.
 
 ## Design
 
@@ -168,7 +173,7 @@ be added or removed without moving files, and several teams can work on one proj
 ```text
 declarations/
   organizations/<org>/
-    organization.yaml               id, name, description
+    organization.yaml               id, name, description, minimum_reins_version
     labels/<category>.yaml          one file per category, listing its labels
     exceptions/<id>.yaml
     skills/  rules/  mcpservers/  hooks/  permissions/
@@ -692,11 +697,22 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
   two checks required and a CODEOWNERS review required; commits, pushes, and registers the
   organisation in local state. `org destroy` removes all of it with the repository (P2.9).
   Amended 2026-10-15.
-- 🟢 **P2.8 — Release and install on macOS, Linux and Windows.** [PENDING] Approved 2026-10-12:
-  GoReleaser builds for the three systems and both architectures, GitHub Releases as the
-  source, a Homebrew tap for macOS and Linux, a Scoop bucket for Windows, `go install` for Go
-  users, and a `version` and an `update` command in the tool. macOS notarisation needs an Apple
-  developer account; without it, Homebrew is the path that avoids the Gatekeeper prompt.
+- 🟢 **P2.8 — Release and install on macOS, Linux and Windows.** [PENDING] Approved 2026-10-12,
+  made concrete 2026-10-15, placed right after P2.7 because the workflow `org create` deploys
+  installs a release. One GoReleaser workflow on a version tag builds every platform and
+  architecture and attaches the archives and a checksum file to a GitHub Release. Doors, all
+  pointing at that release: a Homebrew tap, `homebrew-tap` rewritten on each release, for
+  macOS and Linux; a Scoop bucket, its twin, for Windows; `install.sh` and `install.ps1` in
+  the repository, which detect the platform, download the matching archive, verify the
+  checksum and put the binary into `~/.local/bin`, for CI, cloud environments and everyone
+  without a package manager; `go install` for Go users; `pkg` and `msi` from the same
+  release for MDM rollouts. Later, once used: Homebrew core and winget. Updates: a
+  package-managed install is the manager's job and `reins update` prints its command,
+  recognising the install from where the binary lives; a script install is updated by
+  `reins update` itself, download, checksum, atomic replace; every install gets a daily
+  nudge, one line, cached in state. An organisation's `minimum_reins_version` makes the
+  update mandatory through `sync`. The hook `sync` writes calls the binary by absolute path.
+  No signing yet: package and `curl` installs carry no quarantine flag, and certificates cost.
 - 🟢 **P2.9 — Everything the tool does can be undone (part of B2).** [PENDING] Required
   2026-10-12 so the whole experience can be rerun from scratch: `org destroy` deletes the GitHub
   repository after an explicit confirmation and removes the local registration; `uninstall` in
@@ -881,3 +897,7 @@ writes is read from the next session on, not in the same one.
   exposed that an import re-pointed a link `config` had made; the placement rule is now "a
   command replaces only what the same command placed", recorded in the design. README gained a
   Commands section.
+- (2026-10-15) D7 decided: public under Apache-2.0 after the pilot's first run; `LICENSE`
+  added. P2.8 made concrete: the tap, the bucket, the two install scripts, update split by
+  install method, the daily nudge, `minimum_reins_version`, the absolute hook path, `pkg` and
+  `msi` for MDM; placed after P2.7.
