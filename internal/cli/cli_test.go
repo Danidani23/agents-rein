@@ -20,7 +20,7 @@ func TestOutputGoesThroughTheWriters(t *testing.T) {
 			if entry.IsDir() || !strings.HasSuffix(filePath, ".go") || strings.HasSuffix(filePath, "_test.go") {
 				return nil
 			}
-			if strings.HasSuffix(filepath.ToSlash(filePath), "cmd/reins/main.go") {
+			if strings.HasSuffix(filepath.ToSlash(filePath), "cmd/rein/main.go") {
 				return nil
 			}
 			content, err := os.ReadFile(filePath)
@@ -53,21 +53,21 @@ func writeFile(t *testing.T, root string, relative string, content string) {
 	}
 }
 
-// run executes reins with empty stdin, so every command sees no terminal.
+// run executes rein with empty stdin, so every command sees no terminal.
 func run(arguments ...string) (code int, out string, errOut string) {
 	var outBuffer, errBuffer bytes.Buffer
 	code = Run(arguments, strings.NewReader(""), &outBuffer, &errBuffer)
 	return code, outBuffer.String(), errBuffer.String()
 }
 
-// isolate points the reins home and the Claude home at temp folders.
-func isolate(t *testing.T) (reinsHome string, claudeHome string) {
+// isolate points the rein home and the Claude home at temp folders.
+func isolate(t *testing.T) (reinHome string, claudeHome string) {
 	t.Helper()
-	reinsHome = t.TempDir()
+	reinHome = t.TempDir()
 	claudeHome = filepath.Join(t.TempDir(), ".claude")
-	t.Setenv("REINS_HOME", reinsHome)
+	t.Setenv("REIN_HOME", reinHome)
 	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
-	return reinsHome, claudeHome
+	return reinHome, claudeHome
 }
 
 func userLevelSource(t *testing.T) string {
@@ -155,7 +155,7 @@ func TestVersion(t *testing.T) {
 	t.Run("version prints without config", func(t *testing.T) {
 		isolate(t)
 		code, out, _ := run("version")
-		if code != ExitWorked || !strings.HasPrefix(out, "reins ") {
+		if code != ExitWorked || !strings.HasPrefix(out, "rein ") {
 			t.Fatalf("code %d out %q", code, out)
 		}
 	})
@@ -163,16 +163,16 @@ func TestVersion(t *testing.T) {
 
 func TestConfig(t *testing.T) {
 	t.Run("flags configure the machine and place the user level", func(t *testing.T) {
-		reinsHome, claudeHome := isolate(t)
+		reinHome, claudeHome := isolate(t)
 		source := userLevelSource(t)
 		code, out, errOut := run("config", "--user", "danielmolnar", "--user-level", source)
 		if code != ExitWorked {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
-		if !strings.Contains(out, "linked") || !strings.Contains(out, "configured "+reinsHome) {
+		if !strings.Contains(out, "linked") || !strings.Contains(out, "configured "+reinHome) {
 			t.Fatalf("out %q", out)
 		}
-		_, err := os.Stat(filepath.Join(reinsHome, "config.yaml"))
+		_, err := os.Stat(filepath.Join(reinHome, "config.yaml"))
 		if err != nil {
 			t.Fatalf("config.yaml: %v", err)
 		}
@@ -225,20 +225,20 @@ func TestOrg(t *testing.T) {
 		isolate(t)
 		for _, arguments := range [][]string{{"org", "list"}, {"org", "connect", "x"}, {"org", "use", "x"}, {"org", "disconnect", "x"}} {
 			code, _, errOut := run(arguments...)
-			if code != ExitRefused || !strings.Contains(errOut, "run reins config first") {
+			if code != ExitRefused || !strings.Contains(errOut, "run rein config first") {
 				t.Fatalf("%v: code %d err %q", arguments, code, errOut)
 			}
 		}
 	})
 	t.Run("connect clones the repository, remembers it and makes it active", func(t *testing.T) {
-		reinsHome, _ := isolate(t)
+		reinHome, _ := isolate(t)
 		configure(t, userLevelSource(t))
 		remote := scratchOrgRepository(t, "acme")
 		code, out, errOut := run("org", "connect", remote)
 		if code != ExitWorked || !strings.Contains(out, "connected acme (Acme)") || !strings.Contains(out, "active organisation: acme") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
-		_, err := os.Stat(filepath.Join(reinsHome, "orgs", "0f8fad5b-d9cb-469f-a165-70867728950e", "declarations", "organizations", "acme", "organization.yaml"))
+		_, err := os.Stat(filepath.Join(reinHome, "orgs", "0f8fad5b-d9cb-469f-a165-70867728950e", "declarations", "organizations", "acme", "organization.yaml"))
 		if err != nil {
 			t.Fatalf("clone: %v", err)
 		}
@@ -252,7 +252,7 @@ func TestOrg(t *testing.T) {
 		}
 	})
 	t.Run("a repository without an organisation record is refused and nothing is kept", func(t *testing.T) {
-		reinsHome, _ := isolate(t)
+		reinHome, _ := isolate(t)
 		configure(t, userLevelSource(t))
 		remote := t.TempDir()
 		command := exec.Command("git", "init", "-q")
@@ -265,7 +265,7 @@ func TestOrg(t *testing.T) {
 		if code != ExitRefused || !strings.Contains(errOut, "not an org repository") {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
-		entries, _ := os.ReadDir(filepath.Join(reinsHome, "orgs"))
+		entries, _ := os.ReadDir(filepath.Join(reinHome, "orgs"))
 		if len(entries) != 0 {
 			t.Fatalf("leftover clones: %v", entries)
 		}
@@ -292,14 +292,14 @@ func TestOrg(t *testing.T) {
 		}
 	})
 	t.Run("disconnect removes the clone and the registration and leaves no active organisation", func(t *testing.T) {
-		reinsHome, _ := isolate(t)
+		reinHome, _ := isolate(t)
 		configure(t, userLevelSource(t))
 		run("org", "connect", scratchOrgRepository(t, "acme"))
 		code, out, errOut := run("org", "disconnect", "acme")
 		if code != ExitWorked || !strings.Contains(out, "disconnected acme") || !strings.Contains(out, "no active organisation") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
-		_, err := os.Stat(filepath.Join(reinsHome, "orgs", "0f8fad5b-d9cb-469f-a165-70867728950e"))
+		_, err := os.Stat(filepath.Join(reinHome, "orgs", "0f8fad5b-d9cb-469f-a165-70867728950e"))
 		if !os.IsNotExist(err) {
 			t.Fatalf("clone still there: %v", err)
 		}
@@ -315,7 +315,7 @@ func TestExportAndImport(t *testing.T) {
 		isolate(t)
 		for _, arguments := range [][]string{{"export"}, {"import", "x.zip"}} {
 			code, _, errOut := run(arguments...)
-			if code != ExitRefused || !strings.Contains(errOut, "run reins config first") {
+			if code != ExitRefused || !strings.Contains(errOut, "run rein config first") {
 				t.Fatalf("%v: code %d err %q", arguments, code, errOut)
 			}
 		}
@@ -329,13 +329,13 @@ func TestExportAndImport(t *testing.T) {
 		if code != ExitWorked || !strings.Contains(out, "1 rules, 1 skills") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
-		matches, _ := filepath.Glob(filepath.Join(workingDirectory, "reins-export-danielmolnar-*.zip"))
+		matches, _ := filepath.Glob(filepath.Join(workingDirectory, "rein-export-danielmolnar-*.zip"))
 		if len(matches) != 1 {
 			t.Fatalf("zip not written: %v", matches)
 		}
 	})
 	t.Run("export to a path, then import places rules and skills and records them", func(t *testing.T) {
-		reinsHome, claudeHome := isolate(t)
+		reinHome, claudeHome := isolate(t)
 		configure(t, userLevelSource(t))
 		zipPath := filepath.Join(t.TempDir(), "level.zip")
 		code, _, errOut := run("export", "--out", zipPath)
@@ -343,22 +343,22 @@ func TestExportAndImport(t *testing.T) {
 			t.Fatalf("export: code %d err %q", code, errOut)
 		}
 		// the receiver: a second machine with its own homes and a plain config
-		receiverReins := t.TempDir()
+		receiverRein := t.TempDir()
 		receiverClaude := filepath.Join(t.TempDir(), ".claude")
-		t.Setenv("REINS_HOME", receiverReins)
+		t.Setenv("REIN_HOME", receiverRein)
 		t.Setenv("CLAUDE_CONFIG_DIR", receiverClaude)
 		configure(t, userLevelSource(t))
-		_ = reinsHome
+		_ = reinHome
 		_ = claudeHome
 		code, out, errOut := run("import", zipPath)
 		if code != ExitRefused || !strings.Contains(out, "imported ") {
 			t.Fatalf("import: code %d out %q err %q", code, out, errOut)
 		}
 		resolved, err := os.Readlink(filepath.Join(receiverClaude, "rules", "global.md"))
-		if err != nil || !strings.HasPrefix(resolved, filepath.Join(receiverReins, "imports")) {
+		if err != nil || !strings.HasPrefix(resolved, filepath.Join(receiverRein, "imports")) {
 			t.Fatalf("rule link %q err %v", resolved, err)
 		}
-		state, _ := os.ReadFile(filepath.Join(receiverReins, "state.yaml"))
+		state, _ := os.ReadFile(filepath.Join(receiverRein, "state.yaml"))
 		if !strings.Contains(string(state), "imports:") || !strings.Contains(string(state), "rules/global.md") {
 			t.Fatalf("state %s", state)
 		}
@@ -375,7 +375,7 @@ func TestExportAndImport(t *testing.T) {
 			t.Fatalf("second import: code %d out %q", code, out)
 		}
 	})
-	t.Run("a zip that is not a reins export is refused", func(t *testing.T) {
+	t.Run("a zip that is not a rein export is refused", func(t *testing.T) {
 		isolate(t)
 		configure(t, userLevelSource(t))
 		plain := filepath.Join(t.TempDir(), "plain.zip")
@@ -394,7 +394,7 @@ func TestExportAndImport(t *testing.T) {
 		zipPath := filepath.Join(t.TempDir(), "bad.zip")
 		run("export", "--out", zipPath)
 		receiver := t.TempDir()
-		t.Setenv("REINS_HOME", receiver)
+		t.Setenv("REIN_HOME", receiver)
 		t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), ".claude"))
 		configure(t, userLevelSource(t))
 		code, _, errOut := run("import", zipPath)

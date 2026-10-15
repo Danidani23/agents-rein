@@ -8,28 +8,28 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/reins/internal/exchange"
-	"github.com/Danidani23/reins/internal/lint"
-	"github.com/Danidani23/reins/internal/local"
-	"github.com/Danidani23/reins/internal/placement"
-	"github.com/Danidani23/reins/internal/version"
+	"github.com/Danidani23/agents-rein/internal/exchange"
+	"github.com/Danidani23/agents-rein/internal/lint"
+	"github.com/Danidani23/agents-rein/internal/local"
+	"github.com/Danidani23/agents-rein/internal/placement"
+	"github.com/Danidani23/agents-rein/internal/version"
 )
 
 func newExportCommand(env *environment) *cobra.Command {
 	var out string
 	command := &cobra.Command{
 		Use:   "export",
-		Short: "Write your agent settings as a zip in the reins exchange format",
+		Short: "Write your agent settings as a zip in the rein exchange format",
 		Long: "export writes one level in the declarations layout, rules/<id>.md and skills/<id>/, with a\n" +
 			"manifest that hashes every file. Today it exports your user level; inside a registered\n" +
-			"project it will export everything the agent sees there. Someone with reins runs\n" +
-			"reins import on the zip; the layout is reins's own, not any agent's.",
+			"project it will export everything the agent sees there. Someone with rein runs\n" +
+			"rein import on the zip; the layout is rein's own, not any agent's.",
 		Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
 			return runExport(env, out)
 		},
 	}
-	command.Flags().StringVar(&out, "out", "", "where to write the zip; default reins-export-<user>-<date>.zip in the current directory")
+	command.Flags().StringVar(&out, "out", "", "where to write the zip; default rein-export-<user>-<date>.zip in the current directory")
 	return command
 }
 
@@ -39,7 +39,7 @@ func runExport(env *environment, out string) error {
 		return err
 	}
 	if config.UserLevelSource == "" {
-		return fmt.Errorf("no user level to export; run reins config with --user-level")
+		return fmt.Errorf("no user level to export; run rein config with --user-level")
 	}
 	entries, err := exchange.FromUserLevelSource(config.UserLevelSource)
 	if err != nil {
@@ -47,7 +47,7 @@ func runExport(env *environment, out string) error {
 	}
 	now := time.Now().UTC()
 	if out == "" {
-		out = fmt.Sprintf("reins-export-%s-%s.zip", config.User, now.Format("20060102"))
+		out = fmt.Sprintf("rein-export-%s-%s.zip", config.User, now.Format("20060102"))
 	}
 	manifest := exchange.Manifest{
 		Kind:        "user",
@@ -73,10 +73,10 @@ func newImportCommand(env *environment) *cobra.Command {
 	return &cobra.Command{
 		Use:   "import <zip>",
 		Short: "Place an exported level into your agent's settings",
-		Long: "import checks the manifest and every hash, unpacks the level under the reins home, lints\n" +
+		Long: "import checks the manifest and every hash, unpacks the level under the rein home, lints\n" +
 			"it, and places it for the agent named in your config: for Claude Code, rules into\n" +
 			"~/.claude/rules/ and skills into ~/.claude/skills/, as links on macOS and Linux and copies\n" +
-			"on Windows, every placement recorded so reins reset can remove it. It never replaces a\n" +
+			"on Windows, every placement recorded so rein reset can remove it. It never replaces a\n" +
 			"file it did not place itself.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
@@ -148,7 +148,7 @@ func runImport(env *environment, zipPath string) error {
 	rules, skills := exchange.Count(entries)
 	fmt.Fprintf(env.out, "imported %s from %s: %d rules, %d skills, for %s\n", hash[:12], manifest.User, rules, skills, config.Agent)
 	if refused > 0 {
-		return fmt.Errorf("%d targets refused; move them aside and run reins import again", refused)
+		return fmt.Errorf("%d targets refused; move them aside and run rein import again", refused)
 	}
 	return nil
 }

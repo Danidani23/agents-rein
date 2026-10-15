@@ -21,7 +21,7 @@ func TestRun(t *testing.T) {
 		}
 	})
 	t.Run("preflight refuses a program that is not installed", func(t *testing.T) {
-		err := Preflight("reins-no-such-program")
+		err := Preflight("rein-no-such-program")
 		if err == nil {
 			t.Fatalf("expected an error")
 		}

@@ -1,4 +1,4 @@
-module github.com/Danidani23/reins
+module github.com/Danidani23/agents-rein
 
 go 1.27
 

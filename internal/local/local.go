@@ -1,6 +1,6 @@
-// Package local holds what reins keeps on one machine: config.yaml, what the
+// Package local holds what rein keeps on one machine: config.yaml, what the
 // user chose, and state.yaml, what the tool learned. Both live under the
-// folder REINS_HOME names, by default ~/.reins. Neither ever holds a secret.
+// folder REIN_HOME names, by default ~/.rein. Neither ever holds a secret.
 package local
 
 import (
@@ -14,15 +14,15 @@ import (
 )
 
 // HomeVariable overrides the folder of the two files.
-const HomeVariable = "REINS_HOME"
+const HomeVariable = "REIN_HOME"
 
 const (
 	configFile = "config.yaml"
 	stateFile  = "state.yaml"
 )
 
-// ErrNotConfigured says reins config has never run on this machine.
-var ErrNotConfigured = errors.New("reins is not configured on this machine; run reins config first")
+// ErrNotConfigured says rein config has never run on this machine.
+var ErrNotConfigured = errors.New("rein is not configured on this machine; run rein config first")
 
 // Home is the folder of config.yaml and state.yaml.
 func Home() (string, error) {
@@ -34,7 +34,7 @@ func Home() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(userHome, ".reins"), nil
+	return filepath.Join(userHome, ".rein"), nil
 }
 
 // OrganizationRef is a connected organisation as config records it.
@@ -47,7 +47,7 @@ type OrganizationRef struct {
 // AgentClaudeCode is the one agent this build writes for.
 const AgentClaudeCode = "claude-code"
 
-// SupportedAgents lists the agents reins can write settings for.
+// SupportedAgents lists the agents rein can write settings for.
 var SupportedAgents = []string{AgentClaudeCode}
 
 // Config is what the user chose.
@@ -69,7 +69,7 @@ func (config Config) Organization(slug string) (ref OrganizationRef, found bool)
 	return OrganizationRef{}, false
 }
 
-// Placement is one link or copy reins made in the Claude home. Owner is the
+// Placement is one link or copy rein made in the Claude home. Owner is the
 // command that made it, config or import; a record without one is config's,
 // from before the field existed.
 type Placement struct {
@@ -171,7 +171,7 @@ func SaveState(home string, state State) error {
 	return write(filepath.Join(home, stateFile), state)
 }
 
-// Require loads the config and refuses when reins config has never run.
+// Require loads the config and refuses when rein config has never run.
 func Require(home string) (Config, error) {
 	config, found, err := LoadConfig(home)
 	if err != nil {

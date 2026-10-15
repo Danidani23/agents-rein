@@ -58,9 +58,9 @@ func TestState(t *testing.T) {
 
 func TestHome(t *testing.T) {
 	t.Run("the environment variable overrides the default", func(t *testing.T) {
-		t.Setenv(HomeVariable, "/elsewhere/reins")
+		t.Setenv(HomeVariable, "/elsewhere/rein")
 		home, err := Home()
-		if err != nil || home != "/elsewhere/reins" {
+		if err != nil || home != "/elsewhere/rein" {
 			t.Fatalf("home %q err %v", home, err)
 		}
 	})

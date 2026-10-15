@@ -23,7 +23,7 @@ import (
 )
 
 // ManifestName is the file at the zip root that describes the export.
-const ManifestName = "reins-export.yaml"
+const ManifestName = "rein-export.yaml"
 
 // FormatVersion is the version of the layout this build writes and reads.
 const FormatVersion = 1
@@ -200,7 +200,7 @@ func Read(zipPath string) (Manifest, []Entry, error) {
 	}
 	manifestContent, found := contents[ManifestName]
 	if !found {
-		return Manifest{}, nil, fmt.Errorf("%s is not a reins export: %s is missing", zipPath, ManifestName)
+		return Manifest{}, nil, fmt.Errorf("%s is not a rein export: %s is missing", zipPath, ManifestName)
 	}
 	var manifest Manifest
 	err = yaml.Unmarshal(manifestContent, &manifest)
@@ -208,7 +208,7 @@ func Read(zipPath string) (Manifest, []Entry, error) {
 		return Manifest{}, nil, fmt.Errorf("%s: %s: %w", zipPath, ManifestName, err)
 	}
 	if manifest.FormatVersion != FormatVersion {
-		return Manifest{}, nil, fmt.Errorf("%s: format version %d; this reins reads version %d", zipPath, manifest.FormatVersion, FormatVersion)
+		return Manifest{}, nil, fmt.Errorf("%s: format version %d; this rein reads version %d", zipPath, manifest.FormatVersion, FormatVersion)
 	}
 	delete(contents, ManifestName)
 	var entries []Entry

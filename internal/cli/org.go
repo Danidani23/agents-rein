@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/reins/internal/declaration"
-	"github.com/Danidani23/reins/internal/execute"
-	"github.com/Danidani23/reins/internal/local"
+	"github.com/Danidani23/agents-rein/internal/declaration"
+	"github.com/Danidani23/agents-rein/internal/execute"
+	"github.com/Danidani23/agents-rein/internal/local"
 )
 
 func newOrgCommand(env *environment) *cobra.Command {
@@ -17,7 +17,7 @@ func newOrgCommand(env *environment) *cobra.Command {
 		Use:   "org",
 		Short: "Connect to, list, switch and disconnect organisations",
 		Long: "An organisation is an org repository: a git repository holding declarations/. connect\n" +
-			"clones one into the reins home and remembers it; use makes one the active organisation,\n" +
+			"clones one into the rein home and remembers it; use makes one the active organisation,\n" +
 			"which only decides where commands without a repository context go; disconnect removes\n" +
 			"the clone and the registration and never touches the remote.",
 	}
@@ -67,7 +67,7 @@ func runOrgConnect(env *environment, remote string) error {
 	_, connected := config.Organization(organization.Slug)
 	if connected {
 		os.RemoveAll(temporary)
-		return fmt.Errorf("organisation %q is already connected; run reins org disconnect %s first", organization.Slug, organization.Slug)
+		return fmt.Errorf("organisation %q is already connected; run rein org disconnect %s first", organization.Slug, organization.Slug)
 	}
 	final := filepath.Join(orgsFolder, organization.ID)
 	err = os.RemoveAll(final)
@@ -114,7 +114,7 @@ func newOrgListCommand(env *environment) *cobra.Command {
 				return err
 			}
 			if len(config.Organizations) == 0 {
-				fmt.Fprintf(env.out, "no organisations connected; run reins org connect <remote>\n")
+				fmt.Fprintf(env.out, "no organisations connected; run rein org connect <remote>\n")
 				return nil
 			}
 			for _, ref := range config.Organizations {
@@ -141,7 +141,7 @@ func newOrgUseCommand(env *environment) *cobra.Command {
 			}
 			_, found := config.Organization(arguments[0])
 			if !found {
-				return fmt.Errorf("organisation %q is not connected; run reins org list", arguments[0])
+				return fmt.Errorf("organisation %q is not connected; run rein org list", arguments[0])
 			}
 			config.Active = arguments[0]
 			err = local.SaveConfig(home, config)
@@ -172,7 +172,7 @@ func runOrgDisconnect(env *environment, slug string) error {
 	}
 	ref, found := config.Organization(slug)
 	if !found {
-		return fmt.Errorf("organisation %q is not connected; run reins org list", slug)
+		return fmt.Errorf("organisation %q is not connected; run rein org list", slug)
 	}
 	state, err := local.LoadState(home)
 	if err != nil {

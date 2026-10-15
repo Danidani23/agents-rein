@@ -98,7 +98,7 @@ func TestApply(t *testing.T) {
 			t.Fatalf("link %q err %v", resolved, err)
 		}
 	})
-	t.Run("a file that is not reins's own is refused and left alone", func(t *testing.T) {
+	t.Run("a file that is not rein's own is refused and left alone", func(t *testing.T) {
 		claudeHome := t.TempDir()
 		writeFile(t, filepath.Join(claudeHome, "CLAUDE.md"), "mine\n")
 		pairs, _ := Plan(source(t), claudeHome)
@@ -111,7 +111,7 @@ func TestApply(t *testing.T) {
 			t.Fatalf("file changed: %q", content)
 		}
 	})
-	t.Run("a link placed by another command is refused even though reins knows its target", func(t *testing.T) {
+	t.Run("a link placed by another command is refused even though rein knows its target", func(t *testing.T) {
 		claudeHome := t.TempDir()
 		first := source(t)
 		firstPairs, _ := Plan(first, claudeHome)

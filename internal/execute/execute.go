@@ -1,4 +1,4 @@
-// Package execute is the one place reins runs another program. A failure
+// Package execute is the one place rein runs another program. A failure
 // names what ran and carries the program's own stderr, and no program it runs
 // may ever prompt.
 package execute

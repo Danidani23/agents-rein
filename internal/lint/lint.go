@@ -13,8 +13,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Danidani23/reins/internal/address"
-	"github.com/Danidani23/reins/internal/declaration"
+	"github.com/Danidani23/agents-rein/internal/address"
+	"github.com/Danidani23/agents-rein/internal/declaration"
 )
 
 // Finding is one problem the lint found.

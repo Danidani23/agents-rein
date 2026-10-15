@@ -1,4 +1,4 @@
-// Package version reports which build of reins is running.
+// Package version reports which build of rein is running.
 package version
 
 import "runtime/debug"

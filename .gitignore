@@ -4,11 +4,11 @@
 # scratch that never ships (docs rule)
 .tmp/
 
-# a local build of the tool, go build -o reins ./cmd/reins
-/reins
+# a local build of the tool, go build -o rein ./cmd/rein
+/rein
 
 # agent settings are not repository settings: this repository's own harness is
-# kept on each machine and, from the pilot on, written by reins sync
+# kept on each machine and, from the pilot on, written by rein sync
 /CLAUDE.md
 /CLAUDE.local.md
 /.claude/

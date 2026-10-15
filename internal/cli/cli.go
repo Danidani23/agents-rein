@@ -1,4 +1,4 @@
-// Package cli wires the reins commands. Every byte of output goes through the
+// Package cli wires the rein commands. Every byte of output goes through the
 // writers Run receives; nothing in this module writes to the process streams
 // directly except main, and a test enforces it, so a whole run can be captured.
 package cli
@@ -10,12 +10,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/reins/internal/execute"
-	"github.com/Danidani23/reins/internal/local"
+	"github.com/Danidani23/agents-rein/internal/execute"
+	"github.com/Danidani23/agents-rein/internal/local"
 )
 
 // Exit codes: 0 worked, 1 refused (a precondition or a check failed), 2
-// crashed (an error the command did not expect), 3 a program reins ran failed.
+// crashed (an error the command did not expect), 3 a program rein ran failed.
 const (
 	ExitWorked     = 0
 	ExitRefused    = 1
@@ -40,7 +40,7 @@ type environment struct {
 	errOut io.Writer
 }
 
-// Run executes reins with arguments and returns the exit code.
+// Run executes rein with arguments and returns the exit code.
 func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer) int {
 	env := &environment{in: in, out: out, errOut: errOut}
 	root := newRootCommand(env)
@@ -49,7 +49,7 @@ func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer) int 
 	if err == nil {
 		return ExitWorked
 	}
-	fmt.Fprintf(errOut, "reins: %v\n", err)
+	fmt.Fprintf(errOut, "rein: %v\n", err)
 	var crashed crashedError
 	if errors.As(err, &crashed) {
 		return ExitCrashed
@@ -80,9 +80,9 @@ func requireConfig() (home string, config local.Config, err error) {
 
 func newRootCommand(env *environment) *cobra.Command {
 	root := &cobra.Command{
-		Use:   "reins",
+		Use:   "rein",
 		Short: "Compile and lint the agent harness of an organisation",
-		Long: "reins turns the declarations of an org repository into the files each agent tool\n" +
+		Long: "rein turns the declarations of an org repository into the files each agent tool\n" +
 			"reads, and checks them against the specifications. It is a compiler and a linter,\n" +
 			"never a service.",
 		SilenceUsage:  true,

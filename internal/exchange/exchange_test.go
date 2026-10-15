@@ -93,7 +93,7 @@ func TestWriteAndRead(t *testing.T) {
 			t.Fatalf("bytes differ")
 		}
 	})
-	t.Run("a zip without the manifest is not a reins export", func(t *testing.T) {
+	t.Run("a zip without the manifest is not a rein export", func(t *testing.T) {
 		out := filepath.Join(t.TempDir(), "plain.zip")
 		err := Write(out, Manifest{}, []Entry{{Path: "rules/x.md", Content: []byte("x")}})
 		if err != nil {
@@ -104,7 +104,7 @@ func TestWriteAndRead(t *testing.T) {
 		raw := filepath.Join(t.TempDir(), "raw.zip")
 		writeRawZip(t, raw, entries)
 		_, _, err = Read(raw)
-		if err == nil || !strings.Contains(err.Error(), "not a reins export") {
+		if err == nil || !strings.Contains(err.Error(), "not a rein export") {
 			t.Fatalf("err %v", err)
 		}
 	})

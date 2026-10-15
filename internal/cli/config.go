@@ -11,9 +11,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/reins/internal/address"
-	"github.com/Danidani23/reins/internal/local"
-	"github.com/Danidani23/reins/internal/placement"
+	"github.com/Danidani23/agents-rein/internal/address"
+	"github.com/Danidani23/agents-rein/internal/local"
+	"github.com/Danidani23/agents-rein/internal/placement"
 )
 
 func newConfigCommand(env *environment) *cobra.Command {
@@ -32,7 +32,7 @@ func newConfigCommand(env *environment) *cobra.Command {
 		},
 	}
 	command.Flags().StringVar(&user, "user", "", "your user slug: lowercase letters, digits and single hyphens")
-	command.Flags().StringVar(&agent, "agent", "", "the agent reins writes settings for; today only claude-code")
+	command.Flags().StringVar(&agent, "agent", "", "the agent rein writes settings for; today only claude-code")
 	command.Flags().StringVar(&userLevel, "user-level", "", "folder holding global/AGENTS.md and skills/, placed into the Claude home")
 	return command
 }
@@ -116,7 +116,7 @@ func runConfig(env *environment, user string, userLevel string, agent string) er
 	}
 	fmt.Fprintf(env.out, "configured %s for user %s\n", home, user)
 	if refused > 0 {
-		return fmt.Errorf("%d targets refused; move them aside and run reins config again", refused)
+		return fmt.Errorf("%d targets refused; move them aside and run rein config again", refused)
 	}
 	return nil
 }
