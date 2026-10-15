@@ -10,19 +10,21 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/ai-assisted-dev-tool/internal/lint"
+	"github.com/Danidani23/ai-assisted-dev-tool/internal/execute"
+	"github.com/Danidani23/ai-assisted-dev-tool/internal/local"
 )
 
 // Exit codes: 0 worked, 1 refused (a precondition or a check failed), 2
-// crashed (an error the command did not expect).
+// crashed (an error the command did not expect), 3 a program reins ran failed.
 const (
-	ExitWorked  = 0
-	ExitRefused = 1
-	ExitCrashed = 2
+	ExitWorked     = 0
+	ExitRefused    = 1
+	ExitCrashed    = 2
+	ExitToolFailed = 3
 )
 
 // crashedError marks an error the command did not expect, such as an
-// unreadable directory; every other error is a refusal.
+// unreadable file; every other error is a refusal.
 type crashedError struct {
 	cause error
 }
@@ -31,9 +33,17 @@ func (crashed crashedError) Error() string {
 	return crashed.cause.Error()
 }
 
+// environment is what every command receives: the three streams.
+type environment struct {
+	in     io.Reader
+	out    io.Writer
+	errOut io.Writer
+}
+
 // Run executes reins with arguments and returns the exit code.
-func Run(arguments []string, out io.Writer, errOut io.Writer) int {
-	root := newRootCommand(out, errOut)
+func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer) int {
+	env := &environment{in: in, out: out, errOut: errOut}
+	root := newRootCommand(env)
 	root.SetArgs(arguments)
 	err := root.Execute()
 	if err == nil {
@@ -44,10 +54,31 @@ func Run(arguments []string, out io.Writer, errOut io.Writer) int {
 	if errors.As(err, &crashed) {
 		return ExitCrashed
 	}
+	var failure *execute.Failure
+	if errors.As(err, &failure) {
+		return ExitToolFailed
+	}
 	return ExitRefused
 }
 
-func newRootCommand(out io.Writer, errOut io.Writer) *cobra.Command {
+// requireConfig loads the machine's config or refuses. Every command that
+// acts for a user starts here; lint and version do not.
+func requireConfig() (home string, config local.Config, err error) {
+	home, err = local.Home()
+	if err != nil {
+		return "", local.Config{}, crashedError{cause: err}
+	}
+	config, err = local.Require(home)
+	if errors.Is(err, local.ErrNotConfigured) {
+		return "", local.Config{}, err
+	}
+	if err != nil {
+		return "", local.Config{}, crashedError{cause: err}
+	}
+	return home, config, nil
+}
+
+func newRootCommand(env *environment) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "reins",
 		Short: "Compile and lint the agent harness of an organisation",
@@ -57,38 +88,9 @@ func newRootCommand(out io.Writer, errOut io.Writer) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.SetOut(out)
-	root.SetErr(errOut)
+	root.SetOut(env.out)
+	root.SetErr(env.errOut)
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newLintCommand(out))
+	root.AddCommand(newConfigCommand(env), newOrgCommand(env), newLintCommand(env), newVersionCommand(env))
 	return root
-}
-
-func newLintCommand(out io.Writer) *cobra.Command {
-	return &cobra.Command{
-		Use:   "lint <path>",
-		Short: "Check the skills, rules and settings under a path",
-		Long: "lint walks the path and checks every SKILL.md against the Agent Skills specification,\n" +
-			"every rule file's frontmatter, every settings file's permission rules, and the skills\n" +
-			"that share a name. Exit 1 when it finds an error, 0 when only warnings or nothing.",
-		Args: cobra.ExactArgs(1),
-		RunE: func(command *cobra.Command, arguments []string) error {
-			report, err := lint.Run(arguments[0])
-			if err != nil {
-				return crashedError{cause: err}
-			}
-			for _, finding := range report.Findings {
-				location := finding.Path
-				if finding.Address != "" {
-					location += " (" + finding.Address + ")"
-				}
-				fmt.Fprintf(out, "%s: %s: %s\n", location, finding.Severity, finding.Message)
-			}
-			fmt.Fprintf(out, "%d errors, %d warnings\n", report.Errors(), report.Warnings())
-			if report.Errors() > 0 {
-				return fmt.Errorf("lint found %d errors", report.Errors())
-			}
-			return nil
-		},
-	}
 }
