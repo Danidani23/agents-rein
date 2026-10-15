@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/ai-assisted-dev-tool/internal/declaration"
-	"github.com/Danidani23/ai-assisted-dev-tool/internal/execute"
-	"github.com/Danidani23/ai-assisted-dev-tool/internal/local"
+	"github.com/Danidani23/reins/internal/declaration"
+	"github.com/Danidani23/reins/internal/execute"
+	"github.com/Danidani23/reins/internal/local"
 )
 
 func newOrgCommand(env *environment) *cobra.Command {

@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/ai-assisted-dev-tool/internal/execute"
-	"github.com/Danidani23/ai-assisted-dev-tool/internal/local"
+	"github.com/Danidani23/reins/internal/execute"
+	"github.com/Danidani23/reins/internal/local"
 )
 
 // Exit codes: 0 worked, 1 refused (a precondition or a check failed), 2

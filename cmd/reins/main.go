@@ -6,7 +6,7 @@ package main
 import (
 	"os"
 
-	"github.com/Danidani23/ai-assisted-dev-tool/internal/cli"
+	"github.com/Danidani23/reins/internal/cli"
 )
 
 func main() {

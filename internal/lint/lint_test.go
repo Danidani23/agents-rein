@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Danidani23/ai-assisted-dev-tool/internal/declaration"
+	"github.com/Danidani23/reins/internal/declaration"
 )
 
 func writeFile(t *testing.T, root string, relative string, content string) {

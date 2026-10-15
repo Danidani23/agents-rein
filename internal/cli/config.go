@@ -10,9 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/ai-assisted-dev-tool/internal/address"
-	"github.com/Danidani23/ai-assisted-dev-tool/internal/local"
-	"github.com/Danidani23/ai-assisted-dev-tool/internal/placement"
+	"github.com/Danidani23/reins/internal/address"
+	"github.com/Danidani23/reins/internal/local"
+	"github.com/Danidani23/reins/internal/placement"
 )
 
 func newConfigCommand(env *environment) *cobra.Command {

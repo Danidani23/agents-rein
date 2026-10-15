@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/ai-assisted-dev-tool/internal/lint"
+	"github.com/Danidani23/reins/internal/lint"
 )
 
 func newLintCommand(env *environment) *cobra.Command {

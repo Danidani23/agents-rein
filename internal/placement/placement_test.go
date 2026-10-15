@@ -108,6 +108,26 @@ func TestApply(t *testing.T) {
 			t.Fatalf("outcome %+v", outcomes[0])
 		}
 	})
+	t.Run("a link to the source recorded earlier is re-pointed when the source moved", func(t *testing.T) {
+		claudeHome := t.TempDir()
+		oldSource := source(t)
+		oldPairs, _ := Plan(oldSource, claudeHome)
+		Apply(oldPairs, ModeLink, nil)
+		known := map[string]string{}
+		for _, pair := range oldPairs {
+			known[pair.Path] = pair.Target
+		}
+		newSource := source(t)
+		newPairs, _ := Plan(newSource, claudeHome)
+		moved := statuses(Apply(newPairs, ModeLink, known))
+		if moved["CLAUDE.md"] != StatusLinked || moved["commit"] != StatusLinked {
+			t.Fatalf("moved %v", moved)
+		}
+		resolved, err := os.Readlink(filepath.Join(claudeHome, "CLAUDE.md"))
+		if err != nil || resolved != newPairs[0].Target {
+			t.Fatalf("link %q err %v", resolved, err)
+		}
+	})
 	t.Run("copies are made, refreshed when known, and refused when not", func(t *testing.T) {
 		claudeHome := t.TempDir()
 		pairs, _ := Plan(source(t), claudeHome)

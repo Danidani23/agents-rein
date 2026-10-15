@@ -1,4 +1,4 @@
-module github.com/Danidani23/ai-assisted-dev-tool
+module github.com/Danidani23/reins
 
 go 1.27
 

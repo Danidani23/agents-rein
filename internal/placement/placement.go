@@ -101,8 +101,9 @@ func Plan(source string, claudeHome string) ([]Pair, error) {
 }
 
 // Apply makes each placement. known maps the paths of earlier placements to
-// their targets, so a copy made before is recognised and refreshed; anything
-// else at a path is refused, never replaced.
+// their targets, so a copy made before is recognised and refreshed and a link
+// to a source that has since moved is re-pointed; anything else at a path is
+// refused, never replaced.
 func Apply(pairs []Pair, mode Mode, known map[string]string) []Outcome {
 	outcomes := make([]Outcome, 0, len(pairs))
 	for _, pair := range pairs {
@@ -127,6 +128,13 @@ func apply(pair Pair, mode Mode, known map[string]string) Outcome {
 		if existing == pair.Target {
 			outcome.Status = StatusOk
 			return outcome
+		}
+		if existing == known[pair.Path] {
+			err = os.Remove(pair.Path)
+			if err != nil {
+				return outcome.refuse(err.Error())
+			}
+			return outcome.create()
 		}
 		return outcome.refuse("already a link to " + existing)
 	case mode == ModeCopy && known[pair.Path] == pair.Target:
