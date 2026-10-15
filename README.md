@@ -66,7 +66,8 @@ graph TD
 The principle: **agent settings are not repository settings.** A project repository contains
 the software alone. What reins writes into a clone is never committed; the only trace is a
 marked block in `.gitignore`. A fresh clone gets back on track with one `reins sync`. To hand
-your settings to someone, `reins export` makes a zip.
+your settings to someone, `reins export` makes a zip in reins's own format, and `reins import`
+places it for whatever agent the receiver uses.
 
 Declarations are written in open formats, AGENTS.md, Agent Skills and MCP, so another agent
 is another output of the compiler, not a rewrite of your settings. Which model provider or
@@ -106,13 +107,22 @@ agent is only the first.
 | Claude Code | supported: instructions, rules, skills, tool servers, hooks, permissions |
 | Codex, Cursor, GitHub Copilot, Gemini CLI, OpenCode | planned: each reads AGENTS.md and Agent Skills natively ([findings, Q4](docs/harness-management.md#harness-portability-across-tools)), so each is another output of the same compiler |
 
-## Status
+## Commands
 
-| Command | State |
+What exists today:
+
+| Command | What it does |
 |---|---|
-| `reins lint <path>` | works: skills against the Agent Skills specification, rule files, permission rules, skills sharing a name |
-| `reins config`, `reins org connect`, `list`, `use`, `disconnect`, `reins version` | work: machine setup, organisations, the user level into the agent's home folder |
-| `reins init`, `reins sync`, `reins org create`, `reins export`, `reins reset` | next, in the board's order |
+| `reins config` | Sets up this machine: your user slug, the agent reins writes for, and the folder your global instructions and skills come from, which it places into the agent's home folder. Asks when run in a terminal without flags. Every other command that acts for you refuses until it has run. |
+| `reins org connect <remote>`, `list`, `use <slug>`, `disconnect <slug>` | Clones an org repository and remembers it; lists the connected ones with the active one marked; switches; forgets one and removes its clone without touching the remote. |
+| `reins lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, and skills that share a name. Needs no config, so CI runs it on an org repository. |
+| `reins export [--out <path>]` | Writes your settings as a zip in reins's own exchange format: one level in the declarations layout, with a manifest that hashes every file. |
+| `reins import <zip>` | Verifies and lints an export, then places it for your agent. It never replaces a file it did not place itself. |
+| `reins version` | Prints the version. |
+
+Planned, in the board's order: `reins init` and `reins sync`, which bind a clone to its project
+and write its harness; `reins org create` and `destroy`; `reins propose` and `reins review`;
+`reins label`; `reins reset`; `reins update`.
 
 The reasoning is the [ADR](docs/decisions/2026-10-11_harness-tool-compiler-and-linter.md); the
 design, the decisions and what is next are on the

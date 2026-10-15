@@ -333,6 +333,26 @@ Three rules the table implies:
   adds to that session's context ([hooks docs](https://code.claude.com/docs/en/hooks)). Later
   runs print nothing, because the files are already there when the session starts.
 
+### Exchange format
+
+Decided 2026-10-15. Agent settings travel between people and machines as a zip in reins's own
+layout, never in an agent's: one level in the declarations layout, `rules/<id>.md` and
+`skills/<id>/`, later `mcpservers/`, `hooks/`, `permissions/` and `providers/`, with no owner
+baked in, because the receiver places it as their own level. A manifest, `reins-export.yaml`,
+carries the format version, the kind of level, whose it was, the source, the time, the tool
+version and a hash per file. The export's identity is the hash over its files, so the same
+content has the same identity whenever it was written. From the toolkit layout, the global
+instructions become `rules/global.md`, a rule without `paths:` that loads in every session.
+
+`reins import` verifies the manifest and every hash, unpacks under `~/.reins/imports/<hash>/`,
+lints the level and refuses on errors, then places it for the agent named in config: for
+Claude Code, rules into `~/.claude/rules/` and skills into `~/.claude/skills/`, never
+`CLAUDE.md`, as links on macOS and Linux and copies on Windows, every placement recorded with
+its owner. The placement rule, decided the same day after an import silently re-pointed a link
+that `config` had made: a command replaces only what the same command placed before, and
+reports `replaced`; anything else at a target, another command's placement included, is refused.
+Another agent is refused until its emitter exists (P2.5).
+
 ### Where each thing is stored
 
 | Store | Holds | Rule |
@@ -345,8 +365,9 @@ Three rules the table implies:
 
 Decided 2026-10-14. The verbs of `reins`, and the two files it keeps on a machine.
 
-- `reins config` sets up the machine: the user slug and the first organisation. Every command
-  that acts for a user refuses until it has run, with "run reins config first". Exempt, because
+- `reins config` sets up the machine: the user slug, the agent reins writes for, `claude-code`
+  being the only value today, and the first organisation. Every command that acts for a user
+  refuses until it has run, with "run reins config first". Exempt, because
   they run where no user exists: `lint`, which CI runs on the org repository, and `version`.
   Its placement of the user level into `~/.claude/` is the interim until `sync` delivers the
   personal level per project (P3.1).
@@ -382,6 +403,8 @@ Decided 2026-10-14. The verbs of `reins`, and the two files it keeps on a machin
   org repository: those would be a second pull request system (decided 2026-10-15).
 - `reins review` takes a diff and judges it per the [review design](#review-of-prose-policies);
   a resolved harness whose hash it already judged is not judged again.
+- `reins export [--out <path>]` writes the [exchange format](#exchange-format), by default
+  `reins-export-<user>-<date>.zip` in the current directory; `reins import <zip>` places it.
 - `reins lint <path>`, `reins label create|rename|delete`, `reins uninstall`, `reins reset`,
   `reins version`, `reins update`.
 
@@ -630,12 +653,15 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
   [DEFERRED] Replaced on 2026-10-15 by P2.11 (export): agent settings are not repository
   settings, so nothing of them is ever committed into a project repository, not even as a copy
   for someone who leaves the machine. The toolkit board's D6 is answered by export instead.
-- 🟢 **P2.11 — `reins export` writes the agent settings as a zip, so people can hand them to
-  each other.** [PENDING] Approved 2026-10-15, shape confirmed: the zip holds
-  the Claude home layout, `CLAUDE.md`, `skills/<id>/`, `rules/<id>.md`, so someone without
-  reins unzips it into `~/.claude/` and someone with reins runs `reins import <zip>`, which
-  places it like `config` does and records every placement in state. Today the content is the
-  user level; inside a registered project it is everything the agent would see there.
+- ✅ **P2.11 — `reins export` writes the agent settings as a zip, so people can hand them to
+  each other.** [EXECUTED] 2026-10-15, in the [exchange format](#exchange-format) rather than
+  an agent's layout, as the user decided the same day. Packages `exchange` and `version`,
+  `PlanLevel` in `placement`, the `agent` field in config, the `owner` on placements. Gate:
+  gofmt, vet and tests over eight packages ran green, including an export of a scratch source
+  and its import into throwaway homes. The real export of this machine's toolkit and its
+  import were declined from the agent session and are left for the user, after `reins config`
+  is rerun with the new toolkit path. Today the content is the user level; inside a registered
+  project it will be everything the agent sees there, after `sync`.
 - 🟢 **P2.12 — `docs/reins.md`, the user guide.** [PENDING] Approved 2026-10-15. Install,
   `config`, `org`, `init`, `sync` with "getting back on track on a fresh clone", `export`,
   `reset`; written as each command lands, starting with what exists.
@@ -851,3 +877,7 @@ writes is read from the next session on, not in the same one.
   local ledger instead of a proposals folder; `org create` deploys the workflow, the judge's
   secret, the providers declaration and branch protection; `review` gains its two backends and
   the cache by hash.
+- (2026-10-15) P2.11 executed: export and import in reins's own exchange format. A test
+  exposed that an import re-pointed a link `config` had made; the placement rule is now "a
+  command replaces only what the same command placed", recorded in the design. README gained a
+  Commands section.
