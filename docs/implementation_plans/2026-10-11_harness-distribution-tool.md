@@ -184,7 +184,10 @@ declarations/
 ```
 
 Users keep their declarations here too: everyone is part of the organisation, every change is in
-one history, and the lint can see a personal declaration shadowing a required one. CODEOWNERS
+one history, and the lint can see a personal declaration shadowing a required one. A person
+in several organisations keeps one user level per organisation (C1, decided 2026-10-15), so
+each organisation lints it against its own rules; `export` and `import` copy a user level
+across. CODEOWNERS
 makes each user the reviewer of their own folder and the referenced teams the reviewers of a
 project folder; the tool can emit that file from the records.
 
@@ -226,6 +229,35 @@ Contradictions between levels, and what guarantees what (2026-10-15):
   Code's `/doctor prompt-audit`, which looks for contradictory instruction files, is the review
   tool for the rest, and a model-judged consistency check in CI is a later option (Q6, evals).
 
+### Review of prose policies
+
+Decided 2026-10-15. Prose contradictions are semantic, so no lint reads them; a judge model is
+the gate, before merge. Four rules make it precise and affordable:
+
+1. **Judge the compiled harness, not the tree.** A contradiction can only exist between
+   declarations that reach the same project at the same time. For a change, `reins review`
+   resolves every affected project and gives the judge, per project, the text an agent would
+   read, with each declaration's level, id and enforcement marked. A team change affects that
+   team's projects; an org change affects every project, which covers the downstream direction
+   at no extra cost. Identical resolved texts are deduplicated.
+2. **The rubric is the hierarchy, and every finding names the structured fix.** A lower rule
+   may add to or narrow an upper rule, never widen or negate it. Against a `default` upper
+   rule the fix is to redeclare that id at the lower level, an explicit override; against a
+   `required` rule the fix is an exception at the owner's level. The judge says which applies
+   and quotes both sentences, so conflicts move out of prose into mechanisms the lint proves.
+3. **Two severities.** A contradiction is a required status check and blocks the merge. A
+   tension, two rules a reader might misread together, is advisory and never blocks. On any
+   cross-level finding the CI requests review from the upper level's owners, whom CODEOWNERS
+   would not involve since the change touches only the lower level's paths.
+4. **Keep the judge honest.** Findings are structured and quoted. A fixture set of known
+   contradictory and compatible pairs runs against the judge whenever the rubric changes. The
+   judge's model and provider are an organisation setting under D6, so it runs through the
+   organisation's gateway, never with a token in CI.
+
+`reins propose` runs the review locally before opening the pull request; the org repository's
+CI runs it as the required check (P2.13). At runtime the compiled harness keeps its precedence
+preamble, and `/doctor prompt-audit` per clone is a later drift check.
+
 ### Resolution order
 
 1. Read the organisation and the project from the manifest, the user from the machine, the
@@ -248,8 +280,10 @@ Contradictions between levels, and what guarantees what (2026-10-15):
   repository, `.` for the root, so several projects can share one monorepo: two records with
   one fingerprint and one path are a lint error, and identity falls back to the manifest.
 - A changed fingerprint, after a merged history or a rewrite, is reported by `sync` as drift
-  with an offer to update the record through `reins propose`. Identity holds through the
-  manifest throughout.
+  with an offer to update the record through `reins propose`.
+- A clone whose fingerprint matches a project record in two connected organisations is refused
+  by `sync`, which names both; `reins init --org <slug>` binds it to one, recorded in local
+  state, never silently to the active organisation (C2, decided 2026-10-15).
 - `init` refuses a folder without `.git` and, since 2026-10-15, commits nothing: it creates or
   matches the project record, records the fingerprint once a root commit exists, extends
   `.gitignore` with the marked block and reports that change for the user to commit, writes
@@ -590,6 +624,11 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
 - 🟢 **P2.12 — `docs/reins.md`, the user guide.** [PENDING] Approved 2026-10-15. Install,
   `config`, `org`, `init`, `sync` with "getting back on track on a fresh clone", `export`,
   `reset`; written as each command lands, starting with what exists.
+- 🟢 **P2.13 — `reins review` judges a change against the levels it meets.** [PENDING]
+  Approved 2026-10-15, after P2.5 because it needs resolution. Takes a diff, resolves the
+  affected projects, builds the judge prompts per the [review design](#review-of-prose-policies),
+  prints structured, quoted findings; a contradiction exits 1. Run by `propose` locally and by
+  the org repository's CI as the required check, with the fixture set as its own test.
 - 🟢 **P2.4 — The manifest, the label registry and the merge (B2) exist in code, with `init`,
   `label` and `propose`.** [PENDING]
 - 🟢 **P2.5 — The compiler for Claude Code (B3) emits the plugin and marketplace repository, the
@@ -777,3 +816,7 @@ writes is read from the next session on, not in the same one.
   untracked and ignored before the first push; history to be cleaned of them (you). The links
   in `~/.claude/` still point at the old folder: `reins config` rerun deferred by the user
   until the collision discussion is settled.
+- (2026-10-15) Review of prose policies decided and written; P2.13 `reins review` added after
+  the compiler. C1 (user level per organisation) and C2 (a clone matching two organisations is
+  refused, `init --org` binds) decided. Tension severity taken as advisory, per the
+  recommendation, the user having agreed to the design as a whole.
