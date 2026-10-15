@@ -101,6 +101,10 @@ Not built:
   tool and access to the org repository. This bullet first read: "The project level is committed
   in the project repository, so it reaches cloud sessions, CI and every clone. Organisation, team
   and personal overlays are generated into the vendor's local-only slots or baked in (B4)."
+- Amended 2026-10-15 by D4 on the board, again: a project repository carries no reins file;
+  agent settings are not repository settings. The only trace is a marked block in `.gitignore`;
+  the hook and the project settings live in the uncommitted `.claude/settings.local.json`; the
+  manifest is replaced by the fingerprint. B4, the bake, is deferred in favour of `reins export`.
 - Review, history and blame come from git. Ownership of a level is a CODEOWNERS entry.
 - The source must stay vendor-neutral even while only Claude Code is emitted, or N6 cannot be
   revisited cheaply. Policy compiled for a second vendor will be lossy where rule semantics

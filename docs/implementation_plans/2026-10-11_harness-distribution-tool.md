@@ -82,6 +82,19 @@ committed instead of gitignored (D4).
   O1, whether a file the `SessionStart` hook writes is read in that same session. Option (a),
   committing the generated files, was the recommendation and was not chosen: derived files in
   every project's history, and churn on every project-level change.
+  Amended 2026-10-15: a project repository carries no reins file at all, since agent settings
+  are not repository settings. The manifest is gone; a clone is matched to its project record
+  by fingerprint. The only footprint is a marked block that `sync` keeps in `.gitignore`, naming
+  the generated paths and `.claude/settings.local.json`, which the user commits. The block opens
+  with a comment saying that reins wrote it, that agent settings live outside this repository,
+  and that the block is to be committed and not edited by hand. The
+  `SessionStart` hook, the project-level hooks, permissions and plugin keys live in
+  `.claude/settings.local.json`, written by `sync` and never committed, so they exist only in
+  registered clones; reins owns the keys it writes and never removes the approvals Claude Code
+  saved there. A fresh clone needs one explicit `reins sync`, which identifies the project by
+  fingerprint and writes the rest. The personal level is delivered per project the same way, so
+  two organisations on one machine never collide in `~/.claude/`; the placement `reins config`
+  makes today is the interim until then (P3.1).
 - ✅ **D5 — The tool merges guidance only; policy stays in the vendor's lock.** Decided
   2026-10-11 (ADR, N4). Permissions, bypass mode, MCP and model allowlists live in managed
   settings at the root-owned policy path, delivered by MDM, the admin console or the Claude apps
@@ -90,6 +103,15 @@ committed instead of gitignored (D4).
   vendor switch the tool regenerates the guidance into the new tool's format and the policy into
   that tool's equivalent where one exists ([Q4](../harness-management.md#harness-portability-across-tools)
   lists what is portable and what is not).
+- 💬 **D6 — Provider and gateway settings are declarations, not machine config.** Raised
+  2026-10-15. Which provider or gateway a project talks to, the model aliases and the allowed
+  providers are policy of a level, so they belong in the org repository as a `providers`
+  declaration kind at organisation, team or project level, `required` or `default` like any
+  other, compiled into the vendor's `env` and model keys by P2.5. Never a token: the gateway URL
+  travels, the credential stays in the user's keychain or environment. `reins config` holds
+  nothing about providers, because a machine is not a level. Switching provider is then one
+  change in the org repository that every project receives at its next sync; the routing itself
+  stays the gateway's job (ADR, N5). Recommendation: yes; the address grammar gains `providers`.
 
 ## Design
 
@@ -196,8 +218,8 @@ project folder; the tool can emit that file from the records.
 
 ### Project record, identity and init
 
-- Identity is the address, written into the committed manifest at init. A clone never needs a
-  lookup.
+- Identity is the address. Since 2026-10-15 no manifest is committed: a clone is matched to its
+  project record by fingerprint across the connected organisations (D4 as amended).
 - The fingerprint is the set of root commit hashes reachable from the default branch, sorted.
   It matches a clone that has no manifest yet and feeds the inventory. Several roots occur when
   unrelated histories were merged. A project record also carries its `path` inside the
@@ -206,12 +228,10 @@ project folder; the tool can emit that file from the records.
 - A changed fingerprint, after a merged history or a rewrite, is reported by `sync` as drift
   with an offer to update the record through `reins propose`. Identity holds through the
   manifest throughout.
-- `init` refuses a folder without `.git`. It stages only the files it wrote, commits them with a
-  fixed message and the command echoed, and offers `--no-commit`. Then it verifies: a new `HEAD`
-  exists and `git status --porcelain` lists none of its files. If the commit fails, a pre-commit
-  hook for instance, init prints git's output, leaves its files staged, records no fingerprint,
-  writes `committed: false` into the manifest and exits non-zero. The next `sync` sees that flag
-  and offers the commit again. Re-running init is safe.
+- `init` refuses a folder without `.git` and, since 2026-10-15, commits nothing: it creates or
+  matches the project record, records the fingerprint once a root commit exists, extends
+  `.gitignore` with the marked block and reports that change for the user to commit, writes
+  `.claude/settings.local.json`, and runs the first sync. Re-running init is safe.
 - `localPath` is per machine and lives in local state, never in the record.
 
 ### Slot map for Claude Code
@@ -224,8 +244,8 @@ project repository's settings do not install in cloud sessions, while plugins fr
 settings do ([cloud environments](https://code.claude.com/docs/en/cloud-environments#what-carries-over-from-your-setup)).
 So organisation and team content travels as plugins enabled by managed settings, and project
 content is written as plain files into the working tree, which every kind of session reads.
-Everything in the "Project" column except `.claude/settings.json` is gitignored and written by
-`sync` (D4).
+Everything in the "Project" column is gitignored and written by `sync` (D4 as amended
+2026-10-15); the one committed trace is the marked block in `.gitignore`.
 
 | Kind | Organisation | Team | Project | User |
 |---|---|---|---|---|
@@ -233,19 +253,20 @@ Everything in the "Project" column except `.claude/settings.json` is gitignored 
 | Path-scoped rule | `.claude/rules/org-<id>.md` with `paths:` | `.claude/rules/<team>-<id>.md` | `.claude/rules/<id>.md` | `~/.claude/rules/<id>.md` |
 | Skill | baseline plugin `skills/<id>/` | team plugin `skills/<id>/`, invoked as `/<team>:<id>` | `.claude/skills/<id>/` | `~/.claude/skills/<id>` (the toolkit's links today) |
 | Subagent | baseline plugin `agents/` | team plugin `agents/` | `.claude/agents/<id>.md` | `~/.claude/agents/` |
-| Hook | managed settings `hooks` | team plugin `hooks/hooks.json` | `.claude/settings.json` `hooks`, committed | `~/.claude/settings.json`, not touched by the tool |
+| Hook | managed settings `hooks` | team plugin `hooks/hooks.json` | `.claude/settings.local.json` `hooks`, uncommitted | `~/.claude/settings.json`, not touched by the tool |
 | MCP server | `managedMcpServers` in the drop-in, HTTPS only, OAuth or header auth | team plugin `.mcp.json` | `.mcp.json`, with `${VAR}` for secrets; interactive sessions ask once per server (O3) | `~/.claude.json` user scope, not touched by the tool |
-| Permission rule | managed drop-in `permissions`, with `allowManagedPermissionRulesOnly` when locked | `.claude/settings.json` `permissions`, committed | same file | `.claude/settings.local.json`, Claude Code's own, not touched by the tool |
-| Model and provider | managed drop-in `env` and `availableModels` | not applicable | `.claude/settings.json` `env`, committed | not applicable |
-| Plugin enablement | managed `extraKnownMarketplaces` and `enabledPlugins` | same keys, the team plugin | `.claude/settings.json`, the `SessionStart` hook that runs `sync` | not applicable |
+| Permission rule | managed drop-in `permissions`, with `allowManagedPermissionRulesOnly` when locked | `.claude/settings.local.json` `permissions`, uncommitted | same file | `.claude/settings.local.json`, Claude Code's own, not touched by the tool |
+| Model and provider | managed drop-in `env` and `availableModels` | not applicable | `.claude/settings.local.json` `env`, uncommitted | not applicable |
+| Plugin enablement | managed `extraKnownMarketplaces` and `enabledPlugins` | same keys, the team plugin | `.claude/settings.local.json`, the `SessionStart` hook that runs `sync` | not applicable |
 | Label, exception | not emitted; they decide what the other rows contain | | | |
 | Project record | | | the manifest, committed; file name decided in P2.4 | |
 
 Three rules the table implies:
 
-- `.claude/settings.json` is the one generated file that is committed: it carries the hook,
-  the plugin keys and the team and project hooks, permissions and `env`. These change rarely;
-  `sync` regenerates it and the drift report asks for a commit when it differs.
+- No generated file is committed (D4 as amended 2026-10-15). The hook, the plugin keys and the
+  team and project hooks, permissions and `env` live in `.claude/settings.local.json`, which
+  `sync` writes and Claude Code keeps out of git; the only committed trace is the marked block
+  `sync` keeps in `.gitignore`.
 - The policy drop-in (`managed-settings.d/<org>.json`) is emitted for the MDM and holds the
   "Organisation" column's managed keys. For cloud sessions the same keys go into server-managed
   settings, since the policy path does not reach them.
@@ -261,7 +282,7 @@ Three rules the table implies:
 | Store | Holds | Rule |
 |---|---|---|
 | Org repository | every declaration: labels, exceptions, project and user records included | shared truth, reviewed, with history |
-| Project repository | committed: the manifest (organisation, project, pinned org-repository version), the `.gitignore` entries and `.claude/settings.json`; present but gitignored: every generated file (D4) | about this repository, so every clone has the committed part and `sync` rebuilds the rest |
+| Project repository | committed: only the marked block in `.gitignore`; present but ignored: every generated file and `.claude/settings.local.json` (D4 as amended) | about this repository; `sync` rebuilds everything from the org repository and the fingerprint |
 | Local state on the machine | user identity, clone paths, a cache of the org repository, last sync, drift cache | about this machine; no tokens, git's credential helper does auth |
 
 ### Commands and local state
@@ -271,6 +292,8 @@ Decided 2026-10-14. The verbs of `reins`, and the two files it keeps on a machin
 - `reins config` sets up the machine: the user slug and the first organisation. Every command
   that acts for a user refuses until it has run, with "run reins config first". Exempt, because
   they run where no user exists: `lint`, which CI runs on the org repository, and `version`.
+  Its placement of the user level into `~/.claude/` is the interim until `sync` delivers the
+  personal level per project (P3.1).
 - `reins org create` (interactive, P2.7), `org connect <remote>`, `org list`, `org use <slug>`,
   `org disconnect`, `org destroy`. Disconnect removes the local registration and clone without
   touching GitHub; destroy deletes the repository after an explicit confirmation, which only an
@@ -278,13 +301,17 @@ Decided 2026-10-14. The verbs of `reins`, and the two files it keeps on a machin
 - The active organisation decides only where commands without a repository context go: `init`
   for a new project, `propose`, `label`. An initialised project is bound to the organisation its
   manifest names, so `sync` never depends on which organisation is active.
-- `reins init` binds the current repository to a project: the manifest, the `.gitignore`
-  entries, `.claude/settings.json` with the hook, committed as its own commit, then the first
-  sync.
-- `reins sync` syncs the current repository and is refused with "run reins init" when it has no
-  manifest. `--all` syncs every project registered on this machine; `--project <slug>`,
-  repeatable, a selection; `--report` prints drift. A fresh clone that has a manifest but is not
-  in state is registered on first contact, which is how the inventory fills.
+- `reins init` binds the current repository to a project record of the active organisation,
+  creating the record when it is new, with the clone's fingerprint; then it runs the first sync.
+  Reins commits nothing; the marked block it adds to `.gitignore` is the user's commit.
+- `reins sync` syncs the current repository: it matches the clone to its project record by
+  fingerprint across the connected organisations, writes the hook and the project settings into
+  `.claude/settings.local.json`, keeps the marked block in `.gitignore`, headed by a comment
+  that says reins wrote it and asks for it to be committed, reporting when it changed it, and
+  rewrites the generated files. Refused with "run reins init" when no record matches. `--all`
+  syncs every project registered on this machine; `--project <slug>`, repeatable, a selection;
+  `--report` prints drift. A fresh clone is registered on its first sync, which is how the
+  inventory fills.
 - `reins lint <path>`, `reins propose`, `reins label create|rename|delete`, `reins uninstall`,
   `reins reset`, `reins version`, `reins update`.
 
@@ -307,7 +334,6 @@ reason, a warning without an end date; no `allow` matching an organisation `deny
 URLs on the allowlist; no `CLAUDE.md` inside a plugin; no personal declaration shadowing a
 `required` one; two project records with one fingerprint and one path; every organisation, team,
 project and user record carries a valid, unique UUID `id`, and a rename keeps it.
-
 ## Dependency graph
 
 ```mermaid
@@ -334,8 +360,8 @@ graph TD
   P["Project level, its teams referenced on its record"] --> S
   S --> X["reins sync, run at session start"]
   H --> X
-  X --> CM["Committed by init, the manifest, the gitignore entries and settings.json with the SessionStart hook and the org plugin, plus the bake (B4) for repositories that leave the machine"]
-  X --> CL["Generated and kept out of git (D4), CLAUDE.md, .claude rules and skills, .mcp.json and CLAUDE.local.md, rewritten by sync on every machine"]
+  X --> CM["Committed, only a marked block in .gitignore that sync keeps, naming the generated paths"]
+  X --> CL["Generated and kept out of git (D4), CLAUDE.md, .claude rules and skills, .mcp.json, CLAUDE.local.md and settings.local.json with the hook, rewritten by sync on every machine"]
   X --> MS["managed-settings.json, generated for the MDM to deliver, never written by the tool"]
   X --> OT["Other agent tools, AGENTS.md and the Codex or Cursor formats"]
 ```
@@ -442,10 +468,10 @@ Today, `reins config` places symlinks: a symlink is a filesystem entry that poin
 path, so `~/.claude/skills/commit` *is* `toolkit/skills/commit` and an edit in the toolkit is
 seen by every repository on this machine at its next session, with no code. The tool adds:
 
-- **V1 — Copies for repositories that leave the machine.** A client repository, a cloud session
-  or a CI agent sees none of the symlinked files. The tool bakes the overlays into the committed
-  files for such a repository. This is the toolkit board's D6, which is decided in principle with
-  the mechanism open.
+- **V1 — Agent settings handed from person to person.** A client, a cloud session or a CI
+  agent sees none of the symlinked files. `reins export` writes what the agent would see as a
+  zip, and `reins import` or a plain unzip into `~/.claude/` brings it to another machine. This
+  answers the toolkit board's D6; the bake, a committed copy, was deferred on 2026-10-15.
 - **V2 — One source for several agent tools.** The same levels generated into the formats of
   Claude Code, Codex and Cursor. Worth it only when a second tool is in real use (the toolkit
   ADR deferred this).
@@ -486,6 +512,8 @@ Gate: the manifest, the merge rules and the slot map are written on this board a
   of the org repository.** [EXECUTED] Written in [Design](#design), approved 2026-10-11.
   Deviation from the ADR's B2: the manifest names no team; teams are referenced on the project
   record, so several teams can share a project and be added or removed without moving files.
+  Deviation 2026-10-15: the manifest is dropped altogether; identity is the fingerprint matched
+  against the project records (D4 as amended).
 - ✅ **P1.2 — The merge rules per level are written.** [EXECUTED] Selectors, enforcement, skip
   lists, exceptions and the resolution order in [Design](#design), approved 2026-10-11.
 - ✅ **P1.3 — The slot map per agent tool is written.** [EXECUTED]
@@ -531,12 +559,15 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
   [DEFERRED] Replaced on 2026-10-15 by P2.11 (export): agent settings are not repository
   settings, so nothing of them is ever committed into a project repository, not even as a copy
   for someone who leaves the machine. The toolkit board's D6 is answered by export instead.
-- 💬 **P2.11 — `reins export` writes the agent settings as a zip, so people can hand them to
-  each other.** [PENDING] Decided in substance 2026-10-15; the shape to confirm: the zip holds
+- 🟢 **P2.11 — `reins export` writes the agent settings as a zip, so people can hand them to
+  each other.** [PENDING] Approved 2026-10-15, shape confirmed: the zip holds
   the Claude home layout, `CLAUDE.md`, `skills/<id>/`, `rules/<id>.md`, so someone without
   reins unzips it into `~/.claude/` and someone with reins runs `reins import <zip>`, which
   places it like `config` does and records every placement in state. Today the content is the
   user level; inside a registered project it is everything the agent would see there.
+- 🟢 **P2.12 — `docs/reins.md`, the user guide.** [PENDING] Approved 2026-10-15. Install,
+  `config`, `org`, `init`, `sync` with "getting back on track on a fresh clone", `export`,
+  `reset`; written as each command lands, starting with what exists.
 - 🟢 **P2.4 — The manifest, the label registry and the merge (B2) exist in code, with `init`,
   `label` and `propose`.** [PENDING]
 - 🟢 **P2.5 — The compiler for Claude Code (B3) emits the plugin and marketplace repository, the
@@ -703,3 +734,10 @@ writes is read from the next session on, not in the same one.
 - (2026-10-15) The bake (P2.3) deferred in favour of export (P2.11). Open: whether a project
   repository carries no reins file at all, which would retire the manifest, the committed
   `.gitignore` entries and the committed hook (see the discussion of D4).
+- (2026-10-15) D4 amended to zero footprint: no manifest, no committed settings, no committed
+  hook; a marked block in `.gitignore` is the only trace; `.claude/settings.local.json` holds
+  the hook and the project settings; the personal level goes per project. Slot map, commands,
+  identity, P1.1, V1 and the diagram follow. P2.11 approved, P2.12 added. README rewritten.
+- (2026-10-15) The `.gitignore` block carries a comment naming reins and asking for a commit;
+  D6 raised: provider and gateway settings as a `providers` declaration kind. README reframed
+  around Reins for one developer up to an organisation.
