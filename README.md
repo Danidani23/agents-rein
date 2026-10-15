@@ -29,7 +29,7 @@ teams? This repository collects the research and the decisions.
   its gate ([ADR](docs/decisions/2026-10-11_harness-tool-compiler-and-linter.md),
   [board](docs/implementation_plans/2026-10-11_harness-distribution-tool.md)).
 - [toolkit/](toolkit/) — the personal agent toolkit: global instructions and skills, and
-  `install.sh`, which links them into `~/.claude/` for every repository on the machine
+  which `reins config` places into `~/.claude/` for every repository on the machine
   ([ADR](docs/decisions/2026-10-10_personal-toolkit-open-formats.md),
   [board](docs/implementation_plans/2026-10-10_agent-toolkit.md)).
 - [CLAUDE.md](CLAUDE.md) and [.claude/](.claude/) — the harness this repo runs with: its own

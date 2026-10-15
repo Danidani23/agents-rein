@@ -9,7 +9,7 @@
 > References: [harness-management.md](../harness-management.md)
 > (Q1, Q2, Q6), the [toolkit board](2026-10-10_agent-toolkit.md) (its D6), the
 > [toolkit ADR](../decisions/2026-10-10_personal-toolkit-open-formats.md),
-> [toolkit/install.sh](../../toolkit/install.sh).
+> [cmd/reins](../../cmd/reins/).
 > Markers per the `implementation-plan` skill: 💬 discussed · 🟢 ready · 🔨 in progress ·
 > ✅ done · ⏸️ deferred.
 
@@ -438,7 +438,7 @@ environment's network allowlist admits the org repository's host (open point O2)
 
 ### For a single developer
 
-Today, `install.sh` places symlinks: a symlink is a filesystem entry that points at another
+Today, `reins config` places symlinks: a symlink is a filesystem entry that points at another
 path, so `~/.claude/skills/commit` *is* `toolkit/skills/commit` and an edit in the toolkit is
 seen by every repository on this machine at its next session, with no code. The tool adds:
 
@@ -513,8 +513,14 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
   `commit` existing in both `.claude/` and `toolkit/`. Both are the toolkit board's P2.4, the
   migration of this repository's `.claude/`, done 2026-10-14. The plugin checks wait for P2.5,
   where plugins first exist.
-- 🟢 **P2.10 — `reins config`, the org verbs, and the user level into `~/.claude/`.** [PENDING]
-  Approved 2026-10-14, right after P2.2 because it retires `toolkit/install.sh`. `config`
+- ✅ **P2.10 — `reins config`, the org verbs, and the user level into `~/.claude/`.** [EXECUTED]
+  2026-10-15. Packages `local` (config.yaml, state.yaml), `execute` (the one shell-out helper),
+  `placement` (links or copies, refusals, recording), the organisation record in `declaration`;
+  commands `config`, `org connect|list|use|disconnect`, `version`; exit code 3 for a failed
+  program. Gate ran green: gofmt, vet, tests over seven packages including `org connect`
+  against a scratch repository; the real `reins config --user danielmolnar --user-level toolkit`
+  made eleven links and left `synced` alone, a second run reported `ok`; `reins lint .` clean.
+  `install.sh` deleted. As approved 2026-10-14: `config`
   writes `config.yaml`; `org connect`, `list`, `use` and `disconnect` manage the organisations
   in it and their clones in state; the user level is placed into `~/.claude/` as links on macOS
   and Linux and copies on Windows, refusing any target that is not its own, with every
@@ -684,3 +690,5 @@ writes is read from the next session on, not in the same one.
   duplicates between `.claude/` and `toolkit/`; fixing them is the toolkit board's P2.4 (you).
 - (2026-10-14) Commands and local state decided and written; P2.10 added after P2.2. Parked
   without recording: a scheduled `sync --all` as the polling form of "push from the top".
+- (2026-10-15) P2.10 executed; the machine is configured and the toolkit is placed by `reins`.
+  Left for the user: the commit; `w2going`'s `CLAUDE.md` still names `install.sh`.

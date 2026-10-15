@@ -20,7 +20,9 @@
 - ✅ **D3 — Stack rules become Agent Skills.** Decided 2026-10-10. Portable, at the cost of
   loading by the model's judgment instead of by file match.
 - ✅ **D4 — `szlavik-tomi`'s versions are the merge base.** Decided 2026-10-10.
-- 💬 **D5 — When to run `install.sh`.** A personal skill overrides a project skill of the same
+- ✅ **D5 — When to install the toolkit.** Decided 2026-10-15: now, option (a), as the gate of
+  the harness board's P2.10; repositories migrate when next worked in. The original question:
+  a personal skill overrides a project skill of the same
   name ([skills docs](https://code.claude.com/docs/en/skills)), so from the install on, every
   repository still carrying its own `commit`, `adr` or `implementation-plan` gets the toolkit's
   instead (P3.1–P3.4). Options: (a) install now and migrate each repository the next time it is
@@ -66,7 +68,10 @@ instructions (`/memory`, `/skills`).
 
 - 🟢 **P2.1 — This repository is under git.** [PENDING] (you) `git init`, then the first
   commits.
-- 💬 **P2.2 — The toolkit is installed.** [PENDING] (you) `toolkit/install.sh`. Blocked by D5.
+- ✅ **P2.2 — The toolkit is installed.** [EXECUTED] 2026-10-15 by
+  `reins config --user danielmolnar --user-level toolkit`, which replaced `install.sh`
+  (harness board P2.10): `~/.claude/CLAUDE.md` and ten skill links, `synced` and
+  `reverse-engineer-anything` untouched, a second run reporting `ok`.
 - ✅ **P2.3 — `szlavik-tomi` is migrated (pilot).** [EXECUTED]
   Deleted the rules `communication`, `engineering-principles`, `strict-execution`, `git`,
   `sibling-repos`, `go-style`, `mermaid-diagrams` and the skills `commit`, `adr`,
@@ -134,3 +139,6 @@ the project-specific lines kept in its own instructions, its `CLAUDE.md` index u
 - (2026-10-14) P2.4 executed: this repository's `.claude/` holds only the `docs` rule and the
   permissions. `install.sh` is still not run (checked 2026-10-14), so this repository joins
   `szlavik-tomi` and `w2going` in running without the global policies until P2.2 (you).
+- (2026-10-15) D5 decided and P2.2 executed through `reins config`; `install.sh` deleted. This
+  repository, `szlavik-tomi` and `w2going` have the global policies again from their next
+  session. `w2going`'s `CLAUDE.md` still names `install.sh` (you).
