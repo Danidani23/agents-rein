@@ -53,6 +53,7 @@ var SupportedAgents = []string{AgentClaudeCode}
 // Config is what the user chose.
 type Config struct {
 	User            string            `yaml:"user"`
+	GitHub          string            `yaml:"github,omitempty"`
 	Agent           string            `yaml:"agent,omitempty"`
 	UserLevelSource string            `yaml:"user_level_source,omitempty"`
 	Organizations   []OrganizationRef `yaml:"organizations"`

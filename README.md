@@ -113,7 +113,7 @@ What exists today:
 
 | Command | What it does |
 |---|---|
-| `rein config` | Sets up this machine: your user slug, the agent rein writes for, and the folder your global instructions and skills come from, which it places into the agent's home folder. In a terminal it asks, explains each question on `?`, and confirms before changing anything. Every other command that acts for you refuses until it has run. |
+| `rein config` | Sets up this machine. Your identity is your GitHub account, read from `gh`; the agent is the one rein writes for; until your organisation's repository exists, it also places your instructions and skills from a folder into the agent's home. It shows what it found and confirms before changing anything. Every other command that acts for you refuses until it has run. |
 | `rein status` | Shows what rein has set up on this machine: user, agent, every placed file and whether its target still exists, organisations, projects. |
 | `rein org connect <remote>`, `list`, `use <slug>`, `disconnect <slug>` | Clones an org repository and remembers it; lists the connected ones with the active one marked; switches; forgets one and removes its clone without touching the remote. |
 | `rein lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, and skills that share a name. Needs no config, so CI runs it on an org repository. |

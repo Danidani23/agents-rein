@@ -7,42 +7,41 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/agents-rein/internal/address"
 	"github.com/Danidani23/agents-rein/internal/local"
 	"github.com/Danidani23/agents-rein/internal/placement"
 	"github.com/Danidani23/agents-rein/internal/prompt"
 )
 
-const configIntro = "rein config sets up this machine: who you are, which agent you use, and where your\n" +
-	"personal instructions and skills come from. It writes ~/.rein/config.yaml and places your\n" +
-	"instructions and skills into the agent's home folder. Running it again is safe and is how you\n" +
-	"change a value."
+const configIntro = "rein config sets up this machine. Your identity is your GitHub account, read from gh;\n" +
+	"your agent is the one rein writes settings for. Until your organisation's repository exists,\n" +
+	"config also places your personal instructions and skills from a folder into the agent's\n" +
+	"home. Running it again is safe."
 
 func newConfigCommand(env *environment) *cobra.Command {
-	var user, userLevel, agent string
+	var userLevel, agent string
 	var yes bool
 	command := &cobra.Command{
 		Use:   "config",
-		Short: "Set up this machine: who you are, your agent, and where your settings come from",
-		Long: "config is the first command you run on a machine. It records three things in\n" +
-			"~/.rein/config.yaml: your user slug, the name of your user level in every org repository;\n" +
-			"the agent rein writes settings for, claude-code today; and, until sync exists, the folder\n" +
-			"your global instructions and skills come from. It then places those instructions and skills\n" +
-			"into the agent's home folder (CLAUDE_CONFIG_DIR, else ~/.claude): links on macOS and Linux,\n" +
-			"copies on Windows, each recorded so rein reset can remove it. It refuses to replace anything\n" +
-			"it did not place itself.\n\n" +
-			"In a terminal it asks for each value it was not given as a flag and confirms before it\n" +
-			"changes anything. Without a terminal it needs every flag. Every command that acts for you\n" +
-			"refuses until config has run; lint, status and version do not.",
-		Example: "  rein config\n  rein config --user danielmolnar --user-level ~/toolkit --yes",
+		Short: "Set up this machine: your GitHub identity, your agent, and your personal settings",
+		Long: "config is the first command you run on a machine. Your identity is your GitHub account,\n" +
+			"read from the gh CLI, which must be installed and logged in; its lowercase form is your\n" +
+			"slug, the name of your user level in every org repository. The agent rein writes settings\n" +
+			"for is claude-code today. Until your organisation's repository exists, config also places\n" +
+			"the instructions and skills from a folder (--user-level, remembered from the last run) into\n" +
+			"the agent's home (CLAUDE_CONFIG_DIR, else ~/.claude): links on macOS and Linux, copies on\n" +
+			"Windows, never replacing anything it did not place itself.\n\n" +
+			"In a terminal it shows what it found and confirms before changing anything; without a\n" +
+			"terminal it needs --yes. Every command that acts for you refuses until config has run;\n" +
+			"lint, status and version do not. Nothing in a user level is private: everyone who can\n" +
+			"read an org repository sees every level in it.",
+		Example: "  rein config\n  rein config --user-level ~/toolkit --yes",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			return runConfig(env, user, userLevel, agent, yes)
+			return runConfig(env, userLevel, agent, yes)
 		},
 	}
-	command.Flags().StringVar(&user, "user", "", "your user slug: lowercase letters, digits and single hyphens")
 	command.Flags().StringVar(&agent, "agent", "", "the agent rein writes settings for; today only claude-code")
-	command.Flags().StringVar(&userLevel, "user-level", "", "folder holding global/AGENTS.md and skills/, placed into the agent's home")
+	command.Flags().StringVar(&userLevel, "user-level", "", "folder holding global/AGENTS.md and skills/, placed into the agent's home until the org repository exists")
 	command.Flags().BoolVar(&yes, "yes", false, "do not ask for confirmation before changing the machine")
 	return command
 }
@@ -57,14 +56,7 @@ func agentChoices() []prompt.Choice {
 	return choices
 }
 
-func validateSlug(answer string) string {
-	if !address.IsSlug(answer) {
-		return fmt.Sprintf("%q may only contain lowercase letters, digits and single hyphens, with none at the ends.", answer)
-	}
-	return ""
-}
-
-func runConfig(env *environment, user string, userLevel string, agent string, yes bool) error {
+func runConfig(env *environment, userLevel string, agent string, yes bool) error {
 	home, err := local.Home()
 	if err != nil {
 		return crashedError{cause: err}
@@ -73,95 +65,66 @@ func runConfig(env *environment, user string, userLevel string, agent string, ye
 	if err != nil {
 		return crashedError{cause: err}
 	}
+	login, err := githubLogin()
+	if err != nil {
+		return err
+	}
+	session := prompt.New(env.in, env.out, env.terminal)
+	if session.CanAsk() {
+		session.Intro(configIntro)
+	}
+	fmt.Fprintf(env.out, "GitHub account  %s  (slug %s)\n", login, slugOf(login))
 	if agent == "" {
 		agent = config.Agent
 	}
-	session := prompt.New(env.in, env.out, env.terminal)
-	needsAsking := user == "" || userLevel == ""
-	if needsAsking && !session.CanAsk() {
-		return fmt.Errorf("no terminal to ask on; pass --user and --user-level")
-	}
-	if agent == "" && !session.CanAsk() {
-		agent = local.AgentClaudeCode
-		fmt.Fprintf(env.out, "agent: %s, the only agent this build writes for\n", agent)
-	}
-	if needsAsking {
-		session.Intro(configIntro)
-	}
-	if user == "" {
-		user, err = session.Ask(prompt.Text{
-			Title:       "User slug",
-			Description: "Your name inside Agents Rein: the folder of your user level in every org repository, and the author of your proposals.",
-			Explanation: "The slug names the folder declarations/users/<slug>/ in each org repository you join:\n" +
-				"that folder is your user level, your personal instructions and skills, which rein brings\n" +
-				"to every project you work in. A proposal is a change you offer to an org repository, a\n" +
-				"rule, a skill, a label or a tool server; rein propose turns it into a pull request that the\n" +
-				"owners of that level review, and the slug is recorded as its author. Lowercase letters,\n" +
-				"digits and single hyphens, so it can be a folder name and an address segment. It is not\n" +
-				"your GitHub login, though matching it is sensible, and it never leaves this machine except\n" +
-				"as that folder name in org repositories you push to.",
-			Default:  config.User,
-			Validate: validateSlug,
-		})
-		if err != nil {
-			return err
-		}
-	}
 	if agent == "" {
-		agent, err = session.Choose(prompt.Select{
-			Title:       "Agent",
-			Description: "The agent rein writes your settings for.",
-			Explanation: "Your settings are kept in rein's own format and written out in the format of the\n" +
-				"agent you use. Claude Code is the first agent; the others are planned and listed so you\n" +
-				"can see where the tool is going. Changing the agent later means running rein config again.",
-			Choices: agentChoices(),
-			Default: local.AgentClaudeCode,
-		})
-		if err != nil {
-			return err
+		if session.CanAsk() && len(local.SupportedAgents) > 1 {
+			agent, err = session.Choose(prompt.Select{
+				Title:       "Agent",
+				Description: "The agent rein writes your settings for.",
+				Explanation: "Your settings are kept in rein's own format and written out in the format of the\n" +
+					"agent you use. Changing the agent later means running rein config again.",
+				Choices: agentChoices(),
+				Default: local.AgentClaudeCode,
+			})
+			if err != nil {
+				return err
+			}
+		} else {
+			agent = local.AgentClaudeCode
 		}
-	}
-	if userLevel == "" {
-		userLevel, err = session.Ask(prompt.Text{
-			Title:       "User-level source",
-			Description: "A folder holding global/AGENTS.md and skills/<id>/. Temporary: once sync exists, your user level lives in the org repository.",
-			Explanation: "Until rein sync delivers your user level per project, config places it from a folder on\n" +
-				"this machine: global/AGENTS.md becomes the agent's global instructions and each\n" +
-				"skills/<id>/ a skill. The pilot's folder is the toolkit in the agents-rein repository.",
-			Default: config.UserLevelSource,
-			Validate: func(answer string) string {
-				_, err := placement.Plan(answer, "")
-				if err != nil {
-					return err.Error() + "."
-				}
-				return ""
-			},
-		})
-		if err != nil {
-			return err
-		}
-	}
-	reason := validateSlug(user)
-	if reason != "" {
-		return fmt.Errorf("user slug %s", strings.TrimSuffix(reason, "."))
 	}
 	if !contains(local.SupportedAgents, agent) {
 		return fmt.Errorf("agent %q is not supported; this build writes for %s", agent, strings.Join(local.SupportedAgents, ", "))
+	}
+	fmt.Fprintf(env.out, "agent           %s\n", agent)
+	if userLevel == "" {
+		userLevel = config.UserLevelSource
 	}
 	claudeHome, err := placement.ClaudeHome()
 	if err != nil {
 		return crashedError{cause: err}
 	}
-	pairs, err := placement.Plan(userLevel, claudeHome)
-	if err != nil {
-		return err
+	var pairs []placement.Pair
+	absoluteSource := ""
+	if userLevel != "" {
+		pairs, err = placement.Plan(userLevel, claudeHome)
+		if err != nil {
+			return err
+		}
+		absoluteSource, err = filepath.Abs(userLevel)
+		if err != nil {
+			return crashedError{cause: err}
+		}
+		fmt.Fprintf(env.out, "user level      %s\n", absoluteSource)
 	}
-	absoluteSource, err := filepath.Abs(userLevel)
-	if err != nil {
-		return crashedError{cause: err}
+	fmt.Fprintln(env.out)
+	if len(pairs) > 0 {
+		fmt.Fprintf(env.out, "This will write %s and place %d entries into %s.\n", filepath.Join(home, "config.yaml"), len(pairs), claudeHome)
+	} else {
+		fmt.Fprintf(env.out, "This will write %s. No user level yet: pass --user-level <folder> or run rein import to add one.\n", filepath.Join(home, "config.yaml"))
 	}
 	if !yes {
-		fmt.Fprintf(env.out, "This will write %s and place %d entries into %s.\n", filepath.Join(home, "config.yaml"), len(pairs), claudeHome)
 		if !session.CanAsk() {
 			return fmt.Errorf("no terminal to confirm on; pass --yes")
 		}
@@ -173,7 +136,8 @@ func runConfig(env *environment, user string, userLevel string, agent string, ye
 			return fmt.Errorf("nothing changed")
 		}
 	}
-	config.User = user
+	config.User = slugOf(login)
+	config.GitHub = login
 	config.Agent = agent
 	config.UserLevelSource = absoluteSource
 	err = local.SaveConfig(home, config)
@@ -198,7 +162,7 @@ func runConfig(env *environment, user string, userLevel string, agent string, ye
 	if err != nil {
 		return crashedError{cause: err}
 	}
-	fmt.Fprintf(env.out, "configured %s for user %s, agent %s\n", home, user, agent)
+	fmt.Fprintf(env.out, "configured %s for %s, agent %s\n", home, login, agent)
 	if refused > 0 {
 		return fmt.Errorf("%d targets refused; move them aside and run rein config again", refused)
 	}

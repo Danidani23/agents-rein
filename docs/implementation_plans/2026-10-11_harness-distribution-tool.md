@@ -127,6 +127,30 @@ committed instead of gitignored (D4).
   companies can adopt it without legal friction; `LICENSE` holds the Apache-2.0 text. Timing:
   after the pilot's first end-to-end run, so the first visitor sees something that works.
   Until then the repository stays private and `go install` serves its one user.
+- ✅ **D8 — GitHub is the host; git stays host-neutral.** Decided 2026-10-16. Identity is the
+  GitHub login, read from `gh` and never typed: the record keeps it exactly, `github:
+  Danidani23`, for CODEOWNERS and pull requests, and the slug is its lowercase form, because
+  macOS and Windows file systems are case-insensitive and GitHub logins are unique regardless
+  of case, so no two accounts can share a slug. A proposal is a GitHub pull request, `review`
+  runs in GitHub Actions with a GitHub secret, `org create` makes a GitHub repository, and
+  `gh` is a prerequisite that `config` checks. What stays host-neutral is plain git, cloning
+  and fetching, and the declarations, so a GitLab adapter can be added behind one interface
+  later. Visibility follows GitHub's unit of access, the repository: everyone who can read an
+  org repository sees every level, every proposal and every user level in it, so nothing
+  private belongs in a user level, which `config` says; between organisations nothing leaks;
+  a team that must hide its declarations from other teams would need its own repository.
+- ✅ **D9 — No local config; the local state is a rebuildable cache.** Decided 2026-10-16.
+  Identity comes from `gh` each time; the agent belongs to the user, so it lives in the user
+  record in the org repository, defaulting to the agent found installed; the connected
+  organisations are the clones under `~/.rein/orgs/`; a placement in the agent's home is
+  rein's when its target is under `~/.rein/`, a copy on Windows carrying a marker file; the
+  proposal ledger is `gh pr list --author @me`. What remains local is `state.yaml`, the
+  active organisation when there are several and the project registrations for `sync --all`,
+  both rebuildable from the clones and from `sync`. `connect`, `propose` and `org create`
+  need the remote and fail without it; `sync` works offline from the clone and warns that it
+  could not fetch. Until the org repository exists (P2.7), `config` stays as the bridge: it
+  shows the identity from `gh`, places the user level from a remembered folder, and confirms;
+  it is deleted when `org connect` can place the user level, so P2.7 moves ahead of P2.5.
 
 ## Design
 
@@ -939,3 +963,7 @@ writes is read from the next session on, not in the same one.
   selector, validation and confirmation, `rein status`, help texts as explanations.
 - (2026-10-16) `Taskfile.yml` added: `rein:build`, `rein:install`, `rein:test`, `rein:lint`,
   `rein:check`; README and CLAUDE.md name the tasks instead of raw commands.
+- (2026-10-16) D8 and D9 decided. `config` rebuilt as the bridge: identity from `gh`, the
+  slug derived, no slug question, the user level from the remembered folder or `--user-level`,
+  never asked; a logged-out `gh` is a refusal naming `gh auth login`. Tests stub `gh` on the
+  PATH. The user's slug becomes `danidani23`.

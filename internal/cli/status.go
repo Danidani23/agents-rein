@@ -44,6 +44,9 @@ func runStatus(env *environment) error {
 	}
 	fmt.Fprintf(env.out, "home        %s\n", home)
 	fmt.Fprintf(env.out, "user        %s\n", config.User)
+	if config.GitHub != "" {
+		fmt.Fprintf(env.out, "github      %s\n", config.GitHub)
+	}
 	fmt.Fprintf(env.out, "agent       %s\n", config.Agent)
 	if config.UserLevelSource != "" {
 		fmt.Fprintf(env.out, "user level  %s\n", config.UserLevelSource)
