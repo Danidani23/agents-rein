@@ -1,7 +1,7 @@
 // Package placement puts a user's global instructions and skills into the
 // Claude home, as links on macOS and Linux and as copies on Windows, and
 // refuses to touch anything it did not place itself.
-package placement
+package claudecode
 
 import (
 	"errors"
@@ -134,7 +134,7 @@ func PlanLevel(level string, claudeHome string) ([]Pair, error) {
 	return pairs, nil
 }
 
-// Apply makes each placement. known maps the paths of the placements the
+// Apply makes each claudecode. known maps the paths of the placements the
 // calling command made before to their targets: those it may refresh, or
 // replace with a new target, reporting StatusReplaced. Anything else at a
 // path, another command's placement included, is refused, never replaced.

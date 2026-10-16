@@ -159,7 +159,9 @@ AI-assisted development across many teams? Six questions, answered with sources 
   one for the personal toolkit.
 - [docs/future-ideas.md](docs/future-ideas.md) — ideas parked on purpose, with what would make
   them current.
-- [cmd/rein/](cmd/rein/) and [internal/](internal/) — the tool.
+- [cmd/rein/](cmd/rein/) and [internal/](internal/) — the tool, in a hexagonal layout: `cli`
+  the driving adapter, `app` the use cases, `domain` the pure model, `ports` the interfaces,
+  `adapters` for GitHub, git, Claude Code, local state and the terminal.
 - [toolkit/](toolkit/) — the personal agent toolkit: global instructions and ten skills in open
   formats, the content of the pilot. It becomes the user level of the pilot's org repository,
   delivered per project by `rein sync`

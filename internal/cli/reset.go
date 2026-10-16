@@ -1,16 +1,11 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/agents-rein/internal/local"
-	"github.com/Danidani23/agents-rein/internal/prompt"
+	"github.com/Danidani23/agents-rein/internal/app"
 )
 
 const resetExplanation = "A placement is one link (a copy on Windows) that rein made in your agent's home folder,\n" +
@@ -45,119 +40,58 @@ func newResetCommand(env *environment) *cobra.Command {
 }
 
 func runReset(env *environment, all bool, yes bool) error {
-	home, err := local.Home()
+	dependencies, err := env.dependencies()
 	if err != nil {
-		return crashedError{cause: err}
+		return err
 	}
-	state, err := local.LoadState(home)
+	plan, err := app.PlanReset(dependencies, all)
 	if err != nil {
-		return crashedError{cause: err}
+		return err
 	}
 	fmt.Fprintf(env.out, "This will remove:\n")
-	fmt.Fprintf(env.out, "- %d placements: the links rein made in your agent's home so the agent reads your rules\n  and skills. Removing them takes those away from the agent; your own files are untouched.\n", len(state.Placements))
-	for _, placed := range state.Placements {
+	fmt.Fprintf(env.out, "- %d placements: the links rein made in your agent's home so the agent reads your rules\n  and skills. Removing them takes those away from the agent; your own files are untouched.\n", len(plan.Placements))
+	for _, placed := range plan.Placements {
 		fmt.Fprintf(env.out, "    %s\n", placed.Path)
 	}
-	if len(state.Imports) > 0 {
-		fmt.Fprintf(env.out, "- %d imports: copies under %s that the placements point at,\n  from before import went through the org repository.\n", len(state.Imports), filepath.Join(home, "imports"))
+	if len(plan.Imports) > 0 {
+		fmt.Fprintf(env.out, "- %d imports: copies under %s that the placements point at,\n  from before import went through the org repository.\n", len(plan.Imports), plan.ImportsFolder)
 	}
-	if all {
-		fmt.Fprintf(env.out, "- %d organisations with their clones under %s, and %d project registrations:\n  what this machine knows about them. The remotes on GitHub are not touched.\n", len(state.Organizations), filepath.Join(home, "orgs"), len(state.Projects))
+	if plan.All {
+		fmt.Fprintf(env.out, "- %d organisations with their clones under %s, and %d project registrations:\n  what this machine knows about them. The remotes on GitHub are not touched.\n", len(plan.Organizations), plan.OrgsFolder, len(plan.Projects))
 	}
 	if !yes {
-		session := prompt.New(env.in, env.out, env.terminal)
-		if !session.CanAsk() {
-			return fmt.Errorf("no terminal to confirm on; pass --yes")
+		prompter := env.prompter()
+		if !prompter.CanAsk() {
+			return refuse("no terminal to confirm on; pass --yes")
 		}
-		confirmed, err := session.Confirm("Continue?", resetExplanation)
+		confirmed, err := prompter.Confirm("Continue?", resetExplanation)
 		if err != nil {
-			return err
+			return refuse(err.Error())
 		}
 		if !confirmed {
-			return fmt.Errorf("nothing changed")
+			return refuse("nothing changed")
 		}
 	}
-	var kept []local.Placement
-	for _, placed := range state.Placements {
-		removed, reason := unplace(placed)
-		if removed {
-			fmt.Fprintf(env.out, "removed  %s\n", placed.Path)
-			continue
-		}
-		if reason != "" {
-			fmt.Fprintf(env.errOut, "skipped  %s: %s\n", placed.Path, reason)
-			kept = append(kept, placed)
-			continue
-		}
-		fmt.Fprintf(env.out, "gone     %s\n", placed.Path)
-	}
-	state.Placements = kept
-	err = os.RemoveAll(filepath.Join(home, "imports"))
+	result, err := app.ApplyReset(dependencies, plan)
 	if err != nil {
-		return crashedError{cause: err}
+		return err
 	}
-	state.Imports = nil
-	if all {
-		for id, clone := range state.Clones {
-			err = os.RemoveAll(clone)
-			if err != nil {
-				return crashedError{cause: err}
-			}
-			fmt.Fprintf(env.out, "removed  clone %s\n", id)
+	for _, unplaced := range result.Placements {
+		switch {
+		case unplaced.Removed:
+			fmt.Fprintf(env.out, "removed  %s\n", unplaced.Path)
+		case unplaced.Reason != "":
+			fmt.Fprintf(env.errOut, "skipped  %s: %s\n", unplaced.Path, unplaced.Reason)
+		default:
+			fmt.Fprintf(env.out, "gone     %s\n", unplaced.Path)
 		}
-		err = os.RemoveAll(filepath.Join(home, "orgs"))
-		if err != nil {
-			return crashedError{cause: err}
-		}
-		state.Clones = map[string]string{}
-		state.Organizations = nil
-		state.Active = ""
-		state.Projects = nil
 	}
-	// a config.yaml from before D9 is a leftover
-	os.Remove(filepath.Join(home, "config.yaml"))
-	err = local.SaveState(home, state)
-	if err != nil {
-		return crashedError{cause: err}
+	for _, id := range result.RemovedClones {
+		fmt.Fprintf(env.out, "removed  clone %s\n", id)
 	}
-	fmt.Fprintf(env.out, "reset done; %d placements kept because they were not rein's\n", len(kept))
-	if len(kept) > 0 {
-		return fmt.Errorf("%d placements skipped", len(kept))
+	fmt.Fprintf(env.out, "reset done; %d placements kept because they were not rein's\n", result.Kept)
+	if result.Kept > 0 {
+		return refuse(fmt.Sprintf("%d placements skipped", result.Kept))
 	}
 	return nil
-}
-
-// unplace removes one placement when it is still what rein made: a link
-// whose target is the recorded one, dangling or not, or a recorded copy.
-// removed is false with an empty reason when nothing was there.
-func unplace(placed local.Placement) (removed bool, reason string) {
-	info, err := os.Lstat(placed.Path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return false, ""
-	}
-	if err != nil {
-		return false, err.Error()
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		existing, err := os.Readlink(placed.Path)
-		if err != nil {
-			return false, err.Error()
-		}
-		if existing != placed.Target {
-			return false, "links to " + existing + ", not what rein recorded"
-		}
-		err = os.Remove(placed.Path)
-		if err != nil {
-			return false, err.Error()
-		}
-		return true, ""
-	}
-	if placed.Mode != "copy" {
-		return false, "is a file rein did not place"
-	}
-	err = os.RemoveAll(placed.Path)
-	if err != nil {
-		return false, err.Error()
-	}
-	return true, ""
 }

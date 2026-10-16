@@ -1,6 +1,6 @@
 // Package execute is the one place rein runs another program. A failure
 // names what ran and carries the program's own stderr, and no program it runs
-// may ever prompt.
+// may ever terminal.
 package execute
 
 import (

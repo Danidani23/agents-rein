@@ -1,6 +1,8 @@
-// Package cli wires the rein commands. Every byte of output goes through the
-// writers Run receives; nothing in this module writes to the process streams
-// directly except main, and a test enforces it, so a whole run can be captured.
+// Package cli is the driving adapter: cobra commands that read flags, ask
+// through the Prompter port, call a use case in internal/app and print its
+// result. Every byte of output goes through the writers Run receives; nothing
+// in this module writes to the process streams directly except main, and a
+// test enforces it.
 package cli
 
 import (
@@ -10,9 +12,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/agents-rein/internal/execute"
-	"github.com/Danidani23/agents-rein/internal/local"
-	"github.com/Danidani23/agents-rein/internal/prompt"
+	"github.com/Danidani23/agents-rein/internal/adapters/claudecode"
+	"github.com/Danidani23/agents-rein/internal/adapters/execute"
+	"github.com/Danidani23/agents-rein/internal/adapters/git"
+	"github.com/Danidani23/agents-rein/internal/adapters/github"
+	"github.com/Danidani23/agents-rein/internal/adapters/localstate"
+	"github.com/Danidani23/agents-rein/internal/adapters/terminal"
+	"github.com/Danidani23/agents-rein/internal/app"
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 // Exit codes: 0 worked, 1 refused (a precondition or a check failed), 2
@@ -24,60 +31,92 @@ const (
 	ExitToolFailed = 3
 )
 
-// crashedError marks an error the command did not expect, such as an
-// unreadable file; every other error is a refusal.
-type crashedError struct {
-	cause error
-}
-
-func (crashed crashedError) Error() string {
-	return crashed.cause.Error()
-}
-
-// environment is what every command receives: the three streams, and
-// whether a person is typing on the input, which decides whether a command
-// may ask questions.
+// environment is what every command receives: the streams, whether a person
+// is typing, and the wired dependencies.
 type environment struct {
-	in       io.Reader
-	out      io.Writer
-	errOut   io.Writer
-	terminal bool
+	in           io.Reader
+	out          io.Writer
+	errOut       io.Writer
+	terminal     bool
+	dependencies func() (app.Dependencies, error)
+}
+
+func (env *environment) prompter() ports.Prompter {
+	return terminal.New(env.in, env.out, env.terminal)
 }
 
 // Run executes rein with arguments and returns the exit code.
 func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer) int {
-	env := &environment{in: in, out: out, errOut: errOut, terminal: prompt.IsTerminal(in)}
+	env := &environment{in: in, out: out, errOut: errOut, terminal: terminal.IsTerminal(in), dependencies: realDependencies}
+	return runCommand(env, arguments)
+}
+
+func runCommand(env *environment, arguments []string) int {
 	root := newRootCommand(env)
 	root.SetArgs(arguments)
 	err := root.Execute()
 	if err == nil {
 		return ExitWorked
 	}
-	fmt.Fprintf(errOut, "rein: %v\n", err)
-	var crashed crashedError
-	if errors.As(err, &crashed) {
-		return ExitCrashed
-	}
+	fmt.Fprintf(env.errOut, "rein: %v\n", err)
 	var failure *execute.Failure
 	if errors.As(err, &failure) {
 		return ExitToolFailed
 	}
-	return ExitRefused
+	if errors.Is(err, app.ErrRefused) || errors.Is(err, errRefusedByCommand) {
+		return ExitRefused
+	}
+	if isUsageError(err) {
+		return ExitRefused
+	}
+	return ExitCrashed
 }
 
-// requireIdentity is the gate of every command that acts for a user: the
-// home folder and the GitHub account gh is logged in as. lint, status and
-// version do not pass through it.
-func requireIdentity() (home string, who identity, err error) {
-	home, err = local.Home()
-	if err != nil {
-		return "", identity{}, crashedError{cause: err}
+// errRefusedByCommand marks a refusal decided in the CLI itself, such as a
+// missing terminal or a declined confirmation.
+var errRefusedByCommand = errors.New("refused by command")
+
+type commandRefusal struct {
+	reason string
+}
+
+func (refusal commandRefusal) Error() string {
+	return refusal.reason
+}
+
+func (commandRefusal) Is(target error) bool {
+	return target == errRefusedByCommand
+}
+
+func refuse(reason string) error {
+	return commandRefusal{reason: reason}
+}
+
+// isUsageError recognises cobra's own errors: an unknown command, a missing
+// argument, an unknown flag. They are refusals, not crashes.
+func isUsageError(err error) bool {
+	message := err.Error()
+	for _, prefix := range []string{"unknown command", "accepts ", "requires at least", "unknown flag", "unknown shorthand flag", "flag needs an argument", "invalid argument"} {
+		if len(message) >= len(prefix) && message[:len(prefix)] == prefix {
+			return true
+		}
 	}
-	who, err = githubIdentity()
+	return false
+}
+
+// realDependencies wires the adapters of this machine.
+func realDependencies() (app.Dependencies, error) {
+	home, err := localstate.Home()
 	if err != nil {
-		return "", identity{}, err
+		return app.Dependencies{}, err
 	}
-	return home, who, nil
+	return app.Dependencies{
+		Home:       home,
+		Host:       github.Host{},
+		Repository: git.Repository{},
+		Agents:     []ports.Agent{claudecode.Agent{}},
+		State:      localstate.Store{Home: home},
+	}, nil
 }
 
 func newRootCommand(env *environment) *cobra.Command {

@@ -9,7 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Danidani23/agents-rein/internal/local"
+	"github.com/Danidani23/agents-rein/internal/adapters/localstate"
+	"github.com/Danidani23/agents-rein/internal/domain/machine"
 )
 
 func TestOutputGoesThroughTheWriters(t *testing.T) {
@@ -67,15 +68,8 @@ func run(arguments ...string) (code int, out string, errOut string) {
 // is never a terminal.
 func runInteractive(answers string, arguments ...string) (code int, out string, errOut string) {
 	var outBuffer, errBuffer bytes.Buffer
-	env := &environment{in: strings.NewReader(answers), out: &outBuffer, errOut: &errBuffer, terminal: true}
-	root := newRootCommand(env)
-	root.SetArgs(arguments)
-	err := root.Execute()
-	code = ExitWorked
-	if err != nil {
-		errBuffer.WriteString("rein: " + err.Error() + "\n")
-		code = ExitRefused
-	}
+	env := &environment{in: strings.NewReader(answers), out: &outBuffer, errOut: &errBuffer, terminal: true, dependencies: realDependencies}
+	code = runCommand(env, arguments)
 	return code, outBuffer.String(), errBuffer.String()
 }
 
@@ -137,16 +131,17 @@ func placeLegacy(t *testing.T, reinHome string, claudeHome string) (ruleLink str
 	if err != nil {
 		t.Fatalf("symlink: %v", err)
 	}
-	state, err := local.LoadState(reinHome)
+	store := localstate.Store{Home: reinHome}
+	state, err := store.Load()
 	if err != nil {
 		t.Fatalf("state: %v", err)
 	}
-	state.Placements = []local.Placement{
-		{Path: ruleLink, Target: target, Mode: "link", Owner: local.OwnerImport, Source: "/toolkit"},
-		{Path: filepath.Join(claudeHome, "skills", "gone"), Target: filepath.Join(reinHome, "imports", "abc", "skills", "gone"), Mode: "link", Owner: local.OwnerImport, Source: "/toolkit"},
+	state.Placements = []machine.Placement{
+		{Path: ruleLink, Target: target, Mode: "link", Owner: "import", Source: "/toolkit"},
+		{Path: filepath.Join(claudeHome, "skills", "gone"), Target: filepath.Join(reinHome, "imports", "abc", "skills", "gone"), Mode: "link", Owner: "import", Source: "/toolkit"},
 	}
-	state.Imports = []local.Import{{Hash: "abc000000000", Path: filepath.Join(reinHome, "imports", "abc"), Source: "/toolkit", Imported: "2026-10-16T00:00:00Z"}}
-	err = local.SaveState(reinHome, state)
+	state.Imports = []machine.Import{{Hash: "abc000000000", Path: filepath.Join(reinHome, "imports", "abc"), Source: "/toolkit", Imported: "2026-10-16T00:00:00Z"}}
+	err = store.Save(state)
 	if err != nil {
 		t.Fatalf("save: %v", err)
 	}

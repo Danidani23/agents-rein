@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/agents-rein/internal/lint"
+	"github.com/Danidani23/agents-rein/internal/domain/lint"
 )
 
 func newLintCommand(env *environment) *cobra.Command {
@@ -22,7 +22,7 @@ func newLintCommand(env *environment) *cobra.Command {
 		RunE: func(command *cobra.Command, arguments []string) error {
 			report, err := lint.Run(arguments[0])
 			if err != nil {
-				return crashedError{cause: err}
+				return err
 			}
 			for _, finding := range report.Findings {
 				location := finding.Path
@@ -33,7 +33,7 @@ func newLintCommand(env *environment) *cobra.Command {
 			}
 			fmt.Fprintf(env.out, "%d errors, %d warnings\n", report.Errors(), report.Warnings())
 			if report.Errors() > 0 {
-				return fmt.Errorf("lint found %d errors", report.Errors())
+				return refuse(fmt.Sprintf("lint found %d errors", report.Errors()))
 			}
 			return nil
 		},

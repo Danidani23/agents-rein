@@ -795,11 +795,19 @@ create` creates an organisation; the first team and project exist in it; `init` 
 project, moves its agent settings into a snapshot and commits the move-out; `distill` runs
 from that project's snapshot.
 
-- 🟢 **P2.19 — The hexagonal layout (D15).** [PENDING] The existing packages move: `address`,
-  `declaration`, `lint`, `exchange` into `internal/domain`; `placement` becomes the Claude
-  Code adapter; `local`, `execute`, `prompt` become adapters; the ports are written for host,
-  repository, agent, state, snapshots, prompter; `cli` calls use cases in `internal/app`.
-  Gate: `task rein:check` green with the tests moved along, behaviour unchanged.
+- ✅ **P2.19 — The hexagonal layout (D15).** [EXECUTED] 2026-10-16. `internal/domain` holds
+  `address`, `declaration`, `lint`, `exchange` and the new `machine`, the ledger model moved
+  out of the state adapter; `internal/ports` the interfaces for host, repository, agent,
+  state and prompter, with the question types; `internal/adapters` has `github` (identity
+  over gh), `git` (clone), `claudecode` (the agent: name, detection, unplacing, and the
+  placement code kept for sync), `localstate` (a store), `terminal` (the prompter) and
+  `execute`; `internal/app` the use cases `OrgConnect`, `OrgList`, `OrgUse`,
+  `OrgDisconnect`, `Status`, `PlanReset` and `ApplyReset`, returning results and refusals,
+  never printing or asking; `internal/cli` reads flags, asks, calls and prints, and maps a
+  refusal to exit 1, a failed program to 3, anything else to 2. The snapshots port waits for
+  P2.7, where it is first needed. Gate: `task rein:check` green with every test moved and
+  new use-case tests on fakes for each port; `status`, `--help`, `lint .` and the refusals
+  unchanged on this machine.
 - 🟢 **P2.16 — `team create` and `project create`.** [PENDING] Records written by the owner to
   the org repository (D13): `team.yaml` with id, slug, name, description; `project.yaml` with
   the same plus teams, labels chosen from the seeded registry, and path; committed and pushed.
@@ -1061,3 +1069,8 @@ writes is read from the next session on, not in the same one.
 - (2026-10-16) The user's model recorded: a mutation ledger, `restore` and `reset` (D12), the
   owner writing records directly (D13), `init` committing the move-out (D14), the hexagonal
   layout (D15). The pilot path written with P2.15 to P2.19 in the user's order.
+- (2026-10-16) P2.19 executed: the hexagonal layout, use cases on ports, fakes in the tests.
+- (2026-10-16) Added with P2.19: a test in `internal/architecture` that fails when a layer
+  imports outward, and a fix for the null device counting as a terminal. The user's gateway,
+  orchestration and services vocabulary mapped onto `cli`, `app` and `domain` in CLAUDE.md:
+  a modular monolith in one binary, never separate processes (ADR, N1).

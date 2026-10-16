@@ -1,10 +1,10 @@
-// Package prompt asks questions in a terminal the same way in every command:
+// Package terminal asks questions in a terminal the same way in every command:
 // a title, a one-line description under it, the default in brackets, a
 // validator that asks again with the reason instead of failing, and "?" as
 // an answer that prints the long explanation. A selector is a numbered list
 // answered by number or by name. Without a terminal, a command does not ask;
 // it refuses and names its flags.
-package prompt
+package terminal
 
 import (
 	"bufio"
@@ -13,6 +13,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 // The convention every interactive command states once, as a note under
@@ -22,7 +24,7 @@ var Convention = []string{"Enter keeps the value in brackets", "? explains a que
 // divider separates one question from the next.
 const divider = "────────────────────────────────────────"
 
-// Session asks the questions of one command.
+// Session asks the questions of one command. It is the Prompter port.
 type Session struct {
 	reader   *bufio.Reader
 	out      io.Writer
@@ -30,23 +32,31 @@ type Session struct {
 	asked    int
 }
 
+var _ ports.Prompter = (*Session)(nil)
+
 // New makes a session over the command's streams. terminal says whether a
 // person is typing, which decides styling and whether asking is allowed.
 func New(in io.Reader, out io.Writer, terminal bool) *Session {
 	return &Session{reader: bufio.NewReader(in), out: out, terminal: terminal}
 }
 
-// IsTerminal reports whether in is an interactive terminal.
+// IsTerminal reports whether in is an interactive terminal: a character
+// device that is not the null device, which is a character device too and
+// the usual way to run a command with no input.
 func IsTerminal(in io.Reader) bool {
 	file, ok := in.(*os.File)
 	if !ok {
 		return false
 	}
 	info, err := file.Stat()
-	if err != nil {
+	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
 		return false
 	}
-	return info.Mode()&os.ModeCharDevice != 0
+	null, err := os.Stat(os.DevNull)
+	if err == nil && os.SameFile(info, null) {
+		return false
+	}
+	return true
 }
 
 // CanAsk reports whether the session may ask at all.
@@ -71,18 +81,8 @@ func (session *Session) separate() {
 	session.asked++
 }
 
-// Text is a free-text question.
-type Text struct {
-	Title       string
-	Description string
-	Explanation string
-	Default     string
-	// Validate returns the reason an answer is refused, or "".
-	Validate func(answer string) string
-}
-
 // Ask asks a text question until it has an acceptable answer.
-func (session *Session) Ask(question Text) (string, error) {
+func (session *Session) Ask(question ports.Text) (string, error) {
 	session.separate()
 	for {
 		session.printHeading(question.Title, question.Description)
@@ -118,26 +118,8 @@ func (session *Session) Ask(question Text) (string, error) {
 	}
 }
 
-// Choice is one option of a selector.
-type Choice struct {
-	Name        string
-	Description string
-	// Unavailable is the reason the choice cannot be picked, or "". Such a
-	// choice is listed so people see what is planned, and refused.
-	Unavailable string
-}
-
-// Select is a question answered by picking one choice.
-type Select struct {
-	Title       string
-	Description string
-	Explanation string
-	Choices     []Choice
-	Default     string
-}
-
 // Choose asks a selector until a valid choice is picked, by number or name.
-func (session *Session) Choose(question Select) (string, error) {
+func (session *Session) Choose(question ports.Select) (string, error) {
 	defaultIndex := 0
 	for index, choice := range question.Choices {
 		if choice.Name == question.Default {
@@ -217,20 +199,20 @@ func (session *Session) Confirm(question string, explanation string) (bool, erro
 	}
 }
 
-func pick(choices []Choice, answer string) (Choice, bool) {
+func pick(choices []ports.Choice, answer string) (ports.Choice, bool) {
 	number, err := strconv.Atoi(answer)
 	if err == nil {
 		if number >= 1 && number <= len(choices) {
 			return choices[number-1], true
 		}
-		return Choice{}, false
+		return ports.Choice{}, false
 	}
 	for _, choice := range choices {
 		if strings.EqualFold(choice.Name, answer) {
 			return choice, true
 		}
 	}
-	return Choice{}, false
+	return ports.Choice{}, false
 }
 
 func (session *Session) printHeading(title string, description string) {
