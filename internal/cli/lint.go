@@ -14,9 +14,11 @@ func newLintCommand(env *environment) *cobra.Command {
 		Short: "Check the skills, rules and settings under a path",
 		Long: "lint walks the path and checks every SKILL.md against the Agent Skills specification,\n" +
 			"every rule file's frontmatter, every settings file's permission rules, and the skills\n" +
-			"that share a name. Exit 1 when it finds an error, 0 when only warnings or nothing.\n" +
-			"It needs no config, so CI can run it on an org repository.",
-		Args: cobra.ExactArgs(1),
+			"that share a name. Inside an org repository each finding also carries the address of the\n" +
+			"declaration. Exit 1 when it finds an error, 0 when only warnings or nothing. It needs no\n" +
+			"config, so CI runs it on an org repository and you can run it on any folder.",
+		Example: "  rein lint .\n  rein lint ~/.rein/orgs/<id>/declarations",
+		Args:    cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
 			report, err := lint.Run(arguments[0])
 			if err != nil {

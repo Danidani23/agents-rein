@@ -684,6 +684,29 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
   `claude -p` first, which uses the developer's own subscription locally. The pilot's default
   is `agent-cli` locally and `api` in CI. A resolved harness is cached by hash and not judged
   twice (amended 2026-10-15).
+- ✅ **P2.14 — Questions explain themselves: the `prompt` package and `rein status`.** [EXECUTED]
+  2026-10-16. Gate: gofmt, vet and tests green over nine packages, the prompts driven by
+  scripted input and `config` end to end both interactively and with flags; `rein status` on
+  this machine listed the eleven placements as `missing`, which is the state the move left.
+  One deviation found by the tests: without a terminal the agent is assumed to be
+  `claude-code`, the one supported value, rather than demanded as a flag. The real interactive
+  `rein config` run is the user's (you), since this session cannot type into a terminal.
+  Approved 2026-10-16, before P2.4 so that `init`, `org create` and `propose` are built on it.
+  One package behind every interactive command: a text question and a selector, each with a
+  title, a one-line description under it, a default shown in brackets, a validator that
+  re-asks with the reason, and `?` as an answer that prints the long explanation. A selector
+  is a numbered list answered by number or name, the default marked, planned-but-unsupported
+  choices listed and refused; a multi-select takes several numbers. Every interactive command
+  opens with one paragraph saying what it does, ending "Enter keeps the value in brackets; ?
+  explains a question", and ends with a summary of what it will change and a confirmation,
+  skipped by `--yes`. Without a terminal it refuses and names the flags, as today. Dim and
+  bold through plain ANSI codes, off when the output is not a terminal; no library. A
+  cursor-driven menu was considered and declined on 2026-10-16 as too much for now: it needs
+  raw-mode key reading, a plain fallback for CI, and a TUI library against the
+  minimal-dependency rule. `config` is rewritten on the package; `rein status` shows what the
+  tool has done on this machine, user, agent, placements, organisations, projects; every
+  command's help text becomes an explanation. Tests drive each question with scripted input:
+  `?`, an invalid answer, Enter for the default, a number and a name for the selector.
 - 🟢 **P2.4 — The manifest, the label registry and the merge (B2) exist in code, with `init`,
   `label` and `propose`.** [PENDING]
 - 🟢 **P2.5 — The compiler for Claude Code (B3) emits the plugin and marketplace repository, the
@@ -910,3 +933,7 @@ writes is read from the next session on, not in the same one.
   went with it; the README shows the mark until the new wordmark exists (you).
 - (2026-10-15) The wordmark stays as "reins" by the user's choice; the three lockup files are
   back as `rein-logo*.svg` and the README header shows the lockup again.
+- (2026-10-16) P2.14 added before P2.4: self-explaining questions, a numbered selector, a
+  confirmation summary, `rein status`; a TUI menu declined for now.
+- (2026-10-16) P2.14 executed: `prompt` package, `config` rewritten on it with intro, `?`,
+  selector, validation and confirmation, `rein status`, help texts as explanations.

@@ -12,6 +12,7 @@ import (
 
 	"github.com/Danidani23/agents-rein/internal/execute"
 	"github.com/Danidani23/agents-rein/internal/local"
+	"github.com/Danidani23/agents-rein/internal/prompt"
 )
 
 // Exit codes: 0 worked, 1 refused (a precondition or a check failed), 2
@@ -33,16 +34,19 @@ func (crashed crashedError) Error() string {
 	return crashed.cause.Error()
 }
 
-// environment is what every command receives: the three streams.
+// environment is what every command receives: the three streams, and
+// whether a person is typing on the input, which decides whether a command
+// may ask questions.
 type environment struct {
-	in     io.Reader
-	out    io.Writer
-	errOut io.Writer
+	in       io.Reader
+	out      io.Writer
+	errOut   io.Writer
+	terminal bool
 }
 
 // Run executes rein with arguments and returns the exit code.
 func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer) int {
-	env := &environment{in: in, out: out, errOut: errOut}
+	env := &environment{in: in, out: out, errOut: errOut, terminal: prompt.IsTerminal(in)}
 	root := newRootCommand(env)
 	root.SetArgs(arguments)
 	err := root.Execute()
@@ -81,16 +85,20 @@ func requireConfig() (home string, config local.Config, err error) {
 func newRootCommand(env *environment) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "rein",
-		Short: "Compile and lint the agent harness of an organisation",
-		Long: "rein turns the declarations of an org repository into the files each agent tool\n" +
-			"reads, and checks them against the specifications. It is a compiler and a linter,\n" +
-			"never a service.",
+		Short: "Keep your AI coding agents' settings in one place and bring them to every project",
+		Long: "Agents Rein keeps the settings of your AI coding agents, instructions, rules, skills,\n" +
+			"tool servers, hooks and permissions, as declarations in one git repository per\n" +
+			"organisation, at four levels: organisation, team, project and user. rein checks them,\n" +
+			"works out which apply to a project, and writes them into each clone in the form your\n" +
+			"agent reads. It is a compiler and a linter, never a service.\n\n" +
+			"Start with rein config, then rein org connect. rein status shows what has been set up.\n" +
+			"Every command explains itself with --help.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
 	root.SetOut(env.out)
 	root.SetErr(env.errOut)
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newConfigCommand(env), newOrgCommand(env), newLintCommand(env), newExportCommand(env), newImportCommand(env), newVersionCommand(env))
+	root.AddCommand(newConfigCommand(env), newStatusCommand(env), newOrgCommand(env), newLintCommand(env), newExportCommand(env), newImportCommand(env), newVersionCommand(env))
 	return root
 }

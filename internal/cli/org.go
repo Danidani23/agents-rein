@@ -16,10 +16,12 @@ func newOrgCommand(env *environment) *cobra.Command {
 	org := &cobra.Command{
 		Use:   "org",
 		Short: "Connect to, list, switch and disconnect organisations",
-		Long: "An organisation is an org repository: a git repository holding declarations/. connect\n" +
-			"clones one into the rein home and remembers it; use makes one the active organisation,\n" +
-			"which only decides where commands without a repository context go; disconnect removes\n" +
-			"the clone and the registration and never touches the remote.",
+		Long: "An organisation keeps its agent settings in an org repository, a git repository with a\n" +
+			"declarations/ folder. org connect clones one into ~/.rein/orgs/ and remembers it; the\n" +
+			"first one becomes active. org list shows the connected ones. org use switches the active\n" +
+			"organisation, which only decides where commands without a repository context go, such as\n" +
+			"init for a new project; a project already initialised is bound to its own organisation.\n" +
+			"org disconnect forgets one and removes its clone, and never touches the remote.",
 	}
 	org.AddCommand(newOrgConnectCommand(env), newOrgListCommand(env), newOrgUseCommand(env), newOrgDisconnectCommand(env))
 	return org
@@ -29,7 +31,11 @@ func newOrgConnectCommand(env *environment) *cobra.Command {
 	return &cobra.Command{
 		Use:   "connect <remote>",
 		Short: "Clone an existing org repository and remember it",
-		Args:  cobra.ExactArgs(1),
+		Long: "connect clones the org repository at <remote>, a git URL or a local path, checks that it\n" +
+			"holds exactly one organisation record, keeps the clone under ~/.rein/orgs/<id>/ and adds\n" +
+			"the organisation to your config. The first organisation you connect becomes the active one.",
+		Example: "  rein org connect git@github.com:acme/agent-settings.git",
+		Args:    cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
 			return runOrgConnect(env, arguments[0])
 		},
@@ -158,7 +164,10 @@ func newOrgDisconnectCommand(env *environment) *cobra.Command {
 	return &cobra.Command{
 		Use:   "disconnect <slug>",
 		Short: "Forget an organisation and remove its clone; the remote is untouched",
-		Args:  cobra.ExactArgs(1),
+		Long: "disconnect removes the organisation from your config, deletes its clone under ~/.rein/orgs/\n" +
+			"and forgets the projects registered for it on this machine. The remote repository is not\n" +
+			"touched; org destroy, once it exists, is the command that deletes one.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
 			return runOrgDisconnect(env, arguments[0])
 		},

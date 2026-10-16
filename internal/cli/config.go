@@ -1,12 +1,8 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -14,30 +10,61 @@ import (
 	"github.com/Danidani23/agents-rein/internal/address"
 	"github.com/Danidani23/agents-rein/internal/local"
 	"github.com/Danidani23/agents-rein/internal/placement"
+	"github.com/Danidani23/agents-rein/internal/prompt"
 )
+
+const configIntro = "rein config sets up this machine: who you are, which agent you use, and where your\n" +
+	"personal instructions and skills come from. It writes ~/.rein/config.yaml and places your\n" +
+	"instructions and skills into the agent's home folder. Running it again is safe and is how you\n" +
+	"change a value."
 
 func newConfigCommand(env *environment) *cobra.Command {
 	var user, userLevel, agent string
+	var yes bool
 	command := &cobra.Command{
 		Use:   "config",
-		Short: "Set up this machine: who you are and the source of your global instructions",
-		Long: "config records your user slug and the folder your global instructions and skills come\n" +
-			"from, then places them into the Claude home (CLAUDE_CONFIG_DIR, else ~/.claude): links on\n" +
-			"macOS and Linux, copies on Windows. It refuses to replace anything it did not place itself.\n" +
-			"Without --user and --user-level it asks, when a terminal is attached. Every command that\n" +
-			"acts for a user refuses until config has run. Running it again is safe.",
-		Args: cobra.NoArgs,
+		Short: "Set up this machine: who you are, your agent, and where your settings come from",
+		Long: "config is the first command you run on a machine. It records three things in\n" +
+			"~/.rein/config.yaml: your user slug, the name of your user level in every org repository;\n" +
+			"the agent rein writes settings for, claude-code today; and, until sync exists, the folder\n" +
+			"your global instructions and skills come from. It then places those instructions and skills\n" +
+			"into the agent's home folder (CLAUDE_CONFIG_DIR, else ~/.claude): links on macOS and Linux,\n" +
+			"copies on Windows, each recorded so rein reset can remove it. It refuses to replace anything\n" +
+			"it did not place itself.\n\n" +
+			"In a terminal it asks for each value it was not given as a flag and confirms before it\n" +
+			"changes anything. Without a terminal it needs every flag. Every command that acts for you\n" +
+			"refuses until config has run; lint, status and version do not.",
+		Example: "  rein config\n  rein config --user danielmolnar --user-level ~/toolkit --yes",
+		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			return runConfig(env, user, userLevel, agent)
+			return runConfig(env, user, userLevel, agent, yes)
 		},
 	}
 	command.Flags().StringVar(&user, "user", "", "your user slug: lowercase letters, digits and single hyphens")
 	command.Flags().StringVar(&agent, "agent", "", "the agent rein writes settings for; today only claude-code")
-	command.Flags().StringVar(&userLevel, "user-level", "", "folder holding global/AGENTS.md and skills/, placed into the Claude home")
+	command.Flags().StringVar(&userLevel, "user-level", "", "folder holding global/AGENTS.md and skills/, placed into the agent's home")
+	command.Flags().BoolVar(&yes, "yes", false, "do not ask for confirmation before changing the machine")
 	return command
 }
 
-func runConfig(env *environment, user string, userLevel string, agent string) error {
+// agentChoices lists the supported agent first and the planned ones after it,
+// so people see where the tool is going and cannot pick them yet.
+func agentChoices() []prompt.Choice {
+	choices := []prompt.Choice{{Name: local.AgentClaudeCode, Description: "Claude Code"}}
+	for _, planned := range []string{"codex", "cursor", "copilot", "gemini-cli", "opencode"} {
+		choices = append(choices, prompt.Choice{Name: planned, Unavailable: "not yet supported"})
+	}
+	return choices
+}
+
+func validateSlug(answer string) string {
+	if !address.IsSlug(answer) {
+		return fmt.Sprintf("%q may only contain lowercase letters, digits and single hyphens, with none at the ends.", answer)
+	}
+	return ""
+}
+
+func runConfig(env *environment, user string, userLevel string, agent string, yes bool) error {
 	home, err := local.Home()
 	if err != nil {
 		return crashedError{cause: err}
@@ -46,35 +73,76 @@ func runConfig(env *environment, user string, userLevel string, agent string) er
 	if err != nil {
 		return crashedError{cause: err}
 	}
-	if user == "" || userLevel == "" {
-		if !isTerminal(env.in) {
-			return fmt.Errorf("no terminal to ask on; pass --user and --user-level")
-		}
-		asker := &prompter{reader: bufio.NewReader(env.in), out: env.out}
-		if user == "" {
-			user, err = asker.ask("User slug", config.User)
-			if err != nil {
-				return err
-			}
-		}
-		if userLevel == "" {
-			userLevel, err = asker.ask("User-level source folder (holds global/AGENTS.md and skills/)", config.UserLevelSource)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	if !address.IsSlug(user) {
-		return fmt.Errorf("user slug %q may only contain lowercase letters, digits and single hyphens", user)
-	}
 	if agent == "" {
 		agent = config.Agent
 	}
-	if agent == "" {
+	session := prompt.New(env.in, env.out, env.terminal)
+	needsAsking := user == "" || userLevel == ""
+	if needsAsking && !session.CanAsk() {
+		return fmt.Errorf("no terminal to ask on; pass --user and --user-level")
+	}
+	if agent == "" && !session.CanAsk() {
 		agent = local.AgentClaudeCode
 		fmt.Fprintf(env.out, "agent: %s, the only agent this build writes for\n", agent)
 	}
-	if !slices.Contains(local.SupportedAgents, agent) {
+	if needsAsking {
+		session.Intro(configIntro)
+	}
+	if user == "" {
+		user, err = session.Ask(prompt.Text{
+			Title:       "User slug",
+			Description: "Your name inside Agents Rein: the folder of your user level in every org repository, and the author of your proposals.",
+			Explanation: "The slug names the folder declarations/users/<slug>/ in each org repository you join,\n" +
+				"and is recorded as the author of every proposal you make. Lowercase letters, digits and\n" +
+				"single hyphens, so it can be a folder name and an address segment. It is not your GitHub\n" +
+				"login, though matching it is sensible. It never leaves this machine except as that folder\n" +
+				"name in org repositories you push to.",
+			Default:  config.User,
+			Validate: validateSlug,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if agent == "" {
+		agent, err = session.Choose(prompt.Select{
+			Title:       "Agent",
+			Description: "The agent rein writes your settings for.",
+			Explanation: "Your settings are kept in rein's own format and written out in the format of the\n" +
+				"agent you use. Claude Code is the first agent; the others are planned and listed so you\n" +
+				"can see where the tool is going. Changing the agent later means running rein config again.",
+			Choices: agentChoices(),
+			Default: local.AgentClaudeCode,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if userLevel == "" {
+		userLevel, err = session.Ask(prompt.Text{
+			Title:       "User-level source",
+			Description: "A folder holding global/AGENTS.md and skills/<id>/. Temporary: once sync exists, your user level lives in the org repository.",
+			Explanation: "Until rein sync delivers your user level per project, config places it from a folder on\n" +
+				"this machine: global/AGENTS.md becomes the agent's global instructions and each\n" +
+				"skills/<id>/ a skill. The pilot's folder is the toolkit in the agents-rein repository.",
+			Default: config.UserLevelSource,
+			Validate: func(answer string) string {
+				_, err := placement.Plan(answer, "")
+				if err != nil {
+					return err.Error() + "."
+				}
+				return ""
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+	reason := validateSlug(user)
+	if reason != "" {
+		return fmt.Errorf("user slug %s", strings.TrimSuffix(reason, "."))
+	}
+	if !contains(local.SupportedAgents, agent) {
 		return fmt.Errorf("agent %q is not supported; this build writes for %s", agent, strings.Join(local.SupportedAgents, ", "))
 	}
 	claudeHome, err := placement.ClaudeHome()
@@ -88,6 +156,19 @@ func runConfig(env *environment, user string, userLevel string, agent string) er
 	absoluteSource, err := filepath.Abs(userLevel)
 	if err != nil {
 		return crashedError{cause: err}
+	}
+	if !yes {
+		fmt.Fprintf(env.out, "This will write %s and place %d entries into %s.\n", filepath.Join(home, "config.yaml"), len(pairs), claudeHome)
+		if !session.CanAsk() {
+			return fmt.Errorf("no terminal to confirm on; pass --yes")
+		}
+		confirmed, err := session.Confirm("Continue?")
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			return fmt.Errorf("nothing changed")
+		}
 	}
 	config.User = user
 	config.Agent = agent
@@ -114,7 +195,7 @@ func runConfig(env *environment, user string, userLevel string, agent string) er
 	if err != nil {
 		return crashedError{cause: err}
 	}
-	fmt.Fprintf(env.out, "configured %s for user %s\n", home, user)
+	fmt.Fprintf(env.out, "configured %s for user %s, agent %s\n", home, user, agent)
 	if refused > 0 {
 		return fmt.Errorf("%d targets refused; move them aside and run rein config again", refused)
 	}
@@ -132,43 +213,11 @@ func recordPlacement(placements []local.Placement, placed local.Placement) []loc
 	return append(placements, placed)
 }
 
-// isTerminal reports whether the input is an interactive terminal, so a
-// command may ask instead of refusing.
-func isTerminal(in io.Reader) bool {
-	file, ok := in.(*os.File)
-	if !ok {
-		return false
-	}
-	info, err := file.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeCharDevice != 0
-}
-
-type prompter struct {
-	reader *bufio.Reader
-	out    io.Writer
-}
-
-// ask prints a label with a suggestion and reads one line; an empty line
-// takes the suggestion, and is refused when there is none.
-func (asker *prompter) ask(label string, suggestion string) (string, error) {
-	if suggestion != "" {
-		fmt.Fprintf(asker.out, "%s [%s]: ", label, suggestion)
-	} else {
-		fmt.Fprintf(asker.out, "%s: ", label)
-	}
-	line, err := asker.reader.ReadString('\n')
-	if err != nil && line == "" {
-		return "", fmt.Errorf("%s: no answer", label)
-	}
-	answer := strings.TrimSpace(line)
-	if answer == "" {
-		if suggestion == "" {
-			return "", fmt.Errorf("%s is required", label)
+func contains(list []string, item string) bool {
+	for _, candidate := range list {
+		if candidate == item {
+			return true
 		}
-		return suggestion, nil
 	}
-	return answer, nil
+	return false
 }

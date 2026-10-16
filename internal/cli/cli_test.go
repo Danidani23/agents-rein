@@ -60,6 +60,23 @@ func run(arguments ...string) (code int, out string, errOut string) {
 	return code, outBuffer.String(), errBuffer.String()
 }
 
+// runInteractive executes rein as if a person typed the answers: the
+// environment is built directly with terminal set, since a strings.Reader
+// is never a terminal.
+func runInteractive(answers string, arguments ...string) (code int, out string, errOut string) {
+	var outBuffer, errBuffer bytes.Buffer
+	env := &environment{in: strings.NewReader(answers), out: &outBuffer, errOut: &errBuffer, terminal: true}
+	root := newRootCommand(env)
+	root.SetArgs(arguments)
+	err := root.Execute()
+	code = ExitWorked
+	if err != nil {
+		errBuffer.WriteString("rein: " + err.Error() + "\n")
+		code = ExitRefused
+	}
+	return code, outBuffer.String(), errBuffer.String()
+}
+
 // isolate points the rein home and the Claude home at temp folders.
 func isolate(t *testing.T) (reinHome string, claudeHome string) {
 	t.Helper()
@@ -80,7 +97,7 @@ func userLevelSource(t *testing.T) string {
 
 func configure(t *testing.T, source string) {
 	t.Helper()
-	code, _, errOut := run("config", "--user", "danielmolnar", "--user-level", source)
+	code, _, errOut := run("config", "--user", "danielmolnar", "--user-level", source, "--yes")
 	if code != ExitWorked {
 		t.Fatalf("config: code %d err %q", code, errOut)
 	}
@@ -165,7 +182,7 @@ func TestConfig(t *testing.T) {
 	t.Run("flags configure the machine and place the user level", func(t *testing.T) {
 		reinHome, claudeHome := isolate(t)
 		source := userLevelSource(t)
-		code, out, errOut := run("config", "--user", "danielmolnar", "--user-level", source)
+		code, out, errOut := run("config", "--user", "danielmolnar", "--user-level", source, "--yes")
 		if code != ExitWorked {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
@@ -184,15 +201,47 @@ func TestConfig(t *testing.T) {
 		if err != nil {
 			t.Fatalf("skill link: %v", err)
 		}
-		code, out, _ = run("config", "--user", "danielmolnar", "--user-level", source)
+		code, out, _ = run("config", "--user", "danielmolnar", "--user-level", source, "--yes")
 		if code != ExitWorked || !strings.Contains(out, "ok") {
 			t.Fatalf("second run: code %d out %q", code, out)
+		}
+	})
+	t.Run("in a terminal it asks every question, explains on ?, and confirms", func(t *testing.T) {
+		reinHome, _ := isolate(t)
+		source := userLevelSource(t)
+		answers := "?\nDaniel\ndanielmolnar\n\n" + source + "\n\n"
+		code, out, errOut := runInteractive(answers, "config")
+		if code != ExitWorked {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+		for _, expected := range []string{"rein config sets up this machine", "Enter keeps the value in brackets", "The slug names the folder", "lowercase letters", "1) claude-code", "not yet supported", "Continue?", "configured " + reinHome} {
+			if !strings.Contains(out, expected) {
+				t.Fatalf("missing %q in %q", expected, out)
+			}
+		}
+	})
+	t.Run("answering no at the confirmation changes nothing", func(t *testing.T) {
+		reinHome, _ := isolate(t)
+		code, _, errOut := runInteractive("danielmolnar\n\n"+userLevelSource(t)+"\nn\n", "config")
+		if code != ExitRefused || !strings.Contains(errOut, "nothing changed") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+		_, err := os.Stat(filepath.Join(reinHome, "config.yaml"))
+		if err == nil {
+			t.Fatalf("config.yaml was written")
+		}
+	})
+	t.Run("flags without a terminal need --yes", func(t *testing.T) {
+		isolate(t)
+		code, _, errOut := run("config", "--user", "danielmolnar", "--user-level", userLevelSource(t))
+		if code != ExitRefused || !strings.Contains(errOut, "--yes") {
+			t.Fatalf("code %d err %q", code, errOut)
 		}
 	})
 	t.Run("a foreign file in the Claude home is refused and reported", func(t *testing.T) {
 		_, claudeHome := isolate(t)
 		writeFile(t, claudeHome, "CLAUDE.md", "mine\n")
-		code, _, errOut := run("config", "--user", "danielmolnar", "--user-level", userLevelSource(t))
+		code, _, errOut := run("config", "--user", "danielmolnar", "--user-level", userLevelSource(t), "--yes")
 		if code != ExitRefused || !strings.Contains(errOut, "refused") {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
@@ -206,14 +255,14 @@ func TestConfig(t *testing.T) {
 	})
 	t.Run("a slug with uppercase is refused", func(t *testing.T) {
 		isolate(t)
-		code, _, errOut := run("config", "--user", "Daniel", "--user-level", userLevelSource(t))
+		code, _, errOut := run("config", "--user", "Daniel", "--user-level", userLevelSource(t), "--yes")
 		if code != ExitRefused || !strings.Contains(errOut, "slug") {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
 	})
 	t.Run("a source without skills is refused", func(t *testing.T) {
 		isolate(t)
-		code, _, errOut := run("config", "--user", "danielmolnar", "--user-level", t.TempDir())
+		code, _, errOut := run("config", "--user", "danielmolnar", "--user-level", t.TempDir(), "--yes")
 		if code != ExitRefused || !strings.Contains(errOut, "not a user-level source") {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
@@ -405,9 +454,36 @@ func TestExportAndImport(t *testing.T) {
 	})
 	t.Run("an unsupported agent in config is refused", func(t *testing.T) {
 		isolate(t)
-		code, _, errOut := run("config", "--user", "danielmolnar", "--user-level", userLevelSource(t), "--agent", "codex")
+		code, _, errOut := run("config", "--user", "danielmolnar", "--user-level", userLevelSource(t), "--agent", "codex", "--yes")
 		if code != ExitRefused || !strings.Contains(errOut, "not supported") {
 			t.Fatalf("code %d err %q", code, errOut)
+		}
+	})
+}
+
+func TestStatus(t *testing.T) {
+	t.Run("before config it says so and exits 0", func(t *testing.T) {
+		isolate(t)
+		code, out, _ := run("status")
+		if code != ExitWorked || !strings.Contains(out, "not configured") {
+			t.Fatalf("code %d out %q", code, out)
+		}
+	})
+	t.Run("after config it lists the placements and flags a missing target", func(t *testing.T) {
+		_, _ = isolate(t)
+		source := userLevelSource(t)
+		configure(t, source)
+		code, out, _ := run("status")
+		if code != ExitWorked || !strings.Contains(out, "user        danielmolnar") || !strings.Contains(out, "placements  2") || !strings.Contains(out, "ok       config") {
+			t.Fatalf("code %d out %q", code, out)
+		}
+		err := os.RemoveAll(filepath.Join(source, "skills", "commit"))
+		if err != nil {
+			t.Fatalf("remove: %v", err)
+		}
+		code, out, _ = run("status")
+		if code != ExitWorked || !strings.Contains(out, "missing") || !strings.Contains(out, "1 targets are missing") {
+			t.Fatalf("code %d out %q", code, out)
 		}
 	})
 }
