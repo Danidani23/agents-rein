@@ -908,3 +908,5 @@ writes is read from the next session on, not in the same one.
   `github.com/Danidani23/agents-rein`, the home `~/.rein`, because two AI projects on GitHub
   already carried the name `reins`. Dated entries above keep the old name. The wordmark files
   went with it; the README shows the mark until the new wordmark exists (you).
+- (2026-10-15) The wordmark stays as "reins" by the user's choice; the three lockup files are
+  back as `rein-logo*.svg` and the README header shows the lockup again.

@@ -1,7 +1,7 @@
 <p>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/rein-mark-dark.svg">
-    <img src="docs/images/rein-mark.svg" alt="Agents Rein" width="72">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/rein-logo-dark.svg">
+    <img src="docs/images/rein-logo.svg" alt="Agents Rein" width="240">
   </picture>
 </p>
 
