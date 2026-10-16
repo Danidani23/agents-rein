@@ -1,14 +1,37 @@
-// Command rein is the harness distribution tool: a compiler and a linter for
-// agent configuration held in an org repository. It never runs as a service,
-// never pushes into a repository and never writes a vendor's policy path.
+// Command rein is Agents Rein: a compiler and a linter for agent settings held
+// in an org repository. It never runs as a service, never pushes into a
+// repository and never writes a vendor's policy path. This file is the
+// composition root: it wires the adapters of this machine into the local
+// orchestrator and hands it to the gateway.
 package main
 
 import (
 	"os"
 
-	"github.com/Danidani23/agents-rein/internal/cli"
+	"github.com/Danidani23/agents-rein/internal/adapters/claudecode"
+	"github.com/Danidani23/agents-rein/internal/adapters/git"
+	"github.com/Danidani23/agents-rein/internal/adapters/github"
+	"github.com/Danidani23/agents-rein/internal/adapters/localstate"
+	"github.com/Danidani23/agents-rein/internal/app/0_gateway/cli"
+	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 func main() {
-	os.Exit(cli.Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	os.Exit(cli.Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, wire))
+}
+
+// wire builds the local orchestrator over this machine's adapters.
+func wire() (orchestration.Orchestrator, error) {
+	home, err := localstate.Home()
+	if err != nil {
+		return orchestration.Orchestrator{}, err
+	}
+	return orchestration.NewLocal(orchestration.Dependencies{
+		Home:       home,
+		Host:       github.Host{},
+		Repository: git.Repository{},
+		Agents:     []ports.Agent{claudecode.Agent{}},
+		State:      localstate.Store{Home: home},
+	}), nil
 }

@@ -1,6 +1,7 @@
-// Package architecture holds no code, only the test that keeps the hexagonal
-// layout honest: dependencies point inward, and nothing in the core knows the
-// outside world.
+// Package architecture holds no code, only the test that keeps the layout
+// honest: dependencies point inward, the gateway knows the orchestration only
+// through its interfaces, and the core knows no adapter. main, outside
+// internal, is the composition root and may import everything.
 package architecture
 
 import (
@@ -16,16 +17,18 @@ const module = "github.com/Danidani23/agents-rein/internal/"
 
 // allowed says which internal layers each layer may import.
 var allowed = map[string][]string{
-	"domain":   {"domain"},
-	"ports":    {"domain"},
-	"app":      {"domain", "ports"},
-	"adapters": {"domain", "ports", "adapters/execute"},
-	"cli":      {"domain", "ports", "app", "adapters", "version"},
-	"version":  {},
+	"2_services":      {"2_services"},
+	"ports":           {"2_services"},
+	"1_orchestration": {"2_services", "ports"},
+	"adapters":        {"2_services", "ports", "adapters/execute"},
+	"0_gateway":       {"2_services", "ports", "1_orchestration", "adapters/terminal", "adapters/execute", "version"},
+	"version":         {},
 }
 
-func layerOf(importPath string) string {
-	rest := strings.TrimPrefix(importPath, module)
+// layerOf names the layer of a path under internal/: the three application
+// layers sit under app/, the edges beside it.
+func layerOf(rest string) string {
+	rest = strings.TrimPrefix(rest, "app/")
 	return strings.SplitN(rest, "/", 2)[0]
 }
 
@@ -43,7 +46,7 @@ func TestDependenciesPointInward(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		layer := strings.SplitN(filepath.ToSlash(relative), "/", 2)[0]
+		layer := layerOf(filepath.ToSlash(relative))
 		if layer == "architecture" {
 			return nil
 		}
@@ -56,7 +59,7 @@ func TestDependenciesPointInward(t *testing.T) {
 			if !strings.HasPrefix(importPath, module) {
 				continue
 			}
-			target := strings.TrimPrefix(importPath, module)
+			target := strings.TrimPrefix(strings.TrimPrefix(importPath, module), "app/")
 			permitted := false
 			for _, candidate := range allowed[layer] {
 				if target == candidate || strings.HasPrefix(target, candidate+"/") {

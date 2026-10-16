@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-
-	"github.com/Danidani23/agents-rein/internal/app"
 )
 
 const resetExplanation = "A placement is one link (a copy on Windows) that rein made in your agent's home folder,\n" +
@@ -40,11 +38,11 @@ func newResetCommand(env *environment) *cobra.Command {
 }
 
 func runReset(env *environment, all bool, yes bool) error {
-	dependencies, err := env.dependencies()
+	orchestrator, err := env.orchestrate()
 	if err != nil {
 		return err
 	}
-	plan, err := app.PlanReset(dependencies, all)
+	plan, err := orchestrator.Machine.PlanReset(all)
 	if err != nil {
 		return err
 	}
@@ -72,7 +70,7 @@ func runReset(env *environment, all bool, yes bool) error {
 			return refuse("nothing changed")
 		}
 	}
-	result, err := app.ApplyReset(dependencies, plan)
+	result, err := orchestrator.Machine.ApplyReset(plan)
 	if err != nil {
 		return err
 	}

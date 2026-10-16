@@ -4,9 +4,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-
-	"github.com/Danidani23/agents-rein/internal/adapters/git"
-	"github.com/Danidani23/agents-rein/internal/app"
 )
 
 func newOrgCommand(env *environment) *cobra.Command {
@@ -34,15 +31,11 @@ func newOrgConnectCommand(env *environment) *cobra.Command {
 		Example: "  rein org connect git@github.com:acme/agent-settings.git",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
-			dependencies, err := env.dependencies()
+			orchestrator, err := env.orchestrate()
 			if err != nil {
 				return err
 			}
-			err = git.Repository{}.Preflight()
-			if err != nil {
-				return refuse(err.Error())
-			}
-			result, err := app.OrgConnect(dependencies, arguments[0])
+			result, err := orchestrator.Organizations.Connect(arguments[0])
 			if err != nil {
 				return err
 			}
@@ -61,11 +54,11 @@ func newOrgListCommand(env *environment) *cobra.Command {
 		Short: "List the connected organisations; the active one is marked",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			dependencies, err := env.dependencies()
+			orchestrator, err := env.orchestrate()
 			if err != nil {
 				return err
 			}
-			organizations, active, err := app.OrgList(dependencies)
+			organizations, active, err := orchestrator.Organizations.List()
 			if err != nil {
 				return err
 			}
@@ -91,11 +84,11 @@ func newOrgUseCommand(env *environment) *cobra.Command {
 		Short: "Make an organisation the active one",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
-			dependencies, err := env.dependencies()
+			orchestrator, err := env.orchestrate()
 			if err != nil {
 				return err
 			}
-			err = app.OrgUse(dependencies, arguments[0])
+			err = orchestrator.Organizations.Use(arguments[0])
 			if err != nil {
 				return err
 			}
@@ -114,11 +107,11 @@ func newOrgDisconnectCommand(env *environment) *cobra.Command {
 			"touched; org destroy, once it exists, is the command that deletes one.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
-			dependencies, err := env.dependencies()
+			orchestrator, err := env.orchestrate()
 			if err != nil {
 				return err
 			}
-			result, err := app.OrgDisconnect(dependencies, arguments[0])
+			result, err := orchestrator.Organizations.Disconnect(arguments[0])
 			if err != nil {
 				return err
 			}

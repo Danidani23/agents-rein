@@ -1,8 +1,8 @@
-// Package cli is the driving adapter: cobra commands that read flags, ask
-// through the Prompter port, call a use case in internal/app and print its
-// result. Every byte of output goes through the writers Run receives; nothing
-// in this module writes to the process streams directly except main, and a
-// test enforces it.
+// Package cli is the gateway a person uses: cobra commands that read flags,
+// ask through the Prompter port, call the orchestrator and print its result.
+// It depends on the orchestration interfaces, never on an adapter other than
+// the terminal, which is its own device; main wires the rest. Every byte of
+// output goes through the writers Run receives, and a test enforces it.
 package cli
 
 import (
@@ -12,13 +12,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/agents-rein/internal/adapters/claudecode"
 	"github.com/Danidani23/agents-rein/internal/adapters/execute"
-	"github.com/Danidani23/agents-rein/internal/adapters/git"
-	"github.com/Danidani23/agents-rein/internal/adapters/github"
-	"github.com/Danidani23/agents-rein/internal/adapters/localstate"
 	"github.com/Danidani23/agents-rein/internal/adapters/terminal"
-	"github.com/Danidani23/agents-rein/internal/app"
+	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
@@ -31,14 +27,18 @@ const (
 	ExitToolFailed = 3
 )
 
+// Orchestrate returns the orchestrator a command talks to; it runs lazily so
+// that help and version never touch the machine.
+type Orchestrate func() (orchestration.Orchestrator, error)
+
 // environment is what every command receives: the streams, whether a person
-// is typing, and the wired dependencies.
+// is typing, and the orchestrator.
 type environment struct {
-	in           io.Reader
-	out          io.Writer
-	errOut       io.Writer
-	terminal     bool
-	dependencies func() (app.Dependencies, error)
+	in          io.Reader
+	out         io.Writer
+	errOut      io.Writer
+	terminal    bool
+	orchestrate Orchestrate
 }
 
 func (env *environment) prompter() ports.Prompter {
@@ -46,8 +46,8 @@ func (env *environment) prompter() ports.Prompter {
 }
 
 // Run executes rein with arguments and returns the exit code.
-func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer) int {
-	env := &environment{in: in, out: out, errOut: errOut, terminal: terminal.IsTerminal(in), dependencies: realDependencies}
+func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer, orchestrate Orchestrate) int {
+	env := &environment{in: in, out: out, errOut: errOut, terminal: terminal.IsTerminal(in), orchestrate: orchestrate}
 	return runCommand(env, arguments)
 }
 
@@ -63,17 +63,14 @@ func runCommand(env *environment, arguments []string) int {
 	if errors.As(err, &failure) {
 		return ExitToolFailed
 	}
-	if errors.Is(err, app.ErrRefused) || errors.Is(err, errRefusedByCommand) {
-		return ExitRefused
-	}
-	if isUsageError(err) {
+	if errors.Is(err, orchestration.ErrRefused) || errors.Is(err, errRefusedByCommand) || isUsageError(err) {
 		return ExitRefused
 	}
 	return ExitCrashed
 }
 
-// errRefusedByCommand marks a refusal decided in the CLI itself, such as a
-// missing terminal or a declined confirmation.
+// errRefusedByCommand marks a refusal decided in the gateway itself, such as
+// a missing terminal or a declined confirmation.
 var errRefusedByCommand = errors.New("refused by command")
 
 type commandRefusal struct {
@@ -102,21 +99,6 @@ func isUsageError(err error) bool {
 		}
 	}
 	return false
-}
-
-// realDependencies wires the adapters of this machine.
-func realDependencies() (app.Dependencies, error) {
-	home, err := localstate.Home()
-	if err != nil {
-		return app.Dependencies{}, err
-	}
-	return app.Dependencies{
-		Home:       home,
-		Host:       github.Host{},
-		Repository: git.Repository{},
-		Agents:     []ports.Agent{claudecode.Agent{}},
-		State:      localstate.Store{Home: home},
-	}, nil
 }
 
 func newRootCommand(env *environment) *cobra.Command {

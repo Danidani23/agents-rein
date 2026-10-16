@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Danidani23/agents-rein/internal/domain/machine"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 )
 
 func TestUnplace(t *testing.T) {

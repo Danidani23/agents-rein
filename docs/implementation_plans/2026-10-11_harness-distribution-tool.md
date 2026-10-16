@@ -198,6 +198,18 @@ committed instead of gitignored (D4).
   commit, offers `--no-commit`, and on a failed commit reports, leaves the paths staged and
   records the clone as not committed; `sync` refuses to write at tracked paths until then.
   Pushing stays the user's. To confirm.
+- ✅ **D16 — Gateway, orchestration, services: one modular monolith behind interfaces.**
+  Decided 2026-10-16, on D15. The gateway depends on the orchestration through one interface
+  per area, `Organizations` and `Machine` today, `Projects`, `Review` and `Distill` to come,
+  held by an `Orchestrator`; every method takes and returns plain data and never asks or
+  prints, so a remote implementation can stand in for the local one if a backend ever
+  exists, and the host is a port so leaving GitHub is an adapter. Interfaces for services
+  only where an implementation is swapped or faked; the rest are concrete packages. `main`
+  is the composition root. The three layers sit under `internal/app/` as `0_gateway`,
+  `1_orchestration` and `2_services`, numbered to read in order, with `ports`, `adapters`,
+  `architecture` and `version` beside them; Go accepts the names, the package names stay
+  plain, and the import paths carry the numbers, which is the one cost accepted for the
+  neatness.
 - ✅ **D15 — Hexagonal layout now.** Decided 2026-10-16: a pure core and replaceable adapters,
   with a port only where a second implementation is plausible: the host (GitHub, later
   GitLab), the agent (Claude Code, later the planned ones), the repository (git), state and
@@ -808,6 +820,14 @@ from that project's snapshot.
   P2.7, where it is first needed. Gate: `task rein:check` green with every test moved and
   new use-case tests on fakes for each port; `status`, `--help`, `lint .` and the refusals
   unchanged on this machine.
+- ✅ **P2.20 — The orchestrator interfaces and the final layout (D16).** [EXECUTED]
+  2026-10-16. `internal/app/0_gateway/cli` reads flags, asks and prints against
+  `orchestration.Orchestrator`; `internal/app/1_orchestration` holds `Organizations` and
+  `Machine` with `NewLocal` over the ports; `internal/app/2_services` the pure packages;
+  `cmd/rein` wires the adapters. The repository port gained `Preflight`. Tests: the gateway
+  on a fake orchestrator, the orchestration on fakes for every port, `cmd/rein` end to end
+  over a stubbed `gh` and `claude`, and the architecture test with the new rules. Gate:
+  `task rein:check` green; `status` and `lint .` unchanged on this machine.
 - 🟢 **P2.16 — `team create` and `project create`.** [PENDING] Records written by the owner to
   the org repository (D13): `team.yaml` with id, slug, name, description; `project.yaml` with
   the same plus teams, labels chosen from the seeded registry, and path; committed and pushed.
@@ -1074,3 +1094,5 @@ writes is read from the next session on, not in the same one.
   imports outward, and a fix for the null device counting as a terminal. The user's gateway,
   orchestration and services vocabulary mapped onto `cli`, `app` and `domain` in CLAUDE.md:
   a modular monolith in one binary, never separate processes (ADR, N1).
+- (2026-10-16) D16 and P2.20: the orchestrator interfaces, main as the composition root, the
+  layers numbered under `internal/app/`.

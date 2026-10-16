@@ -4,7 +4,7 @@
 // later the planned ones), the state store, and the prompter.
 package ports
 
-import "github.com/Danidani23/agents-rein/internal/domain/machine"
+import "github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 
 // Identity is who rein acts for: the host account, read every time and never
 // stored (D8, D9). Slug is the address segment derived from the login.
@@ -21,6 +21,9 @@ type Host interface {
 
 // Repository is version control on this machine.
 type Repository interface {
+	// Preflight checks that version control is installed, before anything
+	// changes.
+	Preflight() error
 	// Clone clones remote into directory, which must not exist, without ever
 	// prompting.
 	Clone(remote string, directory string) error

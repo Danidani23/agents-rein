@@ -1,12 +1,12 @@
-package app
+package orchestration
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/Danidani23/agents-rein/internal/domain/declaration"
-	"github.com/Danidani23/agents-rein/internal/domain/machine"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 )
 
 // ConnectResult is what org connect did.
@@ -17,11 +17,16 @@ type ConnectResult struct {
 	BecameActive bool
 }
 
-// OrgConnect clones an org repository, checks that it holds exactly one
+// Connect clones an org repository, checks that it holds exactly one
 // organisation record, keeps the clone under <home>/orgs/<id>/ and remembers
 // the organisation; the first one connected becomes active.
-func OrgConnect(dependencies Dependencies, remote string) (ConnectResult, error) {
+func (implementation *local) Connect(remote string) (ConnectResult, error) {
+	dependencies := implementation.dependencies
 	_, err := dependencies.Host.Identity()
+	if err != nil {
+		return ConnectResult{}, refuse(err.Error())
+	}
+	err = dependencies.Repository.Preflight()
 	if err != nil {
 		return ConnectResult{}, refuse(err.Error())
 	}
@@ -77,8 +82,9 @@ func OrgConnect(dependencies Dependencies, remote string) (ConnectResult, error)
 	return ConnectResult{Slug: organization.Slug, Name: organization.Name, Clone: final, BecameActive: becameActive}, nil
 }
 
-// OrgList returns the connected organisations and the active slug.
-func OrgList(dependencies Dependencies) (organizations []machine.OrganizationRef, active string, err error) {
+// List returns the connected organisations and the active slug.
+func (implementation *local) List() (organizations []machine.OrganizationRef, active string, err error) {
+	dependencies := implementation.dependencies
 	_, err = dependencies.Host.Identity()
 	if err != nil {
 		return nil, "", refuse(err.Error())
@@ -90,8 +96,9 @@ func OrgList(dependencies Dependencies) (organizations []machine.OrganizationRef
 	return state.Organizations, state.Active, nil
 }
 
-// OrgUse makes a connected organisation the active one.
-func OrgUse(dependencies Dependencies, slug string) error {
+// Use makes a connected organisation the active one.
+func (implementation *local) Use(slug string) error {
+	dependencies := implementation.dependencies
 	_, err := dependencies.Host.Identity()
 	if err != nil {
 		return refuse(err.Error())
@@ -115,9 +122,10 @@ type DisconnectResult struct {
 	Active          string
 }
 
-// OrgDisconnect forgets an organisation on this machine: its clone, its
+// Disconnect forgets an organisation on this machine: its clone, its
 // registration and its projects. The remote is never touched.
-func OrgDisconnect(dependencies Dependencies, slug string) (DisconnectResult, error) {
+func (implementation *local) Disconnect(slug string) (DisconnectResult, error) {
+	dependencies := implementation.dependencies
 	_, err := dependencies.Host.Identity()
 	if err != nil {
 		return DisconnectResult{}, refuse(err.Error())

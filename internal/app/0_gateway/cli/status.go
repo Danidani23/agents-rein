@@ -6,8 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/agents-rein/internal/adapters/claudecode"
-	"github.com/Danidani23/agents-rein/internal/app"
+	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 )
 
 func newStatusCommand(env *environment) *cobra.Command {
@@ -22,11 +21,11 @@ func newStatusCommand(env *environment) *cobra.Command {
 			"says so and still shows the rest.",
 		Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			dependencies, err := env.dependencies()
+			orchestrator, err := env.orchestrate()
 			if err != nil {
 				return err
 			}
-			report, err := app.Status(dependencies)
+			report, err := orchestrator.Machine.Status()
 			if err != nil {
 				return err
 			}
@@ -36,14 +35,14 @@ func newStatusCommand(env *environment) *cobra.Command {
 	}
 }
 
-func printStatus(env *environment, report app.StatusReport) {
+func printStatus(env *environment, report orchestration.StatusReport) {
 	if report.IdentityError != "" {
 		fmt.Fprintf(env.out, "github      none: %s\n", report.IdentityError)
 	} else {
 		fmt.Fprintf(env.out, "github      %s  (active gh account; slug %s)\n", report.Identity.Login, report.Identity.Slug)
 	}
 	if len(report.Agents) == 0 {
-		fmt.Fprintf(env.out, "agents      none found; this build writes for %s\n", claudecode.Name)
+		fmt.Fprintf(env.out, "agents      none found; this build writes for claude-code\n")
 	} else {
 		fmt.Fprintf(env.out, "agents      %s\n", strings.Join(report.Agents, ", "))
 	}

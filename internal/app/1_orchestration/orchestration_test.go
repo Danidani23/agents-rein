@@ -1,4 +1,4 @@
-package app
+package orchestration
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Danidani23/agents-rein/internal/domain/machine"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
@@ -29,6 +29,8 @@ type fakeRepository struct {
 	record string
 	fail   bool
 }
+
+func (fakeRepository) Preflight() error { return nil }
 
 func (repository fakeRepository) Clone(remote string, directory string) error {
 	if repository.fail {
@@ -88,7 +90,7 @@ func dependencies(t *testing.T) (Dependencies, *memoryState, *fakeAgent) {
 func TestOrgConnect(t *testing.T) {
 	t.Run("a clone with one record is kept under orgs and becomes active", func(t *testing.T) {
 		deps, state, _ := dependencies(t)
-		result, err := OrgConnect(deps, "git@example:acme.git")
+		result, err := NewLocal(deps).Organizations.Connect("git@example:acme.git")
 		if err != nil || result.Slug != "acme" || result.Name != "Acme" || !result.BecameActive {
 			t.Fatalf("result %+v err %v", result, err)
 		}
@@ -98,8 +100,8 @@ func TestOrgConnect(t *testing.T) {
 	})
 	t.Run("a second connect of the same organisation is refused", func(t *testing.T) {
 		deps, _, _ := dependencies(t)
-		_, _ = OrgConnect(deps, "x")
-		_, err := OrgConnect(deps, "x")
+		_, _ = NewLocal(deps).Organizations.Connect("x")
+		_, err := NewLocal(deps).Organizations.Connect("x")
 		if !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "already connected") {
 			t.Fatalf("err %v", err)
 		}
@@ -107,7 +109,7 @@ func TestOrgConnect(t *testing.T) {
 	t.Run("a clone without a record is refused and removed", func(t *testing.T) {
 		deps, _, _ := dependencies(t)
 		deps.Repository = fakeRepository{}
-		_, err := OrgConnect(deps, "x")
+		_, err := NewLocal(deps).Organizations.Connect("x")
 		if !errors.Is(err, ErrRefused) {
 			t.Fatalf("err %v", err)
 		}
@@ -119,7 +121,7 @@ func TestOrgConnect(t *testing.T) {
 	t.Run("a failed clone is not a refusal", func(t *testing.T) {
 		deps, _, _ := dependencies(t)
 		deps.Repository = fakeRepository{fail: true}
-		_, err := OrgConnect(deps, "x")
+		_, err := NewLocal(deps).Organizations.Connect("x")
 		if err == nil || errors.Is(err, ErrRefused) {
 			t.Fatalf("err %v", err)
 		}
@@ -127,10 +129,10 @@ func TestOrgConnect(t *testing.T) {
 	t.Run("without an identity every org use case refuses", func(t *testing.T) {
 		deps, _, _ := dependencies(t)
 		deps.Host = fakeHost{}
-		_, err := OrgConnect(deps, "x")
-		_, _, listErr := OrgList(deps)
-		useErr := OrgUse(deps, "acme")
-		_, disconnectErr := OrgDisconnect(deps, "acme")
+		_, err := NewLocal(deps).Organizations.Connect("x")
+		_, _, listErr := NewLocal(deps).Organizations.List()
+		useErr := NewLocal(deps).Organizations.Use("acme")
+		_, disconnectErr := NewLocal(deps).Organizations.Disconnect("acme")
 		for _, candidate := range []error{err, listErr, useErr, disconnectErr} {
 			if !errors.Is(candidate, ErrRefused) || !strings.Contains(candidate.Error(), "gh auth login") {
 				t.Fatalf("err %v", candidate)
@@ -139,12 +141,12 @@ func TestOrgConnect(t *testing.T) {
 	})
 	t.Run("use and disconnect work on the state", func(t *testing.T) {
 		deps, state, _ := dependencies(t)
-		_, _ = OrgConnect(deps, "x")
-		err := OrgUse(deps, "other")
+		_, _ = NewLocal(deps).Organizations.Connect("x")
+		err := NewLocal(deps).Organizations.Use("other")
 		if !errors.Is(err, ErrRefused) {
 			t.Fatalf("use of an unknown slug: %v", err)
 		}
-		result, err := OrgDisconnect(deps, "acme")
+		result, err := NewLocal(deps).Organizations.Disconnect("acme")
 		if err != nil || result.Active != "" || len(state.state.Organizations) != 0 {
 			t.Fatalf("result %+v err %v state %+v", result, err, state.state)
 		}
@@ -159,7 +161,7 @@ func TestStatus(t *testing.T) {
 	t.Run("a logged-out host is reported, not refused", func(t *testing.T) {
 		deps, _, _ := dependencies(t)
 		deps.Host = fakeHost{}
-		report, err := Status(deps)
+		report, err := NewLocal(deps).Machine.Status()
 		if err != nil || !strings.Contains(report.IdentityError, "gh auth login") || report.Identity.Login != "" {
 			t.Fatalf("report %+v err %v", report, err)
 		}
@@ -169,7 +171,7 @@ func TestStatus(t *testing.T) {
 		present := filepath.Join(t.TempDir(), "present")
 		_ = os.WriteFile(present, []byte("x"), 0o644)
 		state.state.Placements = []machine.Placement{{Path: "/a", Target: present}, {Path: "/b", Target: "/nowhere/gone"}}
-		report, err := Status(deps)
+		report, err := NewLocal(deps).Machine.Status()
 		if err != nil || report.Missing != 1 || len(report.Placements) != 2 || !report.Placements[0].TargetExists || report.Placements[1].TargetExists {
 			t.Fatalf("report %+v err %v", report, err)
 		}
@@ -177,7 +179,7 @@ func TestStatus(t *testing.T) {
 			t.Fatalf("agents %v", report.Agents)
 		}
 		agent.installed = false
-		report, _ = Status(deps)
+		report, _ = NewLocal(deps).Machine.Status()
 		if len(report.Agents) != 0 {
 			t.Fatalf("agents %v", report.Agents)
 		}
@@ -189,7 +191,7 @@ func TestReset(t *testing.T) {
 		deps, state, _ := dependencies(t)
 		state.state.Placements = []machine.Placement{{Path: "/a"}}
 		state.state.Organizations = []machine.OrganizationRef{{Slug: "acme"}}
-		plan, err := PlanReset(deps, true)
+		plan, err := NewLocal(deps).Machine.PlanReset(true)
 		if err != nil || len(plan.Placements) != 1 || len(plan.Organizations) != 1 || !plan.All {
 			t.Fatalf("plan %+v err %v", plan, err)
 		}
@@ -203,8 +205,8 @@ func TestReset(t *testing.T) {
 		state.state.Clones = map[string]string{"id-1": clone}
 		state.state.Active = "acme"
 		state.state.Projects = []machine.Project{{Organization: "id-1"}}
-		plan, _ := PlanReset(deps, true)
-		result, err := ApplyReset(deps, plan)
+		plan, _ := NewLocal(deps).Machine.PlanReset(true)
+		result, err := NewLocal(deps).Machine.ApplyReset(plan)
 		if err != nil || result.Kept != 1 || len(result.RemovedClones) != 1 || len(agent.unplaced) != 2 {
 			t.Fatalf("result %+v err %v unplaced %v", result, err, agent.unplaced)
 		}

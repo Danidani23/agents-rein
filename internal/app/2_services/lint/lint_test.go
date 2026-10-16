@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Danidani23/agents-rein/internal/domain/declaration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 )
 
 func writeFile(t *testing.T, root string, relative string, content string) {

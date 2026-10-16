@@ -5,7 +5,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/Danidani23/agents-rein/internal/domain/address"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
 )
 
 // The limits the Agent Skills specification sets.

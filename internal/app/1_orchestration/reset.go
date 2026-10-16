@@ -1,10 +1,10 @@
-package app
+package orchestration
 
 import (
 	"os"
 	"path/filepath"
 
-	"github.com/Danidani23/agents-rein/internal/domain/machine"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
@@ -20,7 +20,8 @@ type ResetPlan struct {
 }
 
 // PlanReset reads the state and says what a reset would remove.
-func PlanReset(dependencies Dependencies, all bool) (ResetPlan, error) {
+func (implementation *local) PlanReset(all bool) (ResetPlan, error) {
+	dependencies := implementation.dependencies
 	state, err := dependencies.State.Load()
 	if err != nil {
 		return ResetPlan{}, err
@@ -54,7 +55,8 @@ type ResetResult struct {
 // ApplyReset removes every placement rein made, dangling ones included, the
 // imports, and with all also the clones, the organisations and the projects.
 // A placement that is not what rein recorded is skipped and kept in state.
-func ApplyReset(dependencies Dependencies, plan ResetPlan) (ResetResult, error) {
+func (implementation *local) ApplyReset(plan ResetPlan) (ResetResult, error) {
+	dependencies := implementation.dependencies
 	state, err := dependencies.State.Load()
 	if err != nil {
 		return ResetResult{}, err
