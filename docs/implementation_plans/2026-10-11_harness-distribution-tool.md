@@ -177,6 +177,36 @@ committed instead of gitignored (D4).
   the raw material for `rein migrate`, which later turns a snapshot into declarations with an
   agent's help and offers them through `propose`. Connect places nothing (D4). Order: P2.4,
   then P2.7 with the snapshot, then P2.5.
+- 💬 **D12 — The mutation ledger, `restore` and `reset`.** Proposed 2026-10-16 from the user's
+  model: rein records every mutation it makes on this machine, per agent home and per clone,
+  what it moved out, kept only in `~/.rein/snapshots/` as path to content and never in any
+  repository, and what it placed in. `restore` removes everything rein placed and puts the
+  moved-out files back, machine as before rein; `reset` restores first, then deletes the
+  ledger, the snapshots, the clones and the registrations, so no placed file is ever
+  orphaned. To confirm: that `reset` implies `restore`.
+- 💬 **D13 — The organisation's owner writes records directly.** Proposed 2026-10-16. Teams
+  and projects are records; the account that ran `org create` writes them to `main` while
+  setting the organisation up, and branch protection exempts the owner for records only, since
+  a pull request approved by its own author is ceremony. Declarations always go through
+  `propose`. To confirm.
+- 💬 **D14 — `init` commits the move-out itself.** Proposed 2026-10-16, reversing the
+  "commits nothing" part of D4 for this one case. After the move-out the deleted paths are
+  still tracked in `HEAD`, a `.gitignore` entry does not ignore a tracked file, and the
+  generated files `sync` writes at those paths would show as modifications and could be
+  committed by a careless `git add .`; a `git checkout .` would resurrect the old files. So
+  `init` stages exactly the paths it touched, commits with a fixed message, verifies the
+  commit, offers `--no-commit`, and on a failed commit reports, leaves the paths staged and
+  records the clone as not committed; `sync` refuses to write at tracked paths until then.
+  Pushing stays the user's. To confirm.
+- ✅ **D15 — Hexagonal layout now.** Decided 2026-10-16: a pure core and replaceable adapters,
+  with a port only where a second implementation is plausible: the host (GitHub, later
+  GitLab), the agent (Claude Code, later the planned ones), the repository (git), state and
+  snapshots, the prompter, the judge. `cmd/rein`, `internal/cli` as the driving adapter,
+  `internal/app` for the use cases, `internal/domain` with no I/O, `internal/ports`,
+  `internal/adapters/{github,git,claudecode,localstate,terminal}`. Distill is a pure domain
+  function, snapshot in, declarations out, with the model-assisted pass behind the judge port.
+  Nothing is a service in the process sense (ADR, N1). The move is mechanical and happens
+  before P2.4 so no use case is written against the wrong seams.
 
 ## Design
 
@@ -757,6 +787,35 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
   tool has done on this machine, user, agent, placements, organisations, projects; every
   command's help text becomes an explanation. Tests drive each question with scripted input:
   `?`, an invalid answer, Enter for the default, a number and a name for the selector.
+## The pilot path
+
+Decided 2026-10-16 as the order of work, each item planned before it is built: P2.19, P2.4
+first half, P2.7, P2.16, P2.17, P2.18, P2.15, then P2.5. Its gate is the user's list: `org
+create` creates an organisation; the first team and project exist in it; `init` binds a new
+project, moves its agent settings into a snapshot and commits the move-out; `distill` runs
+from that project's snapshot.
+
+- 🟢 **P2.19 — The hexagonal layout (D15).** [PENDING] The existing packages move: `address`,
+  `declaration`, `lint`, `exchange` into `internal/domain`; `placement` becomes the Claude
+  Code adapter; `local`, `execute`, `prompt` become adapters; the ports are written for host,
+  repository, agent, state, snapshots, prompter; `cli` calls use cases in `internal/app`.
+  Gate: `task rein:check` green with the tests moved along, behaviour unchanged.
+- 🟢 **P2.16 — `team create` and `project create`.** [PENDING] Records written by the owner to
+  the org repository (D13): `team.yaml` with id, slug, name, description; `project.yaml` with
+  the same plus teams, labels chosen from the seeded registry, and path; committed and pushed.
+- 🟢 **P2.17 — `init` binds, snapshots and moves out.** [PENDING] Fingerprint, record binding,
+  the snapshot of `CLAUDE.md`, `.claude/` and `.mcp.json` into `~/.rein/snapshots/`, their
+  deletion from the working tree, the marked block in `.gitignore`, the commit (D14), the
+  registration in state. Refuses outside a git repository and in a clone that matches two
+  organisations (C2).
+- 🟢 **P2.18 — `distill`.** [PENDING] Pure and mechanical first: `CLAUDE.md` and each rule file
+  become rules, skills stay skills, `settings.json` permissions and hooks become permissions
+  and hooks declarations, `.mcp.json` servers become server declarations, each at the
+  project's level in the org repository clone, handed to `propose`. `--assist`, which rewrites
+  prose into cleaner rules through the judge port, comes later. Runs from a project: `rein
+  distill` in the clone, or `--project <slug>`.
+- 🟢 **P2.15 — The ledger, `restore`, and `reset` on it (D12).** [PENDING] Supersedes the
+  undo half of P2.9; `org destroy` and `uninstall` stay there.
 - 🟢 **P2.4 — The manifest, the label registry and the merge (B2) exist in code, with `init`,
   `label` and `propose`.** [PENDING]
 - 🟢 **P2.5 — The compiler for Claude Code (B3) emits the plugin and marketplace repository, the
@@ -999,3 +1058,6 @@ writes is read from the next session on, not in the same one.
   command and source. The dated entries above keep `config` as history.
 - (2026-10-16) D11: import and export go through the org repository, the local import removed,
   snapshots at connect and init for migration. Order: P2.4, P2.7, P2.5.
+- (2026-10-16) The user's model recorded: a mutation ledger, `restore` and `reset` (D12), the
+  owner writing records directly (D13), `init` committing the move-out (D14), the hexagonal
+  layout (D15). The pilot path written with P2.15 to P2.19 in the user's order.
