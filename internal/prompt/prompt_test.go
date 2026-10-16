@@ -138,12 +138,16 @@ func TestStyling(t *testing.T) {
 			t.Fatalf("intro missing the convention: %q", out.String())
 		}
 	})
-	t.Run("escape codes with a terminal", func(t *testing.T) {
+	t.Run("escape codes with a terminal, and the explanation is styled like a description", func(t *testing.T) {
 		var out bytes.Buffer
-		s := New(strings.NewReader("x\n"), &out, true)
-		_, _ = s.Ask(Text{Title: "Q"})
-		if !strings.Contains(out.String(), "\033[1m") {
-			t.Fatalf("no bold in terminal output: %q", out.String())
+		s := New(strings.NewReader("?\nx\n"), &out, true)
+		_, _ = s.Ask(Text{Title: "Q", Description: "d", Explanation: "first line\nsecond line"})
+		text := out.String()
+		if !strings.Contains(text, "\033[1m") {
+			t.Fatalf("no bold in terminal output: %q", text)
+		}
+		if !strings.Contains(text, "\033[2;3m  d\033[0m") || !strings.Contains(text, "\033[2;3mfirst line\033[0m\n\033[2;3msecond line\033[0m") {
+			t.Fatalf("description or explanation not faint italic per line: %q", text)
 		}
 	})
 }

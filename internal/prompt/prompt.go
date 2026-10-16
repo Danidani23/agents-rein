@@ -219,7 +219,7 @@ func (session *Session) explain(explanation string) {
 	if explanation == "" {
 		explanation = "No further explanation for this question."
 	}
-	fmt.Fprintf(session.out, "\n%s\n\n", explanation)
+	fmt.Fprintf(session.out, "\n%s\n\n", session.dim(explanation))
 }
 
 // readLine reads one answer; end of input without an answer is an error
@@ -233,11 +233,19 @@ func (session *Session) readLine(title string) (string, error) {
 	return strings.TrimSpace(line), nil
 }
 
+// dim styles the explanatory text, descriptions and explanations alike, as
+// faint italic. Faint renders everywhere; italic depends on the terminal and
+// is ignored where it is not supported. A multi-line text is styled per
+// line, since some terminals drop the style at a line break.
 func (session *Session) dim(text string) string {
 	if !session.terminal {
 		return text
 	}
-	return "\033[2m" + text + "\033[0m"
+	lines := strings.Split(text, "\n")
+	for index, line := range lines {
+		lines[index] = "\033[2;3m" + line + "\033[0m"
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (session *Session) bold(text string) string {
