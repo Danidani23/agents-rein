@@ -194,8 +194,9 @@ func (session *Session) Choose(question Select) (string, error) {
 	}
 }
 
-// Confirm asks a yes-or-no question; Enter means yes.
-func (session *Session) Confirm(question string) (bool, error) {
+// Confirm asks a yes-or-no question; Enter means yes, and ? prints the
+// explanation of what a yes will do.
+func (session *Session) Confirm(question string, explanation string) (bool, error) {
 	session.separate()
 	for {
 		fmt.Fprintf(session.out, "%s [Y/n]: ", session.bold(question))
@@ -208,8 +209,11 @@ func (session *Session) Confirm(question string) (bool, error) {
 			return true, nil
 		case "n", "no":
 			return false, nil
+		case "?":
+			session.explain(explanation)
+			continue
 		}
-		fmt.Fprintf(session.out, "%s\n", session.dim("Answer y or n."))
+		fmt.Fprintf(session.out, "%s\n", session.dim("Answer y or n; ? explains."))
 	}
 }
 

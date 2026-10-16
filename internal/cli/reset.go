@@ -13,6 +13,14 @@ import (
 	"github.com/Danidani23/agents-rein/internal/prompt"
 )
 
+const resetExplanation = "A placement is one link (a copy on Windows) that rein made in your agent's home folder,\n" +
+	"for Claude Code ~/.claude: rules/<id>.md for a rule and skills/<id> for a skill. Through those\n" +
+	"links the agent reads your settings. reset removes exactly the ones rein recorded, dangling\n" +
+	"ones included; a link that points somewhere rein did not record is left alone and reported.\n" +
+	"An import is a level you brought in with rein import, copied under ~/.rein/imports/; the\n" +
+	"placements point into those copies, so reset deletes them too. Nothing outside ~/.rein and\n" +
+	"the placed links is touched, and rein import brings everything back."
+
 func newResetCommand(env *environment) *cobra.Command {
 	var all, yes bool
 	command := &cobra.Command{
@@ -44,17 +52,21 @@ func runReset(env *environment, all bool, yes bool) error {
 	if err != nil {
 		return crashedError{cause: err}
 	}
-	what := fmt.Sprintf("This will remove %d placements and %d imports", len(state.Placements), len(state.Imports))
-	if all {
-		what += fmt.Sprintf(", forget %d organisations with their clones and %d projects", len(state.Organizations), len(state.Projects))
+	fmt.Fprintf(env.out, "This will remove:\n")
+	fmt.Fprintf(env.out, "- %d placements: the links rein made in your agent's home so the agent reads your rules\n  and skills. Removing them takes those away from the agent; your own files are untouched.\n", len(state.Placements))
+	for _, placed := range state.Placements {
+		fmt.Fprintf(env.out, "    %s\n", placed.Path)
 	}
-	fmt.Fprintf(env.out, "%s.\n", what)
+	fmt.Fprintf(env.out, "- %d imports: the copies of the levels you imported, under %s, that the\n  placements point at.\n", len(state.Imports), filepath.Join(home, "imports"))
+	if all {
+		fmt.Fprintf(env.out, "- %d organisations with their clones under %s, and %d project registrations:\n  what this machine knows about them. The remotes on GitHub are not touched.\n", len(state.Organizations), filepath.Join(home, "orgs"), len(state.Projects))
+	}
 	if !yes {
 		session := prompt.New(env.in, env.out, env.terminal)
 		if !session.CanAsk() {
 			return fmt.Errorf("no terminal to confirm on; pass --yes")
 		}
-		confirmed, err := session.Confirm("Continue?")
+		confirmed, err := session.Confirm("Continue?", resetExplanation)
 		if err != nil {
 			return err
 		}

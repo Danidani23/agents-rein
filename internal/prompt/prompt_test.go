@@ -119,11 +119,18 @@ func TestConfirm(t *testing.T) {
 	cases := map[string]bool{"\n": true, "y\n": true, "Yes\n": true, "n\n": false, "no\n": false, "maybe\nn\n": false}
 	for input, expected := range cases {
 		s, _ := session(input)
-		got, err := s.Confirm("Continue?")
+		got, err := s.Confirm("Continue?", "")
 		if err != nil || got != expected {
 			t.Fatalf("input %q: got %v err %v", input, got, err)
 		}
 	}
+	t.Run("? explains what a yes will do and asks again", func(t *testing.T) {
+		s, out := session("?\ny\n")
+		got, err := s.Confirm("Continue?", "It deletes the links.")
+		if err != nil || !got || !strings.Contains(out.String(), "It deletes the links.") {
+			t.Fatalf("got %v err %v out %q", got, err, out.String())
+		}
+	})
 }
 
 func TestStyling(t *testing.T) {
