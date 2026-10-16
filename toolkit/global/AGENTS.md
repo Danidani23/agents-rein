@@ -1,8 +1,8 @@
 # Global Agent Instructions
 
 Personal working policies that hold in every repository, for every coding agent. The source is
-`toolkit/global/AGENTS.md` in the `agents-rein` repository; `rein import` places it into each
-tool's global instructions. A project's own instructions add to these and do not repeat them.
+`toolkit/global/AGENTS.md` in the `agents-rein` repository; `rein sync` delivers it to each
+project clone as the user level. A project's own instructions add to these and do not repeat them.
 Where a project's instructions explicitly say they replace a section here, the project's version
 holds in that repository.
 

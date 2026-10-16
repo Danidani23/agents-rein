@@ -164,6 +164,19 @@ committed instead of gitignored (D4).
   the imports. `rein reset` removes everything rein placed and `--all` forgets the machine.
   A placement may be replaced only by the same command from the same source, so re-importing
   an edited folder refreshes it and a different level that claims the same id is refused.
+- ✅ **D11 — Import and export go through the org repository; existing settings are
+  snapshotted, never adopted blindly.** Decided 2026-10-16. `rein import <zip or folder>` adds
+  a level to an org repository, the user's own level by default, a team or project level when
+  named, and goes through `propose`, so it is reviewed like everything else; `rein export`
+  writes a level out of an org repository as a zip. Nothing reaches an agent except through
+  `sync`, so the local import of 2026-10-15 is removed, and until `org create` and `sync`
+  exist nothing of rein's reaches an agent, which is also today's state. At `org connect` rein
+  snapshots the agent's home, and at `init` a clone's `.claude/` and `CLAUDE.md`, into
+  `~/.rein/snapshots/<agent or project>-<time>.json`, path to content, harness paths only,
+  never transcripts, memory or plugin caches: the record of what was there before rein, and
+  the raw material for `rein migrate`, which later turns a snapshot into declarations with an
+  agent's help and offers them through `propose`. Connect places nothing (D4). Order: P2.4,
+  then P2.7 with the snapshot, then P2.5.
 
 ## Design
 
@@ -389,14 +402,11 @@ version and a hash per file. The export's identity is the hash over its files, s
 content has the same identity whenever it was written. From the toolkit layout, the global
 instructions become `rules/global.md`, a rule without `paths:` that loads in every session.
 
-`rein import` verifies the manifest and every hash, unpacks under `~/.rein/imports/<hash>/`,
-lints the level and refuses on errors, then places it for the agent named in config: for
-Claude Code, rules into `~/.claude/rules/` and skills into `~/.claude/skills/`, never
-`CLAUDE.md`, as links on macOS and Linux and copies on Windows, every placement recorded with
-its owner. The placement rule, decided the same day after an import silently re-pointed a link
-that `config` had made: a command replaces only what the same command placed before, and
-reports `replaced`; anything else at a target, another command's placement included, is refused.
-Another agent is refused until its emitter exists (P2.5).
+`rein import` verifies the manifest and every hash, lints the level, and adds it to the org
+repository through `propose` (D11); nothing is placed on the machine. The placement rule that
+`sync` inherits, decided 2026-10-15 after an import silently re-pointed a link another command
+had made: a command replaces only what the same command placed before from the same source,
+and reports `replaced`; anything else at a target is refused.
 
 ### Where each thing is stored
 
@@ -445,14 +455,13 @@ Decided 2026-10-14. The verbs of `rein`, and the two files it keeps on a machine
   org repository: those would be a second pull request system (decided 2026-10-15).
 - `rein review` takes a diff and judges it per the [review design](#review-of-prose-policies);
   a resolved harness whose hash it already judged is not judged again.
-- `rein export <folder> [--out <path>]` writes a level, in the declarations or the toolkit
-  layout, as the [exchange format](#exchange-format), by default `rein-export-<slug>-<date>.zip`
-  in the current directory. `rein import <zip or folder>` copies a level under
-  `~/.rein/imports/<hash>/`, lints it and places it for every supported agent found on the
-  machine; it is how a person's own instructions and skills reach the agent until the org
-  repository exists, and the same folder imported again after an edit is refreshed.
-- `rein reset` removes every placement and import; `--all` also forgets the organisations,
-  deletes their clones and the project registrations, leaving the machine as before rein.
+- `rein import <zip or folder> [--level <address>]` adds a level to the active organisation's
+  repository through `propose`, the user's own level by default (D11); `rein export <address>
+  [--out <path>]` writes a level of an org repository as the [exchange format](#exchange-format).
+  Both wait for P2.7.
+- `rein reset` removes every placement rein ever made in an agent's home; `--all` also forgets
+  the organisations, deletes their clones and the project registrations, leaving the machine
+  as before rein.
 - `rein lint <path>`, `rein label create|rename|delete`, `rein uninstall`, `rein reset`,
   `rein version`, `rein update`.
 
@@ -605,9 +614,11 @@ environment's network allowlist admits the org repository's host (open point O2)
 
 ### For a single developer
 
-Today, `rein import` places symlinks: a symlink is a filesystem entry that points at another
-path, so `~/.claude/skills/commit` *is* `toolkit/skills/commit` and an edit in the toolkit is
-seen by every repository on this machine at its next session, with no code. The tool adds:
+Until 2026-10-16 the toolkit reached the agent through symlinks placed by hand and later by
+rein: a symlink is a filesystem entry that points at another path, so `~/.claude/skills/commit`
+*was* `toolkit/skills/commit` and an edit in the toolkit was seen by every repository on this
+machine at its next session. From the pilot on, `rein sync` delivers it per project. The tool
+adds:
 
 - **V1 — Agent settings handed from person to person.** A client, a cloud session or a CI
   agent sees none of the symlinked files. `rein export` writes what the agent would see as a
@@ -986,3 +997,5 @@ writes is read from the next session on, not in the same one.
   content through `rein import <zip or folder>`, `rein reset` with `--all`, `status` with the
   live identity and the installed agents, `export <folder>`. Ownership of a placement is per
   command and source. The dated entries above keep `config` as history.
+- (2026-10-16) D11: import and export go through the org repository, the local import removed,
+  snapshots at connect and init for migration. Order: P2.4, P2.7, P2.5.

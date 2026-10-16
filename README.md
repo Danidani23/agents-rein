@@ -66,8 +66,8 @@ graph TD
 The principle: **agent settings are not repository settings.** A project repository contains
 the software alone. What rein writes into a clone is never committed; the only trace is a
 marked block in `.gitignore`. A fresh clone gets back on track with one `rein sync`. To hand
-your settings to someone, `rein export` makes a zip in rein's own format, and `rein import`
-places it for whatever agent the receiver uses.
+your settings to someone, `rein export` writes a level as a zip in rein's own format, and
+`rein import` adds it to the receiver's organisation, for whatever agent they use.
 
 Declarations are written in open formats, AGENTS.md, Agent Skills and MCP, so another agent
 is another output of the compiler, not a rewrite of your settings. Which model provider or
@@ -117,14 +117,13 @@ GitHub account, and the agents on your machine are detected.
 | `rein status` | Shows who you are to rein, the active GitHub account of `gh`, the supported agents found on this machine, every placed file and whether its target still exists, organisations, projects and imports. |
 | `rein org connect <remote>`, `list`, `use <slug>`, `disconnect <slug>` | Clones an org repository and remembers it; lists the connected ones with the active one marked; switches; forgets one and removes its clone without touching the remote. |
 | `rein lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, and skills that share a name. Needs no config, so CI runs it on an org repository. |
-| `rein export <folder> [--out <path>]` | Writes a folder of settings as a zip in rein's own exchange format: one level in the declarations layout, with a manifest that hashes every file. |
-| `rein import <zip or folder>` | Lints a level and places it for every supported agent on this machine, under its home folder. Until your organisation's repository exists, this is how your own instructions and skills reach the agent; importing an edited folder again refreshes it. It never replaces a file it did not place itself. |
-| `rein reset` | Removes everything rein placed; `--all` forgets the organisations and projects too, leaving the machine as before rein. |
+| `rein reset` | Removes everything rein placed into an agent's home; `--all` forgets the organisations and projects too, leaving the machine as before rein. |
 | `rein version` | Prints the version. |
 
 Planned, in the board's order: `rein init` and `rein sync`, which bind a clone to its project
-and write its harness; `rein org create` and `destroy`; `rein propose` and `rein review`;
-`rein label`; `rein reset`; `rein update`.
+and write its harness; `rein org create` and `destroy`, with a snapshot of what the agent had
+before rein; `rein import` and `rein export`, which move a level into and out of an org
+repository; `rein propose` and `rein review`; `rein label`; `rein migrate`; `rein update`.
 
 The reasoning is the [ADR](docs/decisions/2026-10-11_harness-tool-compiler-and-linter.md); the
 design, the decisions and what is next are on the
@@ -162,8 +161,8 @@ AI-assisted development across many teams? Six questions, answered with sources 
   them current.
 - [cmd/rein/](cmd/rein/) and [internal/](internal/) — the tool.
 - [toolkit/](toolkit/) — the personal agent toolkit: global instructions and ten skills in open
-  formats, the content of the pilot. Today `rein import` places it into `~/.claude/`; it moves
-  into the pilot's org repository when `rein sync` delivers the personal level per project
+  formats, the content of the pilot. It becomes the user level of the pilot's org repository,
+  delivered per project by `rein sync`
   ([ADR](docs/decisions/2026-10-10_personal-toolkit-open-formats.md),
   [board](docs/implementation_plans/2026-10-10_agent-toolkit.md)).
 - `CLAUDE.md` and `.claude/` — the harness this repository runs with, on each machine and not

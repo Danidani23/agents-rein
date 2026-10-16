@@ -61,7 +61,7 @@ func runStatus(env *environment) error {
 		fmt.Fprintf(env.out, "  %s  %-6s %-4s %s -> %s\n", mark, placed.Owner, placed.Mode, placed.Path, placed.Target)
 	}
 	if missing > 0 {
-		fmt.Fprintf(env.out, "  %d targets are missing; run rein reset, then import again\n", missing)
+		fmt.Fprintf(env.out, "  %d targets are missing; run rein reset to remove the dangling links\n", missing)
 	}
 	fmt.Fprintf(env.out, "\norganisations  %d\n", len(state.Organizations))
 	for _, ref := range state.Organizations {

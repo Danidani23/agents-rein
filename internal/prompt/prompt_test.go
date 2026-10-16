@@ -169,7 +169,7 @@ func TestDivider(t *testing.T) {
 		s, out := session("a\n1\n\n")
 		_, _ = s.Ask(Text{Title: "First"})
 		_, _ = s.Choose(Select{Title: "Second", Choices: []Choice{{Name: "one"}}})
-		_, _ = s.Confirm("Third?")
+		_, _ = s.Confirm("Third?", "")
 		text := out.String()
 		if strings.Count(text, divider) != 2 || strings.Index(text, divider) < strings.Index(text, "First") {
 			t.Fatalf("dividers wrong: %q", text)

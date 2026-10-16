@@ -90,14 +90,14 @@ func newRootCommand(env *environment) *cobra.Command {
 			"works out which apply to a project, and writes them into each clone in the form your\n" +
 			"agent reads. It is a compiler and a linter, never a service.\n\n" +
 			"Your identity is your GitHub account, read from the gh CLI, which must be installed and\n" +
-			"logged in. Start with rein org connect, or rein import to bring your own settings in.\n" +
-			"rein status shows what has been set up. Every command explains itself with --help.",
+			"logged in. Start with rein org connect. rein status shows what has been set up. Every\n" +
+			"command explains itself with --help.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
 	root.SetOut(env.out)
 	root.SetErr(env.errOut)
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newStatusCommand(env), newOrgCommand(env), newLintCommand(env), newExportCommand(env), newImportCommand(env), newResetCommand(env), newVersionCommand(env))
+	root.AddCommand(newStatusCommand(env), newOrgCommand(env), newLintCommand(env), newResetCommand(env), newVersionCommand(env))
 	return root
 }

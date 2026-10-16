@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Danidani23/agents-rein/internal/local"
 )
 
 func TestOutputGoesThroughTheWriters(t *testing.T) {
@@ -120,14 +122,35 @@ func userLevelSource(t *testing.T) string {
 	return root
 }
 
-// importLevel brings a folder into the agent's home, the way a person does
-// before an org repository exists.
-func importLevel(t *testing.T, source string) {
+// placeLegacy records two placements the way the retired import did, one of
+// them a real link, so status and reset have something to act on.
+func placeLegacy(t *testing.T, reinHome string, claudeHome string) (ruleLink string) {
 	t.Helper()
-	code, _, errOut := run("import", source)
-	if code != ExitWorked {
-		t.Fatalf("import: code %d err %q", code, errOut)
+	target := filepath.Join(reinHome, "imports", "abc", "rules", "global.md")
+	writeFile(t, filepath.Dir(target), "global.md", "# Global\n")
+	ruleLink = filepath.Join(claudeHome, "rules", "global.md")
+	err := os.MkdirAll(filepath.Dir(ruleLink), 0o755)
+	if err != nil {
+		t.Fatalf("mkdir: %v", err)
 	}
+	err = os.Symlink(target, ruleLink)
+	if err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	state, err := local.LoadState(reinHome)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	state.Placements = []local.Placement{
+		{Path: ruleLink, Target: target, Mode: "link", Owner: local.OwnerImport, Source: "/toolkit"},
+		{Path: filepath.Join(claudeHome, "skills", "gone"), Target: filepath.Join(reinHome, "imports", "abc", "skills", "gone"), Mode: "link", Owner: local.OwnerImport, Source: "/toolkit"},
+	}
+	state.Imports = []local.Import{{Hash: "abc000000000", Path: filepath.Join(reinHome, "imports", "abc"), Source: "/toolkit", Imported: "2026-10-16T00:00:00Z"}}
+	err = local.SaveState(reinHome, state)
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	return ruleLink
 }
 
 // scratchOrgRepository builds a git repository holding one organisation
@@ -201,70 +224,6 @@ func TestVersion(t *testing.T) {
 		code, out, _ := run("version")
 		if code != ExitWorked || !strings.HasPrefix(out, "rein ") {
 			t.Fatalf("code %d out %q", code, out)
-		}
-	})
-}
-
-func TestImportFolder(t *testing.T) {
-	t.Run("a toolkit folder is placed as rules and skills and recorded", func(t *testing.T) {
-		reinHome, claudeHome := isolate(t)
-		source := userLevelSource(t)
-		code, out, errOut := run("import", source)
-		if code != ExitWorked || !strings.Contains(out, "imported ") || !strings.Contains(out, "1 rules, 1 skills") {
-			t.Fatalf("code %d out %q err %q", code, out, errOut)
-		}
-		resolved, err := os.Readlink(filepath.Join(claudeHome, "rules", "global.md"))
-		if err != nil || !strings.HasPrefix(resolved, filepath.Join(reinHome, "imports")) {
-			t.Fatalf("rule link %q err %v", resolved, err)
-		}
-		_, err = os.Readlink(filepath.Join(claudeHome, "skills", "commit"))
-		if err != nil {
-			t.Fatalf("skill link: %v", err)
-		}
-		_, err = os.Stat(filepath.Join(claudeHome, "CLAUDE.md"))
-		if err == nil {
-			t.Fatalf("CLAUDE.md must never be placed")
-		}
-		code, out, _ = run("import", source)
-		if code != ExitWorked || !strings.Contains(out, "ok ") {
-			t.Fatalf("second import: code %d out %q", code, out)
-		}
-	})
-	t.Run("an edited folder is refreshed on the next import", func(t *testing.T) {
-		_, claudeHome := isolate(t)
-		source := userLevelSource(t)
-		importLevel(t, source)
-		writeFile(t, source, "global/AGENTS.md", "# Global, edited\n")
-		code, out, _ := run("import", source)
-		if code != ExitWorked || !strings.Contains(out, "replaced") {
-			t.Fatalf("code %d out %q", code, out)
-		}
-		content, _ := os.ReadFile(filepath.Join(claudeHome, "rules", "global.md"))
-		if string(content) != "# Global, edited\n" {
-			t.Fatalf("not refreshed: %q", content)
-		}
-	})
-	t.Run("a foreign file in the agent home is refused and reported", func(t *testing.T) {
-		_, claudeHome := isolate(t)
-		writeFile(t, claudeHome, "rules/global.md", "mine\n")
-		code, _, errOut := run("import", userLevelSource(t))
-		if code != ExitRefused || !strings.Contains(errOut, "refused") {
-			t.Fatalf("code %d err %q", code, errOut)
-		}
-	})
-	t.Run("a logged-out gh is refused and names gh auth login", func(t *testing.T) {
-		isolate(t)
-		stubGitHub(t, "")
-		code, _, errOut := run("import", userLevelSource(t))
-		if code != ExitRefused || !strings.Contains(errOut, "gh auth login") {
-			t.Fatalf("code %d err %q", code, errOut)
-		}
-	})
-	t.Run("a folder without a level is refused", func(t *testing.T) {
-		isolate(t)
-		code, _, errOut := run("import", t.TempDir())
-		if code != ExitRefused || !strings.Contains(errOut, "holds no level") {
-			t.Fatalf("code %d err %q", code, errOut)
 		}
 	})
 }
@@ -355,88 +314,6 @@ func TestOrg(t *testing.T) {
 	})
 }
 
-func TestExportAndImport(t *testing.T) {
-	t.Run("both refuse without a gh login", func(t *testing.T) {
-		isolate(t)
-		stubGitHub(t, "")
-		for _, arguments := range [][]string{{"export", "x"}, {"import", "x.zip"}} {
-			code, _, errOut := run(arguments...)
-			if code != ExitRefused || !strings.Contains(errOut, "gh auth login") {
-				t.Fatalf("%v: code %d err %q", arguments, code, errOut)
-			}
-		}
-	})
-	t.Run("export writes the default name in the working directory", func(t *testing.T) {
-		isolate(t)
-		source := userLevelSource(t)
-		workingDirectory := t.TempDir()
-		t.Chdir(workingDirectory)
-		code, out, errOut := run("export", source)
-		if code != ExitWorked || !strings.Contains(out, "1 rules, 1 skills") {
-			t.Fatalf("code %d out %q err %q", code, out, errOut)
-		}
-		matches, _ := filepath.Glob(filepath.Join(workingDirectory, "rein-export-danidani23-*.zip"))
-		if len(matches) != 1 {
-			t.Fatalf("zip not written: %v", matches)
-		}
-	})
-	t.Run("export to a path, then import on another machine places it and records it", func(t *testing.T) {
-		isolate(t)
-		zipPath := filepath.Join(t.TempDir(), "level.zip")
-		code, _, errOut := run("export", userLevelSource(t), "--out", zipPath)
-		if code != ExitWorked {
-			t.Fatalf("export: code %d err %q", code, errOut)
-		}
-		receiverRein := t.TempDir()
-		receiverClaude := filepath.Join(t.TempDir(), ".claude")
-		t.Setenv("REIN_HOME", receiverRein)
-		t.Setenv("CLAUDE_CONFIG_DIR", receiverClaude)
-		code, out, errOut := run("import", zipPath)
-		if code != ExitWorked || !strings.Contains(out, "imported ") {
-			t.Fatalf("import: code %d out %q err %q", code, out, errOut)
-		}
-		resolved, err := os.Readlink(filepath.Join(receiverClaude, "rules", "global.md"))
-		if err != nil || !strings.HasPrefix(resolved, filepath.Join(receiverRein, "imports")) {
-			t.Fatalf("rule link %q err %v", resolved, err)
-		}
-		state, _ := os.ReadFile(filepath.Join(receiverRein, "state.yaml"))
-		if !strings.Contains(string(state), "imports:") || !strings.Contains(string(state), "from_user: danidani23") {
-			t.Fatalf("state %s", state)
-		}
-		// a second level with the same skill id is refused for that skill and placed for the rest
-		other := t.TempDir()
-		writeFile(t, other, "rules/other.md", "# Other\n")
-		writeFile(t, other, "skills/commit/SKILL.md", "---\nname: commit\ndescription: another commit skill\n---\n")
-		code, out, errOut = run("import", other)
-		if code != ExitRefused || !strings.Contains(errOut, "skills/commit") || !strings.Contains(out, "rules/other.md") {
-			t.Fatalf("second level: code %d out %q err %q", code, out, errOut)
-		}
-	})
-	t.Run("a zip that is not a rein export is refused", func(t *testing.T) {
-		isolate(t)
-		plain := filepath.Join(t.TempDir(), "plain.zip")
-		writeFile(t, filepath.Dir(plain), "plain.zip", "not a zip")
-		code, _, errOut := run("import", plain)
-		if code != ExitRefused || !strings.Contains(errOut, "not a zip") {
-			t.Fatalf("code %d err %q", code, errOut)
-		}
-	})
-	t.Run("a level with a lint error is refused and nothing is placed", func(t *testing.T) {
-		_, claudeHome := isolate(t)
-		bad := t.TempDir()
-		writeFile(t, bad, "global/AGENTS.md", "# Global\n")
-		writeFile(t, bad, "skills/commit/SKILL.md", "---\nname: commits\ndescription: d\n---\n")
-		code, _, errOut := run("import", bad)
-		if code != ExitRefused || !strings.Contains(errOut, "lint errors") {
-			t.Fatalf("code %d err %q", code, errOut)
-		}
-		_, err := os.Stat(filepath.Join(claudeHome, "rules"))
-		if err == nil {
-			t.Fatalf("something was placed")
-		}
-	})
-}
-
 func TestStatus(t *testing.T) {
 	t.Run("without a gh login it says so and still shows the rest", func(t *testing.T) {
 		isolate(t)
@@ -446,23 +323,14 @@ func TestStatus(t *testing.T) {
 			t.Fatalf("code %d out %q", code, out)
 		}
 	})
-	t.Run("after an import it shows the identity, the agents, the placements, and flags a missing target", func(t *testing.T) {
-		_, _ = isolate(t)
-		source := userLevelSource(t)
-		importLevel(t, source)
+	t.Run("it shows the identity, the agents, the placements, and flags a missing target", func(t *testing.T) {
+		reinHome, claudeHome := isolate(t)
+		placeLegacy(t, reinHome, claudeHome)
 		code, out, _ := run("status")
-		for _, expected := range []string{"github      Danidani23  (active gh account; slug danidani23)", "agents      claude-code", "placements  2", "ok       import"} {
+		for _, expected := range []string{"github      Danidani23  (active gh account; slug danidani23)", "agents      claude-code", "placements  2", "ok       import", "missing  import", "1 targets are missing"} {
 			if code != ExitWorked || !strings.Contains(out, expected) {
 				t.Fatalf("missing %q: code %d out %q", expected, code, out)
 			}
-		}
-		err := os.RemoveAll(filepath.Join(os.Getenv("REIN_HOME"), "imports"))
-		if err != nil {
-			t.Fatalf("remove: %v", err)
-		}
-		code, out, _ = run("status")
-		if code != ExitWorked || !strings.Contains(out, "2 targets are missing") {
-			t.Fatalf("code %d out %q", code, out)
 		}
 	})
 }
@@ -470,33 +338,40 @@ func TestStatus(t *testing.T) {
 func TestReset(t *testing.T) {
 	t.Run("reset removes the placements and imports, dangling ones included, and keeps organisations", func(t *testing.T) {
 		reinHome, claudeHome := isolate(t)
-		importLevel(t, userLevelSource(t))
+		ruleLink := placeLegacy(t, reinHome, claudeHome)
 		run("org", "connect", scratchOrgRepository(t, "acme"))
-		err := os.RemoveAll(filepath.Join(reinHome, "imports"))
-		if err != nil {
-			t.Fatalf("remove: %v", err)
-		}
 		code, out, errOut := run("reset", "--yes")
-		if code != ExitWorked || strings.Count(out, "removed  ") != 2 {
+		if code != ExitWorked || strings.Count(out, "removed  ") != 1 || !strings.Contains(out, "gone     ") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
-		_, err = os.Lstat(filepath.Join(claudeHome, "rules", "global.md"))
+		_, err := os.Lstat(ruleLink)
 		if err == nil {
-			t.Fatalf("dangling link still there")
+			t.Fatalf("link still there")
+		}
+		_, err = os.Stat(filepath.Join(reinHome, "imports"))
+		if err == nil {
+			t.Fatalf("imports folder still there")
 		}
 		code, out, _ = run("status")
 		if !strings.Contains(out, "placements  0") || !strings.Contains(out, "* acme") {
 			t.Fatalf("status after reset: %q", out)
 		}
 	})
+	t.Run("the summary lists every path and ? explains", func(t *testing.T) {
+		reinHome, claudeHome := isolate(t)
+		ruleLink := placeLegacy(t, reinHome, claudeHome)
+		code, out, _ := runInteractive("?\nn\n", "reset")
+		if code != ExitRefused || !strings.Contains(out, ruleLink) || !strings.Contains(out, "A placement is one link") {
+			t.Fatalf("code %d out %q", code, out)
+		}
+	})
 	t.Run("a link that points elsewhere is skipped and reported", func(t *testing.T) {
-		_, claudeHome := isolate(t)
-		importLevel(t, userLevelSource(t))
+		reinHome, claudeHome := isolate(t)
+		ruleLink := placeLegacy(t, reinHome, claudeHome)
 		elsewhere := filepath.Join(t.TempDir(), "other.md")
 		writeFile(t, filepath.Dir(elsewhere), "other.md", "x")
-		rule := filepath.Join(claudeHome, "rules", "global.md")
-		_ = os.Remove(rule)
-		err := os.Symlink(elsewhere, rule)
+		_ = os.Remove(ruleLink)
+		err := os.Symlink(elsewhere, ruleLink)
 		if err != nil {
 			t.Fatalf("symlink: %v", err)
 		}
@@ -504,7 +379,7 @@ func TestReset(t *testing.T) {
 		if code != ExitRefused || !strings.Contains(errOut, "skipped") || !strings.Contains(errOut, "not what rein recorded") {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
-		_, err = os.Lstat(rule)
+		_, err = os.Lstat(ruleLink)
 		if err != nil {
 			t.Fatalf("foreign link was removed")
 		}

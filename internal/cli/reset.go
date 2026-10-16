@@ -14,12 +14,12 @@ import (
 )
 
 const resetExplanation = "A placement is one link (a copy on Windows) that rein made in your agent's home folder,\n" +
-	"for Claude Code ~/.claude: rules/<id>.md for a rule and skills/<id> for a skill. Through those\n" +
-	"links the agent reads your settings. reset removes exactly the ones rein recorded, dangling\n" +
-	"ones included; a link that points somewhere rein did not record is left alone and reported.\n" +
-	"An import is a level you brought in with rein import, copied under ~/.rein/imports/; the\n" +
-	"placements point into those copies, so reset deletes them too. Nothing outside ~/.rein and\n" +
-	"the placed links is touched, and rein import brings everything back."
+	"for Claude Code ~/.claude: CLAUDE.md, rules/<id>.md for a rule and skills/<id> for a skill.\n" +
+	"Through those links the agent read your settings. reset removes exactly the ones rein\n" +
+	"recorded, dangling ones included; a link that points somewhere rein did not record is left\n" +
+	"alone and reported. Nothing outside ~/.rein and the placed links is touched. In the current\n" +
+	"design rein writes nothing into the agent's home: every level reaches a project clone through\n" +
+	"rein sync, so after reset nothing needs bringing back."
 
 func newResetCommand(env *environment) *cobra.Command {
 	var all, yes bool
@@ -27,11 +27,12 @@ func newResetCommand(env *environment) *cobra.Command {
 		Use:   "reset",
 		Short: "Remove everything rein placed into your agent's home; --all forgets this machine entirely",
 		Long: "reset removes every link and copy rein made in the agent's home, dangling ones included,\n" +
-			"deletes the imports under ~/.rein/imports/, and clears them from state. It touches nothing\n" +
-			"it did not place: a link that points somewhere else than rein recorded is left alone and\n" +
-			"reported. With --all it also forgets the connected organisations, deletes their clones and\n" +
-			"the project registrations, which leaves the machine as before rein was first used; the\n" +
-			"remotes are never touched. It confirms before deleting; --yes skips that.",
+			"and clears them from state, together with any imports left under ~/.rein/imports/ from\n" +
+			"before import went through the org repository. It touches nothing it did not place: a link\n" +
+			"that points somewhere else than rein recorded is left alone and reported. With --all it\n" +
+			"also forgets the connected organisations, deletes their clones and the project\n" +
+			"registrations, which leaves the machine as before rein was first used; the remotes are\n" +
+			"never touched. It confirms before deleting; --yes skips that.",
 		Example: "  rein reset\n  rein reset --all --yes",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
@@ -57,7 +58,9 @@ func runReset(env *environment, all bool, yes bool) error {
 	for _, placed := range state.Placements {
 		fmt.Fprintf(env.out, "    %s\n", placed.Path)
 	}
-	fmt.Fprintf(env.out, "- %d imports: the copies of the levels you imported, under %s, that the\n  placements point at.\n", len(state.Imports), filepath.Join(home, "imports"))
+	if len(state.Imports) > 0 {
+		fmt.Fprintf(env.out, "- %d imports: copies under %s that the placements point at,\n  from before import went through the org repository.\n", len(state.Imports), filepath.Join(home, "imports"))
+	}
 	if all {
 		fmt.Fprintf(env.out, "- %d organisations with their clones under %s, and %d project registrations:\n  what this machine knows about them. The remotes on GitHub are not touched.\n", len(state.Organizations), filepath.Join(home, "orgs"), len(state.Projects))
 	}
