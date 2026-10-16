@@ -1,0 +1,51 @@
+# Every repeatable command of this repository, so documentation names a task and never a
+# raw command (docs-and-taskfile skill). `task --list` shows them.
+version: '3'
+
+vars:
+  BINARY: rein
+  PACKAGE: ./cmd/rein
+
+tasks:
+  rein:build:
+    desc: Build rein into .tmp/rein for a local try without installing it
+    cmds:
+      - mkdir -p .tmp
+      - go build -o .tmp/{{.BINARY}} {{.PACKAGE}}
+
+  rein:install:
+    desc: Install rein into the Go bin folder (go env GOPATH)/bin, which must be on the PATH
+    cmds:
+      - go install {{.PACKAGE}}
+      - cmd: |
+          if ! command -v {{.BINARY}} >/dev/null 2>&1; then
+            echo "installed to $(go env GOPATH)/bin/{{.BINARY}}, which is not on your PATH:"
+            echo "  echo 'export PATH=\"$(go env GOPATH)/bin:\$PATH\"' >> ~/.zshrc && source ~/.zshrc"
+            exit 1
+          fi
+          {{.BINARY}} version
+        silent: true
+
+  rein:test:
+    desc: Vet and test every package; the gate before every handover
+    cmds:
+      - go vet ./...
+      - go test ./...
+
+  rein:lint:
+    desc: Run rein lint on this repository
+    deps: [rein:build]
+    cmds:
+      - .tmp/{{.BINARY}} lint .
+
+  rein:check:
+    desc: Format check, vet, tests and lint in one go
+    cmds:
+      - cmd: |
+          unformatted="$(gofmt -l cmd internal)"
+          if [ -n "$unformatted" ]; then
+            echo "not gofmt-formatted:"; echo "$unformatted"; exit 1
+          fi
+        silent: true
+      - task: rein:test
+      - task: rein:lint

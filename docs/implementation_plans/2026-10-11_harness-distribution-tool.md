@@ -937,3 +937,5 @@ writes is read from the next session on, not in the same one.
   confirmation summary, `rein status`; a TUI menu declined for now.
 - (2026-10-16) P2.14 executed: `prompt` package, `config` rewritten on it with intro, `?`,
   selector, validation and confirmation, `rein status`, help texts as explanations.
+- (2026-10-16) `Taskfile.yml` added: `rein:build`, `rein:install`, `rein:test`, `rein:lint`,
+  `rein:check`; README and CLAUDE.md name the tasks instead of raw commands.

@@ -128,12 +128,9 @@ and write its harness; `rein org create` and `destroy`; `rein propose` and `rein
 The reasoning is the [ADR](docs/decisions/2026-10-11_harness-tool-compiler-and-linter.md); the
 design, the decisions and what is next are on the
 [board](docs/implementation_plans/2026-10-11_harness-distribution-tool.md). The code is Go,
-with cobra and yaml.v3 as the only dependencies:
-
-```bash
-go build -o rein ./cmd/rein
-go vet ./... && go test ./...
-```
+with cobra and yaml.v3 as the only dependencies. Every repeatable command is a task in
+[Taskfile.yml](Taskfile.yml): `task rein:install` installs the binary, `task rein:check` is the
+gate, format check, vet, tests and lint; `task --list` shows the rest.
 
 ## The research behind it
 
