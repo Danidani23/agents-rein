@@ -15,14 +15,19 @@ import (
 	"strings"
 )
 
-// The convention every interactive command states once.
-const Convention = "Enter keeps the value in brackets; ? explains a question."
+// The convention every interactive command states once, as a note under
+// its intro: two lines, each its own rule.
+var Convention = []string{"Enter keeps the value in brackets", "? explains a question"}
+
+// divider separates one question from the next.
+const divider = "────────────────────────────────────────"
 
 // Session asks the questions of one command.
 type Session struct {
 	reader   *bufio.Reader
 	out      io.Writer
 	terminal bool
+	asked    int
 }
 
 // New makes a session over the command's streams. terminal says whether a
@@ -49,9 +54,21 @@ func (session *Session) CanAsk() bool {
 	return session.terminal
 }
 
-// Intro prints what the command does, then the convention.
+// Intro prints what the command does, then the convention as a note.
 func (session *Session) Intro(text string) {
-	fmt.Fprintf(session.out, "%s\n%s\n\n", text, session.dim(Convention))
+	fmt.Fprintf(session.out, "%s\n\n%s\n", text, session.underline("NOTE"))
+	for _, rule := range Convention {
+		fmt.Fprintf(session.out, "%s\n", session.dim("- "+rule))
+	}
+	fmt.Fprintln(session.out)
+}
+
+// separate prints a divider before every question but the first.
+func (session *Session) separate() {
+	if session.asked > 0 {
+		fmt.Fprintf(session.out, "%s\n", session.dim(divider))
+	}
+	session.asked++
 }
 
 // Text is a free-text question.
@@ -66,6 +83,7 @@ type Text struct {
 
 // Ask asks a text question until it has an acceptable answer.
 func (session *Session) Ask(question Text) (string, error) {
+	session.separate()
 	for {
 		session.printHeading(question.Title, question.Description)
 		if question.Default != "" {
@@ -126,6 +144,7 @@ func (session *Session) Choose(question Select) (string, error) {
 			defaultIndex = index + 1
 		}
 	}
+	session.separate()
 	for {
 		session.printHeading(question.Title, question.Description)
 		for index, choice := range question.Choices {
@@ -177,6 +196,7 @@ func (session *Session) Choose(question Select) (string, error) {
 
 // Confirm asks a yes-or-no question; Enter means yes.
 func (session *Session) Confirm(question string) (bool, error) {
+	session.separate()
 	for {
 		fmt.Fprintf(session.out, "%s [Y/n]: ", session.bold(question))
 		answer, err := session.readLine(question)
@@ -253,4 +273,12 @@ func (session *Session) bold(text string) string {
 		return text
 	}
 	return "\033[1m" + text + "\033[0m"
+}
+
+// underline styles a note heading: faint italic underlined.
+func (session *Session) underline(text string) string {
+	if !session.terminal {
+		return text
+	}
+	return "\033[2;3;4m" + text + "\033[0m"
 }

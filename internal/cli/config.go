@@ -92,11 +92,14 @@ func runConfig(env *environment, user string, userLevel string, agent string, ye
 		user, err = session.Ask(prompt.Text{
 			Title:       "User slug",
 			Description: "Your name inside Agents Rein: the folder of your user level in every org repository, and the author of your proposals.",
-			Explanation: "The slug names the folder declarations/users/<slug>/ in each org repository you join,\n" +
-				"and is recorded as the author of every proposal you make. Lowercase letters, digits and\n" +
-				"single hyphens, so it can be a folder name and an address segment. It is not your GitHub\n" +
-				"login, though matching it is sensible. It never leaves this machine except as that folder\n" +
-				"name in org repositories you push to.",
+			Explanation: "The slug names the folder declarations/users/<slug>/ in each org repository you join:\n" +
+				"that folder is your user level, your personal instructions and skills, which rein brings\n" +
+				"to every project you work in. A proposal is a change you offer to an org repository, a\n" +
+				"rule, a skill, a label or a tool server; rein propose turns it into a pull request that the\n" +
+				"owners of that level review, and the slug is recorded as its author. Lowercase letters,\n" +
+				"digits and single hyphens, so it can be a folder name and an address segment. It is not\n" +
+				"your GitHub login, though matching it is sensible, and it never leaves this machine except\n" +
+				"as that folder name in org repositories you push to.",
 			Default:  config.User,
 			Validate: validateSlug,
 		})

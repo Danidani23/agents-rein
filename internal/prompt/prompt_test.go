@@ -134,8 +134,13 @@ func TestStyling(t *testing.T) {
 		if strings.Contains(out.String(), "\033[") {
 			t.Fatalf("escape codes in non-terminal output: %q", out.String())
 		}
-		if !strings.Contains(out.String(), Convention) {
-			t.Fatalf("intro missing the convention: %q", out.String())
+		for _, rule := range Convention {
+			if !strings.Contains(out.String(), "- "+rule) {
+				t.Fatalf("intro missing %q: %q", rule, out.String())
+			}
+		}
+		if !strings.Contains(out.String(), "NOTE") {
+			t.Fatalf("intro missing the note heading: %q", out.String())
 		}
 	})
 	t.Run("escape codes with a terminal, and the explanation is styled like a description", func(t *testing.T) {
@@ -148,6 +153,19 @@ func TestStyling(t *testing.T) {
 		}
 		if !strings.Contains(text, "\033[2;3m  d\033[0m") || !strings.Contains(text, "\033[2;3mfirst line\033[0m\n\033[2;3msecond line\033[0m") {
 			t.Fatalf("description or explanation not faint italic per line: %q", text)
+		}
+	})
+}
+
+func TestDivider(t *testing.T) {
+	t.Run("a divider separates questions, none before the first", func(t *testing.T) {
+		s, out := session("a\n1\n\n")
+		_, _ = s.Ask(Text{Title: "First"})
+		_, _ = s.Choose(Select{Title: "Second", Choices: []Choice{{Name: "one"}}})
+		_, _ = s.Confirm("Third?")
+		text := out.String()
+		if strings.Count(text, divider) != 2 || strings.Index(text, divider) < strings.Index(text, "First") {
+			t.Fatalf("dividers wrong: %q", text)
 		}
 	})
 }
