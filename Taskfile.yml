@@ -14,13 +14,20 @@ tasks:
       - go build -o .tmp/{{.BINARY}} {{.PACKAGE}}
 
   rein:install:
-    desc: Install rein into the Go bin folder (go env GOPATH)/bin, which must be on the PATH
+    desc: Install rein into the Go bin folder (go env GOPATH)/bin and check that the shell finds this copy
     cmds:
       - go install {{.PACKAGE}}
       - cmd: |
-          if ! command -v {{.BINARY}} >/dev/null 2>&1; then
-            echo "installed to $(go env GOPATH)/bin/{{.BINARY}}, which is not on your PATH:"
+          installed="$(go env GOPATH)/bin/{{.BINARY}}"
+          found="$(command -v {{.BINARY}} 2>/dev/null || true)"
+          if [ -z "$found" ]; then
+            echo "installed to $installed, which is not on your PATH:"
             echo "  echo 'export PATH=\"$(go env GOPATH)/bin:\$PATH\"' >> ~/.zshrc && source ~/.zshrc"
+            exit 1
+          fi
+          if [ "$found" != "$installed" ]; then
+            echo "installed to $installed, but your shell runs $found first;"
+            echo "remove that copy or put $(go env GOPATH)/bin earlier on your PATH"
             exit 1
           fi
           {{.BINARY}} version
