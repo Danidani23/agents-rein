@@ -89,8 +89,8 @@ func isolate(t *testing.T) (reinHome string, claudeHome string) {
 	return reinHome, claudeHome
 }
 
-// stubGitHub puts a fake gh first on the PATH. An empty login makes it
-// behave as logged out.
+// stubGitHub puts a fake gh and a fake claude first on the PATH. An empty
+// login makes gh behave as logged out.
 func stubGitHub(t *testing.T, login string) {
 	t.Helper()
 	directory := t.TempDir()
@@ -105,6 +105,10 @@ func stubGitHub(t *testing.T, login string) {
 	if err != nil {
 		t.Fatalf("stub gh: %v", err)
 	}
+	err = os.WriteFile(filepath.Join(directory, "claude"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	if err != nil {
+		t.Fatalf("stub claude: %v", err)
+	}
 	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
@@ -116,11 +120,13 @@ func userLevelSource(t *testing.T) string {
 	return root
 }
 
-func configure(t *testing.T, source string) {
+// importLevel brings a folder into the agent's home, the way a person does
+// before an org repository exists.
+func importLevel(t *testing.T, source string) {
 	t.Helper()
-	code, _, errOut := run("config", "--user-level", source, "--yes")
+	code, _, errOut := run("import", source)
 	if code != ExitWorked {
-		t.Fatalf("config: code %d err %q", code, errOut)
+		t.Fatalf("import: code %d err %q", code, errOut)
 	}
 }
 
@@ -179,7 +185,7 @@ func TestLint(t *testing.T) {
 			t.Fatalf("code %d", code)
 		}
 	})
-	t.Run("lint needs no config", func(t *testing.T) {
+	t.Run("lint needs no identity", func(t *testing.T) {
 		isolate(t)
 		root := t.TempDir()
 		code, _, _ := run("lint", root)
@@ -190,7 +196,7 @@ func TestLint(t *testing.T) {
 }
 
 func TestVersion(t *testing.T) {
-	t.Run("version prints without config", func(t *testing.T) {
+	t.Run("version prints without identity", func(t *testing.T) {
 		isolate(t)
 		code, out, _ := run("version")
 		if code != ExitWorked || !strings.HasPrefix(out, "rein ") {
@@ -199,121 +205,83 @@ func TestVersion(t *testing.T) {
 	})
 }
 
-func TestConfig(t *testing.T) {
-	t.Run("flags configure the machine and place the user level", func(t *testing.T) {
+func TestImportFolder(t *testing.T) {
+	t.Run("a toolkit folder is placed as rules and skills and recorded", func(t *testing.T) {
 		reinHome, claudeHome := isolate(t)
 		source := userLevelSource(t)
-		code, out, errOut := run("config", "--user-level", source, "--yes")
-		if code != ExitWorked {
+		code, out, errOut := run("import", source)
+		if code != ExitWorked || !strings.Contains(out, "imported ") || !strings.Contains(out, "1 rules, 1 skills") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
-		if !strings.Contains(out, "linked") || !strings.Contains(out, "configured "+reinHome) {
-			t.Fatalf("out %q", out)
-		}
-		_, err := os.Stat(filepath.Join(reinHome, "config.yaml"))
-		if err != nil {
-			t.Fatalf("config.yaml: %v", err)
-		}
-		resolved, err := os.Readlink(filepath.Join(claudeHome, "CLAUDE.md"))
-		if err != nil || resolved != filepath.Join(source, "global", "AGENTS.md") {
-			t.Fatalf("CLAUDE.md link %q err %v", resolved, err)
+		resolved, err := os.Readlink(filepath.Join(claudeHome, "rules", "global.md"))
+		if err != nil || !strings.HasPrefix(resolved, filepath.Join(reinHome, "imports")) {
+			t.Fatalf("rule link %q err %v", resolved, err)
 		}
 		_, err = os.Readlink(filepath.Join(claudeHome, "skills", "commit"))
 		if err != nil {
 			t.Fatalf("skill link: %v", err)
 		}
-		code, out, _ = run("config", "--user-level", source, "--yes")
-		if code != ExitWorked || !strings.Contains(out, "ok") {
-			t.Fatalf("second run: code %d out %q", code, out)
+		_, err = os.Stat(filepath.Join(claudeHome, "CLAUDE.md"))
+		if err == nil {
+			t.Fatalf("CLAUDE.md must never be placed")
+		}
+		code, out, _ = run("import", source)
+		if code != ExitWorked || !strings.Contains(out, "ok ") {
+			t.Fatalf("second import: code %d out %q", code, out)
 		}
 	})
-	t.Run("in a terminal it shows the GitHub identity, the plan, and confirms", func(t *testing.T) {
-		reinHome, _ := isolate(t)
+	t.Run("an edited folder is refreshed on the next import", func(t *testing.T) {
+		_, claudeHome := isolate(t)
 		source := userLevelSource(t)
-		code, out, errOut := runInteractive("\n", "config", "--user-level", source)
-		if code != ExitWorked {
-			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		importLevel(t, source)
+		writeFile(t, source, "global/AGENTS.md", "# Global, edited\n")
+		code, out, _ := run("import", source)
+		if code != ExitWorked || !strings.Contains(out, "replaced") {
+			t.Fatalf("code %d out %q", code, out)
 		}
-		for _, expected := range []string{"rein config sets up this machine", "Enter keeps the value in brackets", "GitHub account  Danidani23  (slug danidani23)", "agent           claude-code", "This will write", "Continue?", "configured " + reinHome + " for Danidani23"} {
-			if !strings.Contains(out, expected) {
-				t.Fatalf("missing %q in %q", expected, out)
-			}
-		}
-		config, _ := os.ReadFile(filepath.Join(reinHome, "config.yaml"))
-		if !strings.Contains(string(config), "user: danidani23") || !strings.Contains(string(config), "github: Danidani23") {
-			t.Fatalf("config %s", config)
+		content, _ := os.ReadFile(filepath.Join(claudeHome, "rules", "global.md"))
+		if string(content) != "# Global, edited\n" {
+			t.Fatalf("not refreshed: %q", content)
 		}
 	})
-	t.Run("without a user level it configures identity only and says how to add one", func(t *testing.T) {
-		isolate(t)
-		code, out, errOut := run("config", "--yes")
-		if code != ExitWorked || !strings.Contains(out, "No user level yet") {
-			t.Fatalf("code %d out %q err %q", code, out, errOut)
+	t.Run("a foreign file in the agent home is refused and reported", func(t *testing.T) {
+		_, claudeHome := isolate(t)
+		writeFile(t, claudeHome, "rules/global.md", "mine\n")
+		code, _, errOut := run("import", userLevelSource(t))
+		if code != ExitRefused || !strings.Contains(errOut, "refused") {
+			t.Fatalf("code %d err %q", code, errOut)
 		}
 	})
 	t.Run("a logged-out gh is refused and names gh auth login", func(t *testing.T) {
 		isolate(t)
 		stubGitHub(t, "")
-		code, _, errOut := run("config", "--yes")
+		code, _, errOut := run("import", userLevelSource(t))
 		if code != ExitRefused || !strings.Contains(errOut, "gh auth login") {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
 	})
-	t.Run("answering no at the confirmation changes nothing", func(t *testing.T) {
-		reinHome, _ := isolate(t)
-		code, _, errOut := runInteractive("n\n", "config", "--user-level", userLevelSource(t))
-		if code != ExitRefused || !strings.Contains(errOut, "nothing changed") {
-			t.Fatalf("code %d err %q", code, errOut)
-		}
-		_, err := os.Stat(filepath.Join(reinHome, "config.yaml"))
-		if err == nil {
-			t.Fatalf("config.yaml was written")
-		}
-	})
-	t.Run("flags without a terminal need --yes", func(t *testing.T) {
+	t.Run("a folder without a level is refused", func(t *testing.T) {
 		isolate(t)
-		code, _, errOut := run("config", "--user-level", userLevelSource(t))
-		if code != ExitRefused || !strings.Contains(errOut, "--yes") {
-			t.Fatalf("code %d err %q", code, errOut)
-		}
-	})
-	t.Run("a foreign file in the Claude home is refused and reported", func(t *testing.T) {
-		_, claudeHome := isolate(t)
-		writeFile(t, claudeHome, "CLAUDE.md", "mine\n")
-		code, _, errOut := run("config", "--user-level", userLevelSource(t), "--yes")
-		if code != ExitRefused || !strings.Contains(errOut, "refused") {
-			t.Fatalf("code %d err %q", code, errOut)
-		}
-	})
-	t.Run("without a terminal and without --yes it refuses and names the flag", func(t *testing.T) {
-		isolate(t)
-		code, _, errOut := run("config")
-		if code != ExitRefused || !strings.Contains(errOut, "--yes") {
-			t.Fatalf("code %d err %q", code, errOut)
-		}
-	})
-	t.Run("a source without skills is refused", func(t *testing.T) {
-		isolate(t)
-		code, _, errOut := run("config", "--user-level", t.TempDir(), "--yes")
-		if code != ExitRefused || !strings.Contains(errOut, "not a user-level source") {
+		code, _, errOut := run("import", t.TempDir())
+		if code != ExitRefused || !strings.Contains(errOut, "holds no level") {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
 	})
 }
 
 func TestOrg(t *testing.T) {
-	t.Run("every org command refuses before config", func(t *testing.T) {
+	t.Run("every org command refuses without a gh login", func(t *testing.T) {
 		isolate(t)
+		stubGitHub(t, "")
 		for _, arguments := range [][]string{{"org", "list"}, {"org", "connect", "x"}, {"org", "use", "x"}, {"org", "disconnect", "x"}} {
 			code, _, errOut := run(arguments...)
-			if code != ExitRefused || !strings.Contains(errOut, "run rein config first") {
+			if code != ExitRefused || !strings.Contains(errOut, "gh auth login") {
 				t.Fatalf("%v: code %d err %q", arguments, code, errOut)
 			}
 		}
 	})
 	t.Run("connect clones the repository, remembers it and makes it active", func(t *testing.T) {
 		reinHome, _ := isolate(t)
-		configure(t, userLevelSource(t))
 		remote := scratchOrgRepository(t, "acme")
 		code, out, errOut := run("org", "connect", remote)
 		if code != ExitWorked || !strings.Contains(out, "connected acme (Acme)") || !strings.Contains(out, "active organisation: acme") {
@@ -334,7 +302,6 @@ func TestOrg(t *testing.T) {
 	})
 	t.Run("a repository without an organisation record is refused and nothing is kept", func(t *testing.T) {
 		reinHome, _ := isolate(t)
-		configure(t, userLevelSource(t))
 		remote := t.TempDir()
 		command := exec.Command("git", "init", "-q")
 		command.Dir = remote
@@ -353,7 +320,6 @@ func TestOrg(t *testing.T) {
 	})
 	t.Run("a remote that cannot be cloned exits 3", func(t *testing.T) {
 		isolate(t)
-		configure(t, userLevelSource(t))
 		code, _, errOut := run("org", "connect", filepath.Join(t.TempDir(), "nowhere"))
 		if code != ExitToolFailed || !strings.Contains(errOut, "git clone") {
 			t.Fatalf("code %d err %q", code, errOut)
@@ -361,7 +327,6 @@ func TestOrg(t *testing.T) {
 	})
 	t.Run("use switches and refuses an unknown slug", func(t *testing.T) {
 		isolate(t)
-		configure(t, userLevelSource(t))
 		run("org", "connect", scratchOrgRepository(t, "acme"))
 		code, out, _ := run("org", "use", "acme")
 		if code != ExitWorked || !strings.Contains(out, "active organisation: acme") {
@@ -374,7 +339,6 @@ func TestOrg(t *testing.T) {
 	})
 	t.Run("disconnect removes the clone and the registration and leaves no active organisation", func(t *testing.T) {
 		reinHome, _ := isolate(t)
-		configure(t, userLevelSource(t))
 		run("org", "connect", scratchOrgRepository(t, "acme"))
 		code, out, errOut := run("org", "disconnect", "acme")
 		if code != ExitWorked || !strings.Contains(out, "disconnected acme") || !strings.Contains(out, "no active organisation") {
@@ -392,21 +356,22 @@ func TestOrg(t *testing.T) {
 }
 
 func TestExportAndImport(t *testing.T) {
-	t.Run("both refuse before config", func(t *testing.T) {
+	t.Run("both refuse without a gh login", func(t *testing.T) {
 		isolate(t)
-		for _, arguments := range [][]string{{"export"}, {"import", "x.zip"}} {
+		stubGitHub(t, "")
+		for _, arguments := range [][]string{{"export", "x"}, {"import", "x.zip"}} {
 			code, _, errOut := run(arguments...)
-			if code != ExitRefused || !strings.Contains(errOut, "run rein config first") {
+			if code != ExitRefused || !strings.Contains(errOut, "gh auth login") {
 				t.Fatalf("%v: code %d err %q", arguments, code, errOut)
 			}
 		}
 	})
 	t.Run("export writes the default name in the working directory", func(t *testing.T) {
 		isolate(t)
-		configure(t, userLevelSource(t))
+		source := userLevelSource(t)
 		workingDirectory := t.TempDir()
 		t.Chdir(workingDirectory)
-		code, out, errOut := run("export")
+		code, out, errOut := run("export", source)
 		if code != ExitWorked || !strings.Contains(out, "1 rules, 1 skills") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
@@ -415,24 +380,19 @@ func TestExportAndImport(t *testing.T) {
 			t.Fatalf("zip not written: %v", matches)
 		}
 	})
-	t.Run("export to a path, then import places rules and skills and records them", func(t *testing.T) {
-		reinHome, claudeHome := isolate(t)
-		configure(t, userLevelSource(t))
+	t.Run("export to a path, then import on another machine places it and records it", func(t *testing.T) {
+		isolate(t)
 		zipPath := filepath.Join(t.TempDir(), "level.zip")
-		code, _, errOut := run("export", "--out", zipPath)
+		code, _, errOut := run("export", userLevelSource(t), "--out", zipPath)
 		if code != ExitWorked {
 			t.Fatalf("export: code %d err %q", code, errOut)
 		}
-		// the receiver: a second machine with its own homes and a plain config
 		receiverRein := t.TempDir()
 		receiverClaude := filepath.Join(t.TempDir(), ".claude")
 		t.Setenv("REIN_HOME", receiverRein)
 		t.Setenv("CLAUDE_CONFIG_DIR", receiverClaude)
-		configure(t, userLevelSource(t))
-		_ = reinHome
-		_ = claudeHome
 		code, out, errOut := run("import", zipPath)
-		if code != ExitRefused || !strings.Contains(out, "imported ") {
+		if code != ExitWorked || !strings.Contains(out, "imported ") {
 			t.Fatalf("import: code %d out %q err %q", code, out, errOut)
 		}
 		resolved, err := os.Readlink(filepath.Join(receiverClaude, "rules", "global.md"))
@@ -440,25 +400,20 @@ func TestExportAndImport(t *testing.T) {
 			t.Fatalf("rule link %q err %v", resolved, err)
 		}
 		state, _ := os.ReadFile(filepath.Join(receiverRein, "state.yaml"))
-		if !strings.Contains(string(state), "imports:") || !strings.Contains(string(state), "rules/global.md") {
+		if !strings.Contains(string(state), "imports:") || !strings.Contains(string(state), "from_user: danidani23") {
 			t.Fatalf("state %s", state)
 		}
-		// the receiver's own config already placed skills/commit, so the same skill id is refused
-		if !strings.Contains(errOut, "refused") || !strings.Contains(errOut, "skills/commit") || !strings.Contains(errOut, "1 targets refused") {
-			t.Fatalf("expected the same-named skill to be refused: out %q err %q", out, errOut)
-		}
-		resolved, err = os.Readlink(filepath.Join(receiverClaude, "skills", "commit"))
-		if err != nil || strings.Contains(resolved, "imports") {
-			t.Fatalf("config's skill link was replaced: %q err %v", resolved, err)
-		}
-		code, out, _ = run("import", zipPath)
-		if code != ExitRefused || !strings.Contains(out, "ok ") {
-			t.Fatalf("second import: code %d out %q", code, out)
+		// a second level with the same skill id is refused for that skill and placed for the rest
+		other := t.TempDir()
+		writeFile(t, other, "rules/other.md", "# Other\n")
+		writeFile(t, other, "skills/commit/SKILL.md", "---\nname: commit\ndescription: another commit skill\n---\n")
+		code, out, errOut = run("import", other)
+		if code != ExitRefused || !strings.Contains(errOut, "skills/commit") || !strings.Contains(out, "rules/other.md") {
+			t.Fatalf("second level: code %d out %q err %q", code, out, errOut)
 		}
 	})
 	t.Run("a zip that is not a rein export is refused", func(t *testing.T) {
 		isolate(t)
-		configure(t, userLevelSource(t))
 		plain := filepath.Join(t.TempDir(), "plain.zip")
 		writeFile(t, filepath.Dir(plain), "plain.zip", "not a zip")
 		code, _, errOut := run("import", plain)
@@ -466,56 +421,115 @@ func TestExportAndImport(t *testing.T) {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
 	})
-	t.Run("an export with a lint error is refused and nothing is placed", func(t *testing.T) {
+	t.Run("a level with a lint error is refused and nothing is placed", func(t *testing.T) {
 		_, claudeHome := isolate(t)
 		bad := t.TempDir()
 		writeFile(t, bad, "global/AGENTS.md", "# Global\n")
 		writeFile(t, bad, "skills/commit/SKILL.md", "---\nname: commits\ndescription: d\n---\n")
-		configure(t, bad)
-		zipPath := filepath.Join(t.TempDir(), "bad.zip")
-		run("export", "--out", zipPath)
-		receiver := t.TempDir()
-		t.Setenv("REIN_HOME", receiver)
-		t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), ".claude"))
-		configure(t, userLevelSource(t))
-		code, _, errOut := run("import", zipPath)
+		code, _, errOut := run("import", bad)
 		if code != ExitRefused || !strings.Contains(errOut, "lint errors") {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
-		_ = claudeHome
-	})
-	t.Run("an unsupported agent in config is refused", func(t *testing.T) {
-		isolate(t)
-		code, _, errOut := run("config", "--user-level", userLevelSource(t), "--agent", "codex", "--yes")
-		if code != ExitRefused || !strings.Contains(errOut, "not supported") {
-			t.Fatalf("code %d err %q", code, errOut)
+		_, err := os.Stat(filepath.Join(claudeHome, "rules"))
+		if err == nil {
+			t.Fatalf("something was placed")
 		}
 	})
 }
 
 func TestStatus(t *testing.T) {
-	t.Run("before config it says so and exits 0", func(t *testing.T) {
+	t.Run("without a gh login it says so and still shows the rest", func(t *testing.T) {
 		isolate(t)
+		stubGitHub(t, "")
 		code, out, _ := run("status")
-		if code != ExitWorked || !strings.Contains(out, "not configured") {
+		if code != ExitWorked || !strings.Contains(out, "github      none") || !strings.Contains(out, "placements  0") {
 			t.Fatalf("code %d out %q", code, out)
 		}
 	})
-	t.Run("after config it lists the placements and flags a missing target", func(t *testing.T) {
+	t.Run("after an import it shows the identity, the agents, the placements, and flags a missing target", func(t *testing.T) {
 		_, _ = isolate(t)
 		source := userLevelSource(t)
-		configure(t, source)
+		importLevel(t, source)
 		code, out, _ := run("status")
-		if code != ExitWorked || !strings.Contains(out, "user        danidani23") || !strings.Contains(out, "github      Danidani23") || !strings.Contains(out, "placements  2") || !strings.Contains(out, "ok       config") {
-			t.Fatalf("code %d out %q", code, out)
+		for _, expected := range []string{"github      Danidani23  (active gh account; slug danidani23)", "agents      claude-code", "placements  2", "ok       import"} {
+			if code != ExitWorked || !strings.Contains(out, expected) {
+				t.Fatalf("missing %q: code %d out %q", expected, code, out)
+			}
 		}
-		err := os.RemoveAll(filepath.Join(source, "skills", "commit"))
+		err := os.RemoveAll(filepath.Join(os.Getenv("REIN_HOME"), "imports"))
 		if err != nil {
 			t.Fatalf("remove: %v", err)
 		}
 		code, out, _ = run("status")
-		if code != ExitWorked || !strings.Contains(out, "missing") || !strings.Contains(out, "1 targets are missing") {
+		if code != ExitWorked || !strings.Contains(out, "2 targets are missing") {
 			t.Fatalf("code %d out %q", code, out)
+		}
+	})
+}
+
+func TestReset(t *testing.T) {
+	t.Run("reset removes the placements and imports, dangling ones included, and keeps organisations", func(t *testing.T) {
+		reinHome, claudeHome := isolate(t)
+		importLevel(t, userLevelSource(t))
+		run("org", "connect", scratchOrgRepository(t, "acme"))
+		err := os.RemoveAll(filepath.Join(reinHome, "imports"))
+		if err != nil {
+			t.Fatalf("remove: %v", err)
+		}
+		code, out, errOut := run("reset", "--yes")
+		if code != ExitWorked || strings.Count(out, "removed  ") != 2 {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+		_, err = os.Lstat(filepath.Join(claudeHome, "rules", "global.md"))
+		if err == nil {
+			t.Fatalf("dangling link still there")
+		}
+		code, out, _ = run("status")
+		if !strings.Contains(out, "placements  0") || !strings.Contains(out, "* acme") {
+			t.Fatalf("status after reset: %q", out)
+		}
+	})
+	t.Run("a link that points elsewhere is skipped and reported", func(t *testing.T) {
+		_, claudeHome := isolate(t)
+		importLevel(t, userLevelSource(t))
+		elsewhere := filepath.Join(t.TempDir(), "other.md")
+		writeFile(t, filepath.Dir(elsewhere), "other.md", "x")
+		rule := filepath.Join(claudeHome, "rules", "global.md")
+		_ = os.Remove(rule)
+		err := os.Symlink(elsewhere, rule)
+		if err != nil {
+			t.Fatalf("symlink: %v", err)
+		}
+		code, _, errOut := run("reset", "--yes")
+		if code != ExitRefused || !strings.Contains(errOut, "skipped") || !strings.Contains(errOut, "not what rein recorded") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+		_, err = os.Lstat(rule)
+		if err != nil {
+			t.Fatalf("foreign link was removed")
+		}
+	})
+	t.Run("reset --all forgets organisations and projects and deletes the clones", func(t *testing.T) {
+		reinHome, _ := isolate(t)
+		run("org", "connect", scratchOrgRepository(t, "acme"))
+		code, out, _ := run("reset", "--all", "--yes")
+		if code != ExitWorked || !strings.Contains(out, "removed  clone") {
+			t.Fatalf("code %d out %q", code, out)
+		}
+		_, err := os.Stat(filepath.Join(reinHome, "orgs"))
+		if err == nil {
+			t.Fatalf("orgs folder still there")
+		}
+		code, out, _ = run("status")
+		if !strings.Contains(out, "organisations  0") {
+			t.Fatalf("status after reset --all: %q", out)
+		}
+	})
+	t.Run("without a terminal and without --yes it refuses", func(t *testing.T) {
+		isolate(t)
+		code, _, errOut := run("reset")
+		if code != ExitRefused || !strings.Contains(errOut, "--yes") {
+			t.Fatalf("code %d err %q", code, errOut)
 		}
 	})
 }

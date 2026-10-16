@@ -65,21 +65,19 @@ func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer) int 
 	return ExitRefused
 }
 
-// requireConfig loads the machine's config or refuses. Every command that
-// acts for a user starts here; lint and version do not.
-func requireConfig() (home string, config local.Config, err error) {
+// requireIdentity is the gate of every command that acts for a user: the
+// home folder and the GitHub account gh is logged in as. lint, status and
+// version do not pass through it.
+func requireIdentity() (home string, who identity, err error) {
 	home, err = local.Home()
 	if err != nil {
-		return "", local.Config{}, crashedError{cause: err}
+		return "", identity{}, crashedError{cause: err}
 	}
-	config, err = local.Require(home)
-	if errors.Is(err, local.ErrNotConfigured) {
-		return "", local.Config{}, err
-	}
+	who, err = githubIdentity()
 	if err != nil {
-		return "", local.Config{}, crashedError{cause: err}
+		return "", identity{}, err
 	}
-	return home, config, nil
+	return home, who, nil
 }
 
 func newRootCommand(env *environment) *cobra.Command {
@@ -91,14 +89,15 @@ func newRootCommand(env *environment) *cobra.Command {
 			"organisation, at four levels: organisation, team, project and user. rein checks them,\n" +
 			"works out which apply to a project, and writes them into each clone in the form your\n" +
 			"agent reads. It is a compiler and a linter, never a service.\n\n" +
-			"Start with rein config, then rein org connect. rein status shows what has been set up.\n" +
-			"Every command explains itself with --help.",
+			"Your identity is your GitHub account, read from the gh CLI, which must be installed and\n" +
+			"logged in. Start with rein org connect, or rein import to bring your own settings in.\n" +
+			"rein status shows what has been set up. Every command explains itself with --help.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
 	root.SetOut(env.out)
 	root.SetErr(env.errOut)
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newConfigCommand(env), newStatusCommand(env), newOrgCommand(env), newLintCommand(env), newExportCommand(env), newImportCommand(env), newVersionCommand(env))
+	root.AddCommand(newStatusCommand(env), newOrgCommand(env), newLintCommand(env), newExportCommand(env), newImportCommand(env), newResetCommand(env), newVersionCommand(env))
 	return root
 }

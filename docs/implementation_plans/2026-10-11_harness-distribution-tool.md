@@ -151,6 +151,19 @@ committed instead of gitignored (D4).
   could not fetch. Until the org repository exists (P2.7), `config` stays as the bridge: it
   shows the identity from `gh`, places the user level from a remembered folder, and confirms;
   it is deleted when `org connect` can place the user level, so P2.7 moves ahead of P2.5.
+- ✅ **D10 — No `config` command at all.** Decided 2026-10-16, finishing D9 at once instead of
+  at P2.7. Identity comes from `gh` on every command that acts for a user, and a logged-out
+  `gh` is the refusal, naming `gh auth login`. Which agents a project allows is a declaration
+  of its levels, `agents`, allowed at organisation level and narrowed by a team or a project
+  (P2.4); which of them a machine has is detected by their command on the PATH, so nobody
+  configures an agent anywhere, and a person with two agents gets both. Content reaches the
+  agent's home through `rein import <zip or folder>` into `~/.rein/imports/`, and from P2.7
+  on from the org repository's clone, both in the home folder; a folder inside a git checkout
+  is never remembered. `config.yaml` is gone; `state.yaml` is the one local file and holds
+  the connected organisations, the active one, the clones, the projects, the placements and
+  the imports. `rein reset` removes everything rein placed and `--all` forgets the machine.
+  A placement may be replaced only by the same command from the same source, so re-importing
+  an edited folder refreshes it and a different level that claims the same id is refused.
 
 ## Design
 
@@ -397,12 +410,9 @@ Another agent is refused until its emitter exists (P2.5).
 
 Decided 2026-10-14. The verbs of `rein`, and the two files it keeps on a machine.
 
-- `rein config` sets up the machine: the user slug, the agent rein writes for, `claude-code`
-  being the only value today, and the first organisation. Every command that acts for a user
-  refuses until it has run, with "run rein config first". Exempt, because
-  they run where no user exists: `lint`, which CI runs on the org repository, and `version`.
-  Its placement of the user level into `~/.claude/` is the interim until `sync` delivers the
-  personal level per project (P3.1).
+- There is no setup command (D10). Every command that acts for a user reads the active GitHub
+  account from `gh` and refuses when it is logged out. Exempt, because they run where no user
+  exists: `lint`, which CI runs on the org repository, `status` and `version`.
 - `rein org create` (interactive, P2.7), `org connect <remote>`, `org list`, `org use <slug>`,
   `org disconnect`, `org destroy`. Disconnect removes the local registration and clone without
   touching GitHub; destroy deletes the repository after an explicit confirmation, which only an
@@ -435,21 +445,26 @@ Decided 2026-10-14. The verbs of `rein`, and the two files it keeps on a machine
   org repository: those would be a second pull request system (decided 2026-10-15).
 - `rein review` takes a diff and judges it per the [review design](#review-of-prose-policies);
   a resolved harness whose hash it already judged is not judged again.
-- `rein export [--out <path>]` writes the [exchange format](#exchange-format), by default
-  `rein-export-<user>-<date>.zip` in the current directory; `rein import <zip>` places it.
+- `rein export <folder> [--out <path>]` writes a level, in the declarations or the toolkit
+  layout, as the [exchange format](#exchange-format), by default `rein-export-<slug>-<date>.zip`
+  in the current directory. `rein import <zip or folder>` copies a level under
+  `~/.rein/imports/<hash>/`, lints it and places it for every supported agent found on the
+  machine; it is how a person's own instructions and skills reach the agent until the org
+  repository exists, and the same folder imported again after an edit is refreshed.
+- `rein reset` removes every placement and import; `--all` also forgets the organisations,
+  deletes their clones and the project registrations, leaving the machine as before rein.
 - `rein lint <path>`, `rein label create|rename|delete`, `rein uninstall`, `rein reset`,
   `rein version`, `rein update`.
 
-Two files under `~/.rein/`, the folder overridable with `REIN_HOME`:
+One file under `~/.rein/`, the folder overridable with `REIN_HOME` (D10):
 
-- `config.yaml`, what the user chose, small and hand-editable: the user slug, the connected
-  organisations (UUID, slug, git remote) and which one is active. Never a secret: git's
-  credential helper and `gh` hold the tokens.
-- `state.yaml`, what the tool learned and owns: the clone path of each org repository under
+- `state.yaml`, a rebuildable cache (D9): the connected organisations (UUID, slug, git remote)
+  and which one is active, the clone path of each org repository under
   `~/.rein/orgs/<uuid>/`, the registered project repositories on this machine with clone path,
   address, fingerprint and last sync, every link or copy placed into `~/.claude/`, so
-  `reset` removes exactly those, and the proposal ledger: branch, content hash, time and pull
-  request URL of every proposal made from this machine.
+  `reset` removes exactly those, and the imports. Never a secret: git's credential helper
+  and `gh` hold the tokens. The proposal ledger is `gh pr list --author @me` on the org
+  repository.
 
 ### What the lint checks
 
@@ -590,7 +605,7 @@ environment's network allowlist admits the org repository's host (open point O2)
 
 ### For a single developer
 
-Today, `rein config` places symlinks: a symlink is a filesystem entry that points at another
+Today, `rein import` places symlinks: a symlink is a filesystem entry that points at another
 path, so `~/.claude/skills/commit` *is* `toolkit/skills/commit` and an edit in the toolkit is
 seen by every repository on this machine at its next session, with no code. The tool adds:
 
@@ -967,3 +982,7 @@ writes is read from the next session on, not in the same one.
   slug derived, no slug question, the user level from the remembered folder or `--user-level`,
   never asked; a logged-out `gh` is a refusal naming `gh auth login`. Tests stub `gh` on the
   PATH. The user's slug becomes `danidani23`.
+- (2026-10-16) D10: `config` removed; identity from `gh` on every command, agents detected,
+  content through `rein import <zip or folder>`, `rein reset` with `--all`, `status` with the
+  live identity and the installed agents, `export <folder>`. Ownership of a placement is per
+  command and source. The dated entries above keep `config` as history.

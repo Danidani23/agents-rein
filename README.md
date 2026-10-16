@@ -109,16 +109,17 @@ the first agent is only the first.
 
 ## Commands
 
-What exists today:
+What exists today. There is no setup step beyond `gh auth login`: your identity is your
+GitHub account, and the agents on your machine are detected.
 
 | Command | What it does |
 |---|---|
-| `rein config` | Sets up this machine. Your identity is your GitHub account, read from `gh`; the agent is the one rein writes for; until your organisation's repository exists, it also places your instructions and skills from a folder into the agent's home. It shows what it found and confirms before changing anything. Every other command that acts for you refuses until it has run. |
-| `rein status` | Shows what rein has set up on this machine: user, agent, every placed file and whether its target still exists, organisations, projects. |
+| `rein status` | Shows who you are to rein, the active GitHub account of `gh`, the supported agents found on this machine, every placed file and whether its target still exists, organisations, projects and imports. |
 | `rein org connect <remote>`, `list`, `use <slug>`, `disconnect <slug>` | Clones an org repository and remembers it; lists the connected ones with the active one marked; switches; forgets one and removes its clone without touching the remote. |
 | `rein lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, and skills that share a name. Needs no config, so CI runs it on an org repository. |
-| `rein export [--out <path>]` | Writes your settings as a zip in rein's own exchange format: one level in the declarations layout, with a manifest that hashes every file. |
-| `rein import <zip>` | Verifies and lints an export, then places it for your agent. It never replaces a file it did not place itself. |
+| `rein export <folder> [--out <path>]` | Writes a folder of settings as a zip in rein's own exchange format: one level in the declarations layout, with a manifest that hashes every file. |
+| `rein import <zip or folder>` | Lints a level and places it for every supported agent on this machine, under its home folder. Until your organisation's repository exists, this is how your own instructions and skills reach the agent; importing an edited folder again refreshes it. It never replaces a file it did not place itself. |
+| `rein reset` | Removes everything rein placed; `--all` forgets the organisations and projects too, leaving the machine as before rein. |
 | `rein version` | Prints the version. |
 
 Planned, in the board's order: `rein init` and `rein sync`, which bind a clone to its project
@@ -161,7 +162,7 @@ AI-assisted development across many teams? Six questions, answered with sources 
   them current.
 - [cmd/rein/](cmd/rein/) and [internal/](internal/) — the tool.
 - [toolkit/](toolkit/) — the personal agent toolkit: global instructions and ten skills in open
-  formats, the content of the pilot. Today `rein config` places it into `~/.claude/`; it moves
+  formats, the content of the pilot. Today `rein import` places it into `~/.claude/`; it moves
   into the pilot's org repository when `rein sync` delivers the personal level per project
   ([ADR](docs/decisions/2026-10-10_personal-toolkit-open-formats.md),
   [board](docs/implementation_plans/2026-10-10_agent-toolkit.md)).

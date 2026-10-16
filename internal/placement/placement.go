@@ -171,7 +171,7 @@ func apply(pair Pair, mode Mode, known map[string]string) Outcome {
 			}
 			return outcome.create().replaced()
 		}
-		return outcome.refuse("already a link to " + existing + "; not placed by this command")
+		return outcome.refuse("already a link to " + existing + "; placed from another source")
 	case mode == ModeCopy && owned:
 		err = os.RemoveAll(pair.Path)
 		if err != nil {
@@ -183,7 +183,7 @@ func apply(pair Pair, mode Mode, known map[string]string) Outcome {
 		}
 		return created
 	}
-	return outcome.refuse("already exists and was not placed by this command")
+	return outcome.refuse("already exists and was not placed by rein from this source")
 }
 
 // replaced marks a successful placement that stood in for an earlier one.

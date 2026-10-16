@@ -1,57 +1,36 @@
 package local
 
-import (
-	"errors"
-	"testing"
-)
-
-func TestConfig(t *testing.T) {
-	t.Run("a fresh home has no config and Require refuses", func(t *testing.T) {
-		home := t.TempDir()
-		_, found, err := LoadConfig(home)
-		if err != nil || found {
-			t.Fatalf("err %v found %v", err, found)
-		}
-		_, err = Require(home)
-		if !errors.Is(err, ErrNotConfigured) {
-			t.Fatalf("expected ErrNotConfigured, got %v", err)
-		}
-	})
-	t.Run("a saved config round-trips and Require returns it", func(t *testing.T) {
-		home := t.TempDir()
-		saved := Config{User: "danielmolnar", Organizations: []OrganizationRef{{ID: "id-1", Slug: "dani", Remote: "git@example:dani.git"}}, Active: "dani"}
-		err := SaveConfig(home, saved)
-		if err != nil {
-			t.Fatalf("save: %v", err)
-		}
-		loaded, err := Require(home)
-		if err != nil {
-			t.Fatalf("require: %v", err)
-		}
-		ref, found := loaded.Organization("dani")
-		if loaded.User != "danielmolnar" || !found || ref.Remote != "git@example:dani.git" || loaded.Active != "dani" {
-			t.Fatalf("loaded %+v", loaded)
-		}
-	})
-}
+import "testing"
 
 func TestState(t *testing.T) {
 	t.Run("a missing state is empty with a usable clones map", func(t *testing.T) {
 		state, err := LoadState(t.TempDir())
-		if err != nil || state.Clones == nil || len(state.Placements) != 0 {
+		if err != nil || state.Clones == nil || len(state.Placements) != 0 || state.Active != "" {
 			t.Fatalf("state %+v err %v", state, err)
 		}
 	})
 	t.Run("a saved state round-trips", func(t *testing.T) {
 		home := t.TempDir()
-		saved := State{Clones: map[string]string{"id-1": "/clones/id-1"}, Placements: []Placement{{Path: "/home/.claude/CLAUDE.md", Target: "/toolkit/global/AGENTS.md", Mode: "link"}}}
+		saved := State{
+			Organizations: []OrganizationRef{{ID: "id-1", Slug: "dani", Remote: "git@example:dani.git"}},
+			Active:        "dani",
+			Clones:        map[string]string{"id-1": "/clones/id-1"},
+			Placements:    []Placement{{Path: "/home/.claude/rules/global.md", Target: "/imports/x/rules/global.md", Mode: "link", Owner: OwnerImport, Source: "/toolkit"}},
+		}
 		err := SaveState(home, saved)
 		if err != nil {
 			t.Fatalf("save: %v", err)
 		}
 		loaded, err := LoadState(home)
-		if err != nil || loaded.Clones["id-1"] != "/clones/id-1" || len(loaded.Placements) != 1 {
-			t.Fatalf("loaded %+v err %v", loaded, err)
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+		ref, found := loaded.Organization("dani")
+		if !found || ref.Remote != "git@example:dani.git" || loaded.Active != "dani" || loaded.Clones["id-1"] != "/clones/id-1" {
+			t.Fatalf("loaded %+v", loaded)
+		}
+		if len(loaded.OwnedBy(OwnerImport, "/toolkit")) != 1 || len(loaded.OwnedBy(OwnerImport, "/other")) != 0 {
+			t.Fatalf("owned %v", loaded.OwnedBy(OwnerImport, "/toolkit"))
 		}
 	})
 }

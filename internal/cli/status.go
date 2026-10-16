@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -13,11 +13,13 @@ import (
 func newStatusCommand(env *environment) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show what rein has set up on this machine",
-		Long: "status reads ~/.rein/config.yaml and ~/.rein/state.yaml and shows who you are, which\n" +
-			"agent rein writes for, every file it placed into the agent's home and whether its target\n" +
-			"still exists, the connected organisations with the active one marked, and the registered\n" +
-			"projects. It changes nothing and needs no config: before rein config has run it says so.",
+		Short: "Show who you are to rein and what it has set up on this machine",
+		Long: "status shows the GitHub account gh is logged in as, which is your identity (gh can hold\n" +
+			"several accounts; the active one counts), the supported agents found on this machine,\n" +
+			"every file rein placed into the agent's home and whether its target still exists, the\n" +
+			"connected organisations with the active one marked, the registered projects and the\n" +
+			"imports. It changes nothing and runs without an identity: when gh is not logged in it\n" +
+			"says so and still shows the rest.",
 		Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
 			return runStatus(env)
@@ -30,49 +32,41 @@ func runStatus(env *environment) error {
 	if err != nil {
 		return crashedError{cause: err}
 	}
-	config, err := local.Require(home)
-	if errors.Is(err, local.ErrNotConfigured) {
-		fmt.Fprintf(env.out, "not configured on this machine; run rein config\n")
-		return nil
-	}
-	if err != nil {
-		return crashedError{cause: err}
-	}
 	state, err := local.LoadState(home)
 	if err != nil {
 		return crashedError{cause: err}
 	}
+	who, err := githubIdentity()
+	if err != nil {
+		fmt.Fprintf(env.out, "github      none: %v\n", err)
+	} else {
+		fmt.Fprintf(env.out, "github      %s  (active gh account; slug %s)\n", who.Login, who.Slug)
+	}
+	agents := installedAgents()
+	if len(agents) == 0 {
+		fmt.Fprintf(env.out, "agents      none found; this build writes for %s\n", local.AgentClaudeCode)
+	} else {
+		fmt.Fprintf(env.out, "agents      %s\n", strings.Join(agents, ", "))
+	}
 	fmt.Fprintf(env.out, "home        %s\n", home)
-	fmt.Fprintf(env.out, "user        %s\n", config.User)
-	if config.GitHub != "" {
-		fmt.Fprintf(env.out, "github      %s\n", config.GitHub)
-	}
-	fmt.Fprintf(env.out, "agent       %s\n", config.Agent)
-	if config.UserLevelSource != "" {
-		fmt.Fprintf(env.out, "user level  %s\n", config.UserLevelSource)
-	}
 	fmt.Fprintf(env.out, "\nplacements  %d\n", len(state.Placements))
 	missing := 0
 	for _, placed := range state.Placements {
-		owner := placed.Owner
-		if owner == "" {
-			owner = local.OwnerConfig
-		}
 		mark := "ok     "
 		_, err := os.Stat(placed.Target)
 		if err != nil {
 			mark = "missing"
 			missing++
 		}
-		fmt.Fprintf(env.out, "  %s  %-6s %-4s %s -> %s\n", mark, owner, placed.Mode, placed.Path, placed.Target)
+		fmt.Fprintf(env.out, "  %s  %-6s %-4s %s -> %s\n", mark, placed.Owner, placed.Mode, placed.Path, placed.Target)
 	}
 	if missing > 0 {
-		fmt.Fprintf(env.out, "  %d targets are missing; run rein config again to re-point them\n", missing)
+		fmt.Fprintf(env.out, "  %d targets are missing; run rein reset, then import again\n", missing)
 	}
-	fmt.Fprintf(env.out, "\norganisations  %d\n", len(config.Organizations))
-	for _, ref := range config.Organizations {
+	fmt.Fprintf(env.out, "\norganisations  %d\n", len(state.Organizations))
+	for _, ref := range state.Organizations {
 		marker := " "
-		if ref.Slug == config.Active {
+		if ref.Slug == state.Active {
 			marker = "*"
 		}
 		fmt.Fprintf(env.out, "  %s %s  %s\n", marker, ref.Slug, ref.Remote)
@@ -84,7 +78,11 @@ func runStatus(env *environment) error {
 	if len(state.Imports) > 0 {
 		fmt.Fprintf(env.out, "\nimports  %d\n", len(state.Imports))
 		for _, imported := range state.Imports {
-			fmt.Fprintf(env.out, "  %s  from %s  %s\n", imported.Hash[:12], imported.FromUser, imported.Path)
+			origin := imported.Source
+			if imported.FromUser != "" {
+				origin = "from " + imported.FromUser
+			}
+			fmt.Fprintf(env.out, "  %s  %s  %s\n", imported.Hash[:12], origin, imported.Path)
 		}
 	}
 	return nil

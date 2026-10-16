@@ -144,3 +144,27 @@ func TestWriteAndRead(t *testing.T) {
 		}
 	})
 }
+
+func TestFromFolder(t *testing.T) {
+	t.Run("the toolkit layout is recognised", func(t *testing.T) {
+		entries, err := FromFolder(source(t))
+		if err != nil || len(entries) != 4 || entries[0].Path != "rules/global.md" {
+			t.Fatalf("entries %v err %v", paths(entries), err)
+		}
+	})
+	t.Run("the declarations layout is recognised", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "rules/style.md", "# Style\n")
+		writeFile(t, root, "skills/deploy/SKILL.md", "---\nname: deploy\ndescription: d\n---\n")
+		entries, err := FromFolder(root)
+		if err != nil || strings.Join(paths(entries), " ") != "rules/style.md skills/deploy/SKILL.md" {
+			t.Fatalf("entries %v err %v", paths(entries), err)
+		}
+	})
+	t.Run("an empty folder is refused", func(t *testing.T) {
+		_, err := FromFolder(t.TempDir())
+		if err == nil {
+			t.Fatalf("expected an error")
+		}
+	})
+}

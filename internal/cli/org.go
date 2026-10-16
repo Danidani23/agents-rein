@@ -33,7 +33,7 @@ func newOrgConnectCommand(env *environment) *cobra.Command {
 		Short: "Clone an existing org repository and remember it",
 		Long: "connect clones the org repository at <remote>, a git URL or a local path, checks that it\n" +
 			"holds exactly one organisation record, keeps the clone under ~/.rein/orgs/<id>/ and adds\n" +
-			"the organisation to your config. The first organisation you connect becomes the active one.",
+			"the organisation to this machine's state. The first one you connect becomes the active one.",
 		Example: "  rein org connect git@github.com:acme/agent-settings.git",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
@@ -43,13 +43,17 @@ func newOrgConnectCommand(env *environment) *cobra.Command {
 }
 
 func runOrgConnect(env *environment, remote string) error {
-	home, config, err := requireConfig()
+	home, _, err := requireIdentity()
 	if err != nil {
 		return err
 	}
 	err = execute.Preflight("git")
 	if err != nil {
 		return err
+	}
+	state, err := local.LoadState(home)
+	if err != nil {
+		return crashedError{cause: err}
 	}
 	orgsFolder := filepath.Join(home, "orgs")
 	err = os.MkdirAll(orgsFolder, 0o755)
@@ -70,7 +74,7 @@ func runOrgConnect(env *environment, remote string) error {
 		os.RemoveAll(temporary)
 		return err
 	}
-	_, connected := config.Organization(organization.Slug)
+	_, connected := state.Organization(organization.Slug)
 	if connected {
 		os.RemoveAll(temporary)
 		return fmt.Errorf("organisation %q is already connected; run rein org disconnect %s first", organization.Slug, organization.Slug)
@@ -84,18 +88,10 @@ func runOrgConnect(env *environment, remote string) error {
 	if err != nil {
 		return crashedError{cause: err}
 	}
-	config.Organizations = append(config.Organizations, local.OrganizationRef{ID: organization.ID, Slug: organization.Slug, Remote: remote})
-	becameActive := config.Active == ""
+	state.Organizations = append(state.Organizations, local.OrganizationRef{ID: organization.ID, Slug: organization.Slug, Remote: remote})
+	becameActive := state.Active == ""
 	if becameActive {
-		config.Active = organization.Slug
-	}
-	err = local.SaveConfig(home, config)
-	if err != nil {
-		return crashedError{cause: err}
-	}
-	state, err := local.LoadState(home)
-	if err != nil {
-		return crashedError{cause: err}
+		state.Active = organization.Slug
 	}
 	state.Clones[organization.ID] = final
 	err = local.SaveState(home, state)
@@ -115,17 +111,21 @@ func newOrgListCommand(env *environment) *cobra.Command {
 		Short: "List the connected organisations; the active one is marked",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			_, config, err := requireConfig()
+			home, _, err := requireIdentity()
 			if err != nil {
 				return err
 			}
-			if len(config.Organizations) == 0 {
+			state, err := local.LoadState(home)
+			if err != nil {
+				return crashedError{cause: err}
+			}
+			if len(state.Organizations) == 0 {
 				fmt.Fprintf(env.out, "no organisations connected; run rein org connect <remote>\n")
 				return nil
 			}
-			for _, ref := range config.Organizations {
+			for _, ref := range state.Organizations {
 				marker := " "
-				if ref.Slug == config.Active {
+				if ref.Slug == state.Active {
 					marker = "*"
 				}
 				fmt.Fprintf(env.out, "%s %s  %s\n", marker, ref.Slug, ref.Remote)
@@ -141,20 +141,24 @@ func newOrgUseCommand(env *environment) *cobra.Command {
 		Short: "Make an organisation the active one",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
-			home, config, err := requireConfig()
+			home, _, err := requireIdentity()
 			if err != nil {
 				return err
 			}
-			_, found := config.Organization(arguments[0])
-			if !found {
-				return fmt.Errorf("organisation %q is not connected; run rein org list", arguments[0])
-			}
-			config.Active = arguments[0]
-			err = local.SaveConfig(home, config)
+			state, err := local.LoadState(home)
 			if err != nil {
 				return crashedError{cause: err}
 			}
-			fmt.Fprintf(env.out, "active organisation: %s\n", config.Active)
+			_, found := state.Organization(arguments[0])
+			if !found {
+				return fmt.Errorf("organisation %q is not connected; run rein org list", arguments[0])
+			}
+			state.Active = arguments[0]
+			err = local.SaveState(home, state)
+			if err != nil {
+				return crashedError{cause: err}
+			}
+			fmt.Fprintf(env.out, "active organisation: %s\n", state.Active)
 			return nil
 		},
 	}
@@ -164,7 +168,7 @@ func newOrgDisconnectCommand(env *environment) *cobra.Command {
 	return &cobra.Command{
 		Use:   "disconnect <slug>",
 		Short: "Forget an organisation and remove its clone; the remote is untouched",
-		Long: "disconnect removes the organisation from your config, deletes its clone under ~/.rein/orgs/\n" +
+		Long: "disconnect forgets the organisation on this machine, deletes its clone under ~/.rein/orgs/\n" +
 			"and forgets the projects registered for it on this machine. The remote repository is not\n" +
 			"touched; org destroy, once it exists, is the command that deletes one.",
 		Args: cobra.ExactArgs(1),
@@ -175,17 +179,17 @@ func newOrgDisconnectCommand(env *environment) *cobra.Command {
 }
 
 func runOrgDisconnect(env *environment, slug string) error {
-	home, config, err := requireConfig()
+	home, _, err := requireIdentity()
 	if err != nil {
 		return err
-	}
-	ref, found := config.Organization(slug)
-	if !found {
-		return fmt.Errorf("organisation %q is not connected; run rein org list", slug)
 	}
 	state, err := local.LoadState(home)
 	if err != nil {
 		return crashedError{cause: err}
+	}
+	ref, found := state.Organization(slug)
+	if !found {
+		return fmt.Errorf("organisation %q is not connected; run rein org list", slug)
 	}
 	clone, known := state.Clones[ref.ID]
 	if !known {
@@ -207,31 +211,27 @@ func runOrgDisconnect(env *environment, slug string) error {
 	}
 	state.Projects = kept
 	var remaining []local.OrganizationRef
-	for _, candidate := range config.Organizations {
+	for _, candidate := range state.Organizations {
 		if candidate.Slug != slug {
 			remaining = append(remaining, candidate)
 		}
 	}
-	config.Organizations = remaining
-	if config.Active == slug {
-		config.Active = ""
+	state.Organizations = remaining
+	if state.Active == slug {
+		state.Active = ""
 		if len(remaining) > 0 {
-			config.Active = remaining[0].Slug
+			state.Active = remaining[0].Slug
 		}
-	}
-	err = local.SaveConfig(home, config)
-	if err != nil {
-		return crashedError{cause: err}
 	}
 	err = local.SaveState(home, state)
 	if err != nil {
 		return crashedError{cause: err}
 	}
 	fmt.Fprintf(env.out, "disconnected %s: removed the clone at %s and %d project registrations\n", slug, clone, removedProjects)
-	if config.Active == "" {
+	if state.Active == "" {
 		fmt.Fprintf(env.out, "no active organisation\n")
 	} else {
-		fmt.Fprintf(env.out, "active organisation: %s\n", config.Active)
+		fmt.Fprintf(env.out, "active organisation: %s\n", state.Active)
 	}
 	return nil
 }
