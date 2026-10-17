@@ -69,7 +69,7 @@ func (implementation *local) Connect(remote string) (ConnectResult, error) {
 	if err != nil {
 		return ConnectResult{}, err
 	}
-	state.Organizations = append(state.Organizations, machine.OrganizationRef{ID: organization.ID, Slug: organization.Slug, Remote: remote})
+	state.Organizations = append(state.Organizations, machine.OrganizationRef{ID: organization.ID, Slug: organization.Slug, Remote: remote, Host: organization.Host})
 	becameActive := state.Active == ""
 	if becameActive {
 		state.Active = organization.Slug

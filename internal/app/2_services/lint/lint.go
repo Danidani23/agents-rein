@@ -57,6 +57,11 @@ const (
 	kindSkill
 	kindRule
 	kindSettings
+	kindOrganization
+	kindTeam
+	kindProject
+	kindUser
+	kindLabels
 )
 
 // classify says what a file is by its name and its folder: a SKILL.md is a
@@ -64,13 +69,24 @@ const (
 // settings.local.json holds permissions.
 func classify(filePath string) fileKind {
 	base := filepath.Base(filePath)
+	parent := filepath.Base(filepath.Dir(filePath))
 	switch {
 	case base == "SKILL.md":
 		return kindSkill
 	case base == "settings.json" || base == "settings.local.json":
 		return kindSettings
-	case strings.HasSuffix(base, ".md") && filepath.Base(filepath.Dir(filePath)) == "rules":
+	case strings.HasSuffix(base, ".md") && parent == "rules":
 		return kindRule
+	case base == "organization.yaml":
+		return kindOrganization
+	case base == "team.yaml":
+		return kindTeam
+	case base == "project.yaml":
+		return kindProject
+	case base == "user.yaml":
+		return kindUser
+	case strings.HasSuffix(base, ".yaml") && parent == "labels":
+		return kindLabels
 	}
 	return kindOther
 }
@@ -80,6 +96,7 @@ type run struct {
 	absoluteRoot string
 	report       Report
 	skillsByName map[string][]string
+	trees        []string
 }
 
 // Run lints every harness file under root.
@@ -106,13 +123,15 @@ func Run(root string) (Report, error) {
 			}
 			return nil
 		}
-		switch classify(filePath) {
+		switch kind := classify(filePath); kind {
 		case kindSkill:
 			state.lintSkill(filePath)
 		case kindRule:
 			state.lintRule(filePath)
 		case kindSettings:
 			state.lintSettings(filePath)
+		case kindOrganization, kindTeam, kindProject, kindUser, kindLabels:
+			state.lintRecord(filePath, kind)
 		}
 		return nil
 	})
@@ -120,6 +139,7 @@ func Run(root string) (Report, error) {
 		return Report{}, err
 	}
 	state.reportDuplicateSkills()
+	state.crossCheckTrees()
 	sort.Slice(state.report.Findings, func(left, right int) bool {
 		if state.report.Findings[left].Path != state.report.Findings[right].Path {
 			return state.report.Findings[left].Path < state.report.Findings[right].Path
@@ -206,6 +226,87 @@ func (state *run) lintSettings(filePath string) {
 			}
 		}
 	}
+}
+
+// lintRecord parses one record file; the per-record checks live with the
+// records, the cross-checks run once per tree afterwards.
+func (state *run) lintRecord(filePath string, kind fileKind) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		state.add(filePath, "", declaration.Problem{Severity: declaration.SeverityError, Message: "cannot read: " + err.Error()})
+		return
+	}
+	folder := filepath.Base(filepath.Dir(filePath))
+	var problems []declaration.Problem
+	switch kind {
+	case kindOrganization:
+		_, problems = declaration.ParseOrganization(folder, content)
+	case kindTeam:
+		_, problems = declaration.ParseTeam(folder, content)
+	case kindProject:
+		_, problems = declaration.ParseProject(folder, content)
+	case kindUser:
+		_, problems = declaration.ParseUser(folder, content)
+	case kindLabels:
+		_, problems = declaration.ParseLabelCategory(strings.TrimSuffix(filepath.Base(filePath), ".yaml"), content)
+	}
+	addressText, _ := recordAddress(filePath, kind)
+	for _, problem := range problems {
+		state.add(filePath, addressText, problem)
+	}
+	if kind == kindOrganization {
+		state.trees = append(state.trees, filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filePath)))))
+	}
+}
+
+// crossCheckTrees runs the cross-checks of every org repository the walk
+// found, once each; a tree that cannot load has already been reported
+// record by record.
+func (state *run) crossCheckTrees() {
+	for _, clone := range state.trees {
+		_, problems, err := declaration.LoadTree(clone)
+		if err != nil {
+			continue
+		}
+		for _, problem := range problems {
+			if !problem.Cross {
+				continue
+			}
+			if problem.Path == "" {
+				problem.Path = clone
+			}
+			state.add(problem.Path, problem.Address, problem.Problem)
+		}
+	}
+}
+
+// recordAddress is the level a record describes: its folder.
+func recordAddress(absolutePath string, kind fileKind) (text string, problem *declaration.Problem) {
+	segments := strings.Split(filepath.ToSlash(absolutePath), "/")
+	start := -1
+	for index, segment := range segments {
+		if segment == "declarations" {
+			start = index
+		}
+	}
+	if start < 0 || start+1 >= len(segments) {
+		return "", nil
+	}
+	inside := segments[start+1:]
+	if inside[0] != address.Organizations && inside[0] != address.Users {
+		return "", nil
+	}
+	var relative string
+	if kind == kindLabels {
+		relative = path.Join(append(inside[:len(inside)-1], strings.TrimSuffix(inside[len(inside)-1], ".yaml"))...)
+	} else {
+		relative = path.Join(inside[:len(inside)-1]...)
+	}
+	parsed, err := address.FromPath(relative)
+	if err != nil {
+		return "", &declaration.Problem{Severity: declaration.SeverityError, Message: "path does not form an address: " + err.Error()}
+	}
+	return parsed.String(), nil
 }
 
 // reportDuplicateSkills warns about skills that share a name across the run:

@@ -72,7 +72,7 @@ func (memory *memoryState) Save(state machine.State) error {
 	return nil
 }
 
-const validRecord = "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\n"
+const validRecord = "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\nhost: github\n"
 
 func dependencies(t *testing.T) (Dependencies, *memoryState, *fakeAgent) {
 	t.Helper()

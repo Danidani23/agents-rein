@@ -116,7 +116,7 @@ GitHub account, and the agents on your machine are detected.
 |---|---|
 | `rein status` | Shows who you are to rein, the active GitHub account of `gh`, the supported agents found on this machine, every placed file and whether its target still exists, organisations, projects and imports. |
 | `rein org connect <remote>`, `list`, `use <slug>`, `disconnect <slug>` | Clones an org repository and remembers it; lists the connected ones with the active one marked; switches; forgets one and removes its clone without touching the remote. |
-| `rein lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, and skills that share a name. Needs no config, so CI runs it on an org repository. |
+| `rein lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, skills that share a name, and in an org repository every record: organisation, teams, projects, users and the label registry, with their references. Needs no identity, so CI runs it on an org repository. |
 | `rein reset` | Removes everything rein placed into an agent's home; `--all` forgets the organisations and projects too, leaving the machine as before rein. |
 | `rein version` | Prints the version. |
 

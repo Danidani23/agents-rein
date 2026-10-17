@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const validOrganization = "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\ndescription: The pilot.\n"
+const validOrganization = "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\ndescription: The pilot.\nhost: github\n"
 
 func TestParseOrganization(t *testing.T) {
 	t.Run("a valid record parses", func(t *testing.T) {
@@ -22,9 +22,11 @@ func TestParseOrganization(t *testing.T) {
 		content  string
 		expected string
 	}{
-		{"an id that is not a UUID is refused", "acme", "id: 123\nslug: acme\nname: Acme\n", "not a lowercase UUID"},
+		{"an id that is not a UUID is refused", "acme", "id: 123\nslug: acme\nname: Acme\nhost: github\n", "not a lowercase UUID"},
+		{"a missing host is refused", "acme", "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\n", "host is required"},
+		{"a planned host is refused as not yet supported", "acme", "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\nhost: gitlab\n", "not yet supported"},
 		{"a slug must match its folder", "other", validOrganization, "does not match the folder"},
-		{"a name is required", "acme", "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\n", "name is required"},
+		{"a name is required", "acme", "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nhost: github\n", "name is required"},
 		{"a field outside the record is refused", "acme", validOrganization + "colour: blue\n", "colour"},
 	}
 	for _, testCase := range cases {

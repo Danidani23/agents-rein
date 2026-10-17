@@ -4,11 +4,14 @@
 // from the clones and from sync, and it never holds an identity or a secret.
 package machine
 
-// OrganizationRef is a connected organisation.
+// OrganizationRef is a connected organisation. Host is the forge named in
+// its record, mirrored here so the right adapter is picked without reading
+// the clone.
 type OrganizationRef struct {
 	ID     string `yaml:"id"`
 	Slug   string `yaml:"slug"`
 	Remote string `yaml:"remote"`
+	Host   string `yaml:"host,omitempty"`
 }
 
 // Placement is one link or copy rein made in an agent's home. Owner is the

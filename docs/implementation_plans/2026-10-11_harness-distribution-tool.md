@@ -133,7 +133,12 @@ committed instead of gitignored (D4).
   macOS and Windows file systems are case-insensitive and GitHub logins are unique regardless
   of case, so no two accounts can share a slug. A proposal is a GitHub pull request, `review`
   runs in GitHub Actions with a GitHub secret, `org create` makes a GitHub repository, and
-  `gh` is a prerequisite that `config` checks. What stays host-neutral is plain git, cloning
+  `gh` is a prerequisite checked before any command that acts for a user. Amended
+  2026-10-16: the host is a property of an organisation, `host: github` in its record, chosen
+  at `org create` from a selector that lists the supported and the planned hosts, mirrored
+  into the machine state per organisation so the right adapter is picked, and identity is
+  per host; nothing about the host is configured on a machine (D10). What stays host-neutral
+  is plain git, cloning
   and fetching, and the declarations, so a GitLab adapter can be added behind one interface
   later. Visibility follows GitHub's unit of access, the repository: everyone who can read an
   org repository sees every level, every proposal and every user level in it, so nothing
@@ -844,8 +849,19 @@ from that project's snapshot.
   distill` in the clone, or `--project <slug>`.
 - 🟢 **P2.15 — The ledger, `restore`, and `reset` on it (D12).** [PENDING] Supersedes the
   undo half of P2.9; `org destroy` and `uninstall` stay there.
-- 🟢 **P2.4 — The manifest, the label registry and the merge (B2) exist in code, with `init`,
-  `label` and `propose`.** [PENDING]
+- 🔨 **P2.4 — The manifest, the label registry and the merge (B2) exist in code, with `init`,
+  `label` and `propose`.** [IN PROGRESS] First half executed 2026-10-16: the records. In
+  `2_services/declaration`: `Team`, `Project` (teams, labels, path, fingerprint), `User`
+  (github exactly, slug its lowercase form), `LabelCategory` with the seeded registry
+  `language`, `kind`, `data`; the organisation record gained `host`, `github` the only value
+  this build accepts and `gitlab` listed as planned and refused, plus `minimum_rein_version`;
+  `LoadTree` reads a whole org repository and cross-checks it: teams referenced exist, labels
+  are registered, no two records share a UUID, no two projects share a repository and a path;
+  the lint classifies the record files and runs the cross-checks once per tree, every finding
+  with its address. Gate: `task rein:check` green; `rein lint` over a scratch org repository
+  clean, then reporting a planned host, a missing team and an unregistered label. Second half,
+  with `sync`: selectors, enforcement, skip lists, exceptions and the resolution order. The
+  manifest in the title is gone since D4; `init`, `label` and `propose` are P2.17 and P2.16.
 - 🟢 **P2.5 — The compiler for Claude Code (B3) emits the plugin and marketplace repository, the
   managed-settings drop-in, `.mcp.json` and `CLAUDE.local.md`.** [PENDING] Blocked by P1.3.
 - 🟢 **P2.6 — The drift and inventory report (B5).** [PENDING]
@@ -1096,3 +1112,5 @@ writes is read from the next session on, not in the same one.
   a modular monolith in one binary, never separate processes (ADR, N1).
 - (2026-10-16) D16 and P2.20: the orchestrator interfaces, main as the composition root, the
   layers numbered under `internal/app/`.
+- (2026-10-16) P2.4 first half: the records, the seeded registry, the tree cross-checks and
+  the lint of org repositories. The host lives in the organisation record (D8 amended).

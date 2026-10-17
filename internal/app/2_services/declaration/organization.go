@@ -20,14 +20,27 @@ func IsUUID(text string) bool {
 	return uuidPattern.MatchString(text)
 }
 
+// Hosts rein can talk to, the first being the only one this build supports
+// (D8). An organisation names its host in its record; the choice is made at
+// org create and never on a machine.
+var Hosts = []string{"github"}
+
+// PlannedHosts are listed so people see where the tool is going; a record
+// naming one is refused.
+var PlannedHosts = []string{"gitlab"}
+
 // Organization is the record of an organisation, organization.yaml under
 // declarations/organizations/<slug>/. The id never changes; the slug is the
-// address segment; name and description are free to change.
+// address segment; name and description are free to change; host says which
+// forge holds the org repository and its identities.
 type Organization struct {
 	ID          string `yaml:"id"`
 	Slug        string `yaml:"slug"`
 	Name        string `yaml:"name"`
 	Description string `yaml:"description,omitempty"`
+	Host        string `yaml:"host"`
+	// MinimumReinVersion makes an older rein refuse to sync (P2.8).
+	MinimumReinVersion string `yaml:"minimum_rein_version,omitempty"`
 }
 
 // ParseOrganization reads the record; folder is the slug folder holding it.
@@ -52,7 +65,25 @@ func ParseOrganization(folder string, content []byte) (organization Organization
 	if organization.Name == "" {
 		problems = append(problems, Problem{Severity: SeverityError, Message: "name is required"})
 	}
+	problems = append(problems, checkHost(organization.Host)...)
 	return organization, problems
+}
+
+func checkHost(host string) []Problem {
+	if host == "" {
+		return []Problem{{Severity: SeverityError, Message: "host is required; this build supports " + strings.Join(Hosts, ", ")}}
+	}
+	for _, supported := range Hosts {
+		if host == supported {
+			return nil
+		}
+	}
+	for _, planned := range PlannedHosts {
+		if host == planned {
+			return []Problem{{Severity: SeverityError, Message: fmt.Sprintf("host %q is planned but not yet supported; this build supports %s", host, strings.Join(Hosts, ", "))}}
+		}
+	}
+	return []Problem{{Severity: SeverityError, Message: fmt.Sprintf("host %q is unknown; this build supports %s", host, strings.Join(Hosts, ", "))}}
 }
 
 // FindOrganization locates the one organisation record in an org repository

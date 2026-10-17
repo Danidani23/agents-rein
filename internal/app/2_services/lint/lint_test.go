@@ -183,3 +183,45 @@ func TestRun(t *testing.T) {
 		}
 	})
 }
+
+func TestRecords(t *testing.T) {
+	organization := "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\nhost: github\n"
+	team := "id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427\nslug: web\nname: Web\n"
+	t.Run("a consistent org repository lints clean", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "declarations/organizations/acme/organization.yaml", organization)
+		writeFile(t, root, "declarations/organizations/acme/labels/language.yaml", "category: language\nlabels:\n  go: Go\n")
+		writeFile(t, root, "declarations/organizations/acme/teams/web/team.yaml", team)
+		writeFile(t, root, "declarations/organizations/acme/projects/shop/project.yaml", "id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: shop\nname: Shop\nteams: [web]\nlabels: [language:go]\n")
+		writeFile(t, root, "declarations/users/danidani23/user.yaml", "slug: danidani23\ngithub: Danidani23\n")
+		report := mustRun(t, root)
+		if len(report.Findings) != 0 {
+			t.Fatalf("findings: %v", messages(report))
+		}
+	})
+	t.Run("a broken record and a bad reference are reported with their addresses", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "declarations/organizations/acme/organization.yaml", organization)
+		writeFile(t, root, "declarations/organizations/acme/teams/web/team.yaml", "id: nope\nslug: web\nname: Web\n")
+		writeFile(t, root, "declarations/organizations/acme/projects/shop/project.yaml", "id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: shop\nname: Shop\nteams: [web]\n")
+		report := mustRun(t, root)
+		if report.Errors() != 2 {
+			t.Fatalf("findings: %v", messages(report))
+		}
+		addresses := map[string]int{}
+		for _, finding := range report.Findings {
+			addresses[finding.Address]++
+		}
+		if addresses["organizations.acme.teams.web"] != 1 || addresses["organizations.acme.projects.shop"] != 1 {
+			t.Fatalf("addresses: %v findings %v", addresses, messages(report))
+		}
+	})
+	t.Run("a label file outside a declarations tree is checked but has no address", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "labels/kind.yaml", "category: other\nlabels:\n  x: y\n")
+		report := mustRun(t, root)
+		if report.Errors() != 1 || report.Findings[0].Address != "" {
+			t.Fatalf("findings: %v", messages(report))
+		}
+	})
+}
