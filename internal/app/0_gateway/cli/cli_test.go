@@ -48,18 +48,50 @@ func TestOutputGoesThroughTheWriters(t *testing.T) {
 // gateway's own behaviour, printing, exit codes and confirmations, is tested
 // without any adapter.
 
-type fakeOrganizations struct {
+type fakeWorkflows struct {
 	connect    orchestration.ConnectResult
-	list       []machine.OrganizationRef
-	active     string
+	disconnect orchestration.DisconnectResult
+	reset      orchestration.ResetResult
 	err        error
 	calls      []string
-	disconnect orchestration.DisconnectResult
+	applied    bool
 }
 
-func (fake *fakeOrganizations) Connect(remote string) (orchestration.ConnectResult, error) {
+func (fake *fakeWorkflows) ConnectOrganization(remote string) (orchestration.ConnectResult, error) {
 	fake.calls = append(fake.calls, "connect "+remote)
 	return fake.connect, fake.err
+}
+
+func (fake *fakeWorkflows) DisconnectOrganization(slug string) (orchestration.DisconnectResult, error) {
+	fake.calls = append(fake.calls, "disconnect "+slug)
+	return fake.disconnect, fake.err
+}
+
+func (fake *fakeWorkflows) ResetMachine(plan orchestration.ResetPlan) (orchestration.ResetResult, error) {
+	fake.applied = true
+	return fake.reset, fake.err
+}
+
+type fakeQueries struct {
+	status orchestration.StatusReport
+	plan   orchestration.ResetPlan
+	err    error
+}
+
+func (fake *fakeQueries) Status() (orchestration.StatusReport, error) {
+	return fake.status, fake.err
+}
+
+func (fake *fakeQueries) PlanReset(all bool) (orchestration.ResetPlan, error) {
+	fake.plan.All = all
+	return fake.plan, fake.err
+}
+
+type fakeOrganizations struct {
+	list   []machine.OrganizationRef
+	active string
+	err    error
+	calls  []string
 }
 
 func (fake *fakeOrganizations) List() ([]machine.OrganizationRef, string, error) {
@@ -72,44 +104,18 @@ func (fake *fakeOrganizations) Use(slug string) error {
 	return fake.err
 }
 
-func (fake *fakeOrganizations) Disconnect(slug string) (orchestration.DisconnectResult, error) {
-	fake.calls = append(fake.calls, "disconnect "+slug)
-	return fake.disconnect, fake.err
-}
-
-type fakeMachine struct {
-	status  orchestration.StatusReport
-	plan    orchestration.ResetPlan
-	result  orchestration.ResetResult
-	err     error
-	applied bool
-}
-
-func (fake *fakeMachine) Status() (orchestration.StatusReport, error) {
-	return fake.status, fake.err
-}
-
-func (fake *fakeMachine) PlanReset(all bool) (orchestration.ResetPlan, error) {
-	fake.plan.All = all
-	return fake.plan, fake.err
-}
-
-func (fake *fakeMachine) ApplyReset(plan orchestration.ResetPlan) (orchestration.ResetResult, error) {
-	fake.applied = true
-	return fake.result, fake.err
-}
-
 type harness struct {
+	workflows     *fakeWorkflows
+	queries       *fakeQueries
 	organizations *fakeOrganizations
-	machine       *fakeMachine
 }
 
 func newHarness() harness {
-	return harness{organizations: &fakeOrganizations{}, machine: &fakeMachine{}}
+	return harness{workflows: &fakeWorkflows{}, queries: &fakeQueries{}, organizations: &fakeOrganizations{}}
 }
 
 func (fixture harness) orchestrate() (orchestration.Orchestrator, error) {
-	return orchestration.Orchestrator{Organizations: fixture.organizations, Machine: fixture.machine}, nil
+	return orchestration.Orchestrator{Workflows: fixture.workflows, Queries: fixture.queries, Organizations: fixture.organizations}, nil
 }
 
 // run executes rein with empty stdin, so every command sees no terminal.
@@ -207,13 +213,13 @@ func TestLint(t *testing.T) {
 func TestOrg(t *testing.T) {
 	t.Run("connect prints the result and the active organisation", func(t *testing.T) {
 		fixture := newHarness()
-		fixture.organizations.connect = orchestration.ConnectResult{Slug: "acme", Name: "Acme", Clone: "/clones/1", BecameActive: true}
+		fixture.workflows.connect = orchestration.ConnectResult{Slug: "acme", Name: "Acme", Clone: "/clones/1", BecameActive: true}
 		code, out, _ := fixture.run("org", "connect", "git@example:acme.git")
 		if code != ExitWorked || !strings.Contains(out, "connected acme (Acme) at /clones/1") || !strings.Contains(out, "active organisation: acme") {
 			t.Fatalf("code %d out %q", code, out)
 		}
-		if fixture.organizations.calls[0] != "connect git@example:acme.git" {
-			t.Fatalf("calls %v", fixture.organizations.calls)
+		if fixture.workflows.calls[0] != "connect git@example:acme.git" {
+			t.Fatalf("calls %v", fixture.workflows.calls)
 		}
 	})
 	t.Run("list marks the active organisation and says when there is none", func(t *testing.T) {
@@ -235,7 +241,7 @@ func TestOrg(t *testing.T) {
 		if code != ExitWorked || !strings.Contains(out, "active organisation: acme") {
 			t.Fatalf("code %d out %q", code, out)
 		}
-		fixture.organizations.disconnect = orchestration.DisconnectResult{Clone: "/clones/1", RemovedProjects: 2}
+		fixture.workflows.disconnect = orchestration.DisconnectResult{Clone: "/clones/1", RemovedProjects: 2}
 		code, out, _ = fixture.run("org", "disconnect", "acme")
 		if code != ExitWorked || !strings.Contains(out, "removed the clone at /clones/1 and 2 project registrations") || !strings.Contains(out, "no active organisation") {
 			t.Fatalf("code %d out %q", code, out)
@@ -246,7 +252,7 @@ func TestOrg(t *testing.T) {
 func TestStatus(t *testing.T) {
 	t.Run("the report is printed, missing targets flagged", func(t *testing.T) {
 		fixture := newHarness()
-		fixture.machine.status = orchestration.StatusReport{
+		fixture.queries.status = orchestration.StatusReport{
 			Identity:      ports.Identity{Login: "Danidani23", Slug: "danidani23"},
 			Agents:        []string{"claude-code"},
 			Home:          "/home/.rein",
@@ -264,7 +270,7 @@ func TestStatus(t *testing.T) {
 	})
 	t.Run("a logged-out identity is shown, not refused", func(t *testing.T) {
 		fixture := newHarness()
-		fixture.machine.status = orchestration.StatusReport{IdentityError: "gh is not logged in"}
+		fixture.queries.status = orchestration.StatusReport{IdentityError: "gh is not logged in"}
 		code, out, _ := fixture.run("status")
 		if code != ExitWorked || !strings.Contains(out, "github      none: gh is not logged in") || !strings.Contains(out, "agents      none found") {
 			t.Fatalf("code %d out %q", code, out)
@@ -276,32 +282,32 @@ func TestReset(t *testing.T) {
 	plan := orchestration.ResetPlan{Placements: []machine.Placement{{Path: "/home/.claude/rules/global.md"}}, ImportsFolder: "/home/.rein/imports"}
 	t.Run("the summary lists the paths, ? explains, and a yes applies", func(t *testing.T) {
 		fixture := newHarness()
-		fixture.machine.plan = plan
-		fixture.machine.result = orchestration.ResetResult{Placements: []orchestration.Unplaced{{Placement: plan.Placements[0], Removed: true}}}
+		fixture.queries.plan = plan
+		fixture.workflows.reset = orchestration.ResetResult{Placements: []orchestration.Unplaced{{Placement: plan.Placements[0], Removed: true}}}
 		code, out, _ := fixture.runInteractive("?\n\n", "reset")
-		if code != ExitWorked || !strings.Contains(out, "/home/.claude/rules/global.md") || !strings.Contains(out, "A placement is one link") || !strings.Contains(out, "removed  /home/.claude/rules/global.md") || !fixture.machine.applied {
-			t.Fatalf("code %d out %q applied %v", code, out, fixture.machine.applied)
+		if code != ExitWorked || !strings.Contains(out, "/home/.claude/rules/global.md") || !strings.Contains(out, "A placement is one link") || !strings.Contains(out, "removed  /home/.claude/rules/global.md") || !fixture.workflows.applied {
+			t.Fatalf("code %d out %q applied %v", code, out, fixture.workflows.applied)
 		}
 	})
 	t.Run("a no changes nothing", func(t *testing.T) {
 		fixture := newHarness()
-		fixture.machine.plan = plan
+		fixture.queries.plan = plan
 		code, _, errOut := fixture.runInteractive("n\n", "reset")
-		if code != ExitRefused || !strings.Contains(errOut, "nothing changed") || fixture.machine.applied {
-			t.Fatalf("code %d err %q applied %v", code, errOut, fixture.machine.applied)
+		if code != ExitRefused || !strings.Contains(errOut, "nothing changed") || fixture.workflows.applied {
+			t.Fatalf("code %d err %q applied %v", code, errOut, fixture.workflows.applied)
 		}
 	})
 	t.Run("without a terminal and without --yes it refuses", func(t *testing.T) {
 		fixture := newHarness()
 		code, _, errOut := fixture.run("reset")
-		if code != ExitRefused || !strings.Contains(errOut, "--yes") || fixture.machine.applied {
+		if code != ExitRefused || !strings.Contains(errOut, "--yes") || fixture.workflows.applied {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
 	})
 	t.Run("a skipped placement is reported and exits 1", func(t *testing.T) {
 		fixture := newHarness()
-		fixture.machine.plan = plan
-		fixture.machine.result = orchestration.ResetResult{Placements: []orchestration.Unplaced{{Placement: plan.Placements[0], Reason: "links elsewhere"}}, Kept: 1}
+		fixture.queries.plan = plan
+		fixture.workflows.reset = orchestration.ResetResult{Placements: []orchestration.Unplaced{{Placement: plan.Placements[0], Reason: "links elsewhere"}}, Kept: 1}
 		code, _, errOut := fixture.run("reset", "--yes")
 		if code != ExitRefused || !strings.Contains(errOut, "skipped  /home/.claude/rules/global.md: links elsewhere") {
 			t.Fatalf("code %d err %q", code, errOut)
@@ -309,8 +315,8 @@ func TestReset(t *testing.T) {
 	})
 	t.Run("--all names the organisations and projects", func(t *testing.T) {
 		fixture := newHarness()
-		fixture.machine.plan = orchestration.ResetPlan{Organizations: []machine.OrganizationRef{{Slug: "acme"}}, OrgsFolder: "/home/.rein/orgs"}
-		fixture.machine.result = orchestration.ResetResult{RemovedClones: []string{"id-1"}}
+		fixture.queries.plan = orchestration.ResetPlan{Organizations: []machine.OrganizationRef{{Slug: "acme"}}, OrgsFolder: "/home/.rein/orgs"}
+		fixture.workflows.reset = orchestration.ResetResult{RemovedClones: []string{"id-1"}}
 		code, out, _ := fixture.run("reset", "--all", "--yes")
 		if code != ExitWorked || !strings.Contains(out, "1 organisations with their clones under /home/.rein/orgs") || !strings.Contains(out, "removed  clone id-1") {
 			t.Fatalf("code %d out %q", code, out)

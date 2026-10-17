@@ -155,14 +155,16 @@ AI-assisted development across many teams? Six questions, answered with sources 
 - [docs/harness-management.md](docs/harness-management.md) — the findings, one section per
   question.
 - [docs/decisions/](docs/decisions/) — Architecture Decision Records, the immutable "why".
+- [docs/architecture.md](docs/architecture.md) — how the tool's code is organised: the layers,
+  the rules the architecture test enforces, and where a new piece goes.
 - [docs/implementation_plans/](docs/implementation_plans/) — the live boards: one for Agents Rein,
   one for the personal toolkit.
 - [docs/future-ideas.md](docs/future-ideas.md) — ideas parked on purpose, with what would make
   them current.
 - [cmd/rein/](cmd/rein/) and [internal/](internal/) — the tool: under `app/`, the gateway
-  the user calls, the orchestration with one interface per area, and the services with the
-  pure logic; beside them the ports and the adapters for GitHub, git, Claude Code, local
-  state and the terminal.
+  the user calls, the orchestration with the workflows and queries, and the services, each
+  owning one piece of state, with the pure libraries beside them; then the ports and the
+  adapters for GitHub, git, Claude Code, local state and the terminal.
 - [toolkit/](toolkit/) — the personal agent toolkit: global instructions and ten skills in open
   formats, the content of the pilot. It becomes the user level of the pilot's org repository,
   delivered per project by `rein sync`

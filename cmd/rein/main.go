@@ -1,8 +1,8 @@
 // Command rein is Agents Rein: a compiler and a linter for agent settings held
 // in an org repository. It never runs as a service, never pushes into a
 // repository and never writes a vendor's policy path. This file is the
-// composition root: it wires the adapters of this machine into the local
-// orchestrator and hands it to the gateway.
+// composition root: it wires the adapters of this machine into the services,
+// the services into the local orchestrator, and hands that to the gateway.
 package main
 
 import (
@@ -27,11 +27,6 @@ func wire() (orchestration.Orchestrator, error) {
 	if err != nil {
 		return orchestration.Orchestrator{}, err
 	}
-	return orchestration.NewLocal(orchestration.Dependencies{
-		Home:       home,
-		Host:       github.Host{},
-		Repository: git.Repository{},
-		Agents:     []ports.Agent{claudecode.Agent{}},
-		State:      localstate.Store{Home: home},
-	}), nil
+	services := orchestration.NewServices(home, github.Host{}, git.Repository{}, localstate.Store{Home: home}, []ports.Agent{claudecode.Agent{}})
+	return orchestration.NewLocal(services), nil
 }

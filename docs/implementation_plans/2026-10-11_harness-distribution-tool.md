@@ -214,7 +214,26 @@ committed instead of gitignored (D4).
   `1_orchestration` and `2_services`, numbered to read in order, with `ports`, `adapters`,
   `architecture` and `version` beside them; Go accepts the names, the package names stay
   plain, and the import paths carry the numbers, which is the one cost accepted for the
-  neatness.
+  neatness. Refined by D17: the areas are services, and the orchestration keeps only
+  workflows and queries.
+- ✅ **D17 — Services hold the single operations; the orchestration holds workflows and
+  queries only.** Decided 2026-10-17 on the user's review of D16: `Organizations` and
+  `Machine` in the orchestration were services wearing the orchestration's name. Now
+  `2_services` has two kinds of package: the libraries (`address`, `declaration`, `lint`,
+  `exchange`, `machine`), pure and stateless, and the services (`identity`, `organizations`,
+  `clones`, `placements`), each owning one piece of state or one kind of side effect behind
+  the ports and never importing another service. `1_orchestration` keeps what spans
+  services: workflows, a list of steps each with its compensation, run by a saga runner of
+  fifty lines that undoes the completed steps in reverse when one fails, Temporal's shape
+  without Temporal, since a workflow engine brings a server and rein has none (ADR, N1); and
+  queries, reads across services that change nothing. The gateway calls a service directly
+  for a single operation (`org list`, `org use`) and a workflow for several (`org connect`,
+  `org disconnect`, `reset`), and still sees interfaces only, held by
+  `Orchestrator{Workflows, Queries, Organizations}`. The architecture test enforces the new
+  rule: a service imports the ports and the libraries, never a sibling; the gateway imports
+  no service package. The rules and where a new piece goes are written out in
+  [docs/architecture.md](../architecture.md), with a local `architecture` skill pointing at
+  it, so the document travels with the repository and the skill with rein.
 - ✅ **D15 — Hexagonal layout now.** Decided 2026-10-16: a pure core and replaceable adapters,
   with a port only where a second implementation is plausible: the host (GitHub, later
   GitLab), the agent (Claude Code, later the planned ones), the repository (git), state and
@@ -833,6 +852,22 @@ from that project's snapshot.
   on a fake orchestrator, the orchestration on fakes for every port, `cmd/rein` end to end
   over a stubbed `gh` and `claude`, and the architecture test with the new rules. Gate:
   `task rein:check` green; `status` and `lint .` unchanged on this machine.
+- ✅ **P2.21 — Services, workflows and the saga runner (D17).** [EXECUTED] 2026-10-17. New
+  under `2_services`: `identity` (who, from the host), `organizations` (register, use,
+  forget, restore, forget all, projects, over the state port, with `ErrNotConnected` and
+  `ErrAlreadyConnected`), `clones` (temporary clone, verify, place, remove), `placements`
+  (list, unplace through the agent, keep). In `1_orchestration`: `saga.go` with `Step`,
+  `run` and `CompensationError`; `ConnectOrganization` as clone, verify, register, place,
+  where a second connect of the same organisation now refuses before touching the existing
+  clone, which the old code removed first; `DisconnectOrganization` as forget then remove,
+  restored on failure; `ResetMachine` without compensation, deletions ordered files first;
+  the queries `Status` and `PlanReset`. Gateway and `main` rewired; output and exit codes
+  unchanged. Tests: the saga runner on scripted steps including a failing undo, the
+  workflows on the real services over fake ports including one compensation, the
+  organisations service, the gateway on fake workflows, queries and service, `cmd/rein` end
+  to end, and the architecture rules tightened. Documented in
+  [docs/architecture.md](../architecture.md). Gate: `task rein:check` green, `rein lint .`
+  clean including the new skill.
 - 🟢 **P2.16 — `team create` and `project create`.** [PENDING] Records written by the owner to
   the org repository (D13): `team.yaml` with id, slug, name, description; `project.yaml` with
   the same plus teams, labels chosen from the seeded registry, and path; committed and pushed.
@@ -1114,3 +1149,7 @@ writes is read from the next session on, not in the same one.
   layers numbered under `internal/app/`.
 - (2026-10-16) P2.4 first half: the records, the seeded registry, the tree cross-checks and
   the lint of org repositories. The host lives in the organisation record (D8 amended).
+- (2026-10-17) D17 and P2.21: the single operations moved into services (`identity`,
+  `organizations`, `clones`, `placements`); the orchestration keeps workflows on a saga runner
+  and queries; the gateway calls services directly or runs a workflow. `docs/architecture.md`
+  written and a local `architecture` skill added; the architecture test keeps services apart.

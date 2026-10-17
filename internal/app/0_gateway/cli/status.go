@@ -25,7 +25,7 @@ func newStatusCommand(env *environment) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			report, err := orchestrator.Machine.Status()
+			report, err := orchestrator.Queries.Status()
 			if err != nil {
 				return err
 			}

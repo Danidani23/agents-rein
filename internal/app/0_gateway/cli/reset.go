@@ -42,7 +42,7 @@ func runReset(env *environment, all bool, yes bool) error {
 	if err != nil {
 		return err
 	}
-	plan, err := orchestrator.Machine.PlanReset(all)
+	plan, err := orchestrator.Queries.PlanReset(all)
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func runReset(env *environment, all bool, yes bool) error {
 			return refuse("nothing changed")
 		}
 	}
-	result, err := orchestrator.Machine.ApplyReset(plan)
+	result, err := orchestrator.Workflows.ResetMachine(plan)
 	if err != nil {
 		return err
 	}

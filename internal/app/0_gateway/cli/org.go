@@ -35,7 +35,7 @@ func newOrgConnectCommand(env *environment) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			result, err := orchestrator.Organizations.Connect(arguments[0])
+			result, err := orchestrator.Workflows.ConnectOrganization(arguments[0])
 			if err != nil {
 				return err
 			}
@@ -111,7 +111,7 @@ func newOrgDisconnectCommand(env *environment) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			result, err := orchestrator.Organizations.Disconnect(arguments[0])
+			result, err := orchestrator.Workflows.DisconnectOrganization(arguments[0])
 			if err != nil {
 				return err
 			}

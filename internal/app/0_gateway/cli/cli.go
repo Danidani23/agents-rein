@@ -1,8 +1,9 @@
 // Package cli is the gateway a person uses: cobra commands that read flags,
-// ask through the Prompter port, call the orchestrator and print its result.
-// It depends on the orchestration interfaces, never on an adapter other than
-// the terminal, which is its own device; main wires the rest. Every byte of
-// output goes through the writers Run receives, and a test enforces it.
+// ask through the Prompter port, and print. A single operation goes straight
+// to a service; several in order go to a workflow of the orchestrator (D17).
+// It depends on interfaces only, never on an adapter other than the terminal,
+// which is its own device; main wires the rest. Every byte of output goes
+// through the writers Run receives, and a test enforces it.
 package cli
 
 import (
