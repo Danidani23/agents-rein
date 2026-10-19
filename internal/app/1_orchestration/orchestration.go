@@ -13,8 +13,10 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/clones"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/hosting"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/identity"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/organizations"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/placements"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/records"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/snapshots"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
@@ -29,6 +31,9 @@ type Services struct {
 	Placements    placements.Service
 	Hosting       hosting.Service
 	Snapshots     snapshots.Service
+	Records       records.Service
+	// Clock stamps every record a workflow writes (D20).
+	Clock func() time.Time
 }
 
 // NewServices builds the services over the ports: identity over the host,
@@ -45,7 +50,18 @@ func NewServices(home string, host ports.Host, repository ports.Repository, stat
 		Placements:    placements.Service{Home: home, State: state, Agents: agents},
 		Hosting:       hosting.Service{Host: host, Repository: repository},
 		Snapshots:     snapshots.Service{Home: home, Agents: agents, Clock: time.Now},
+		Records:       records.Service{Repository: repository},
+		Clock:         time.Now,
 	}
+}
+
+// resolveOrganization is the organisation a command works in: the one named,
+// or the active one when the name is empty.
+func resolveOrganization(services Services, slug string) (organization machine.OrganizationRef, orgClonePath string, err error) {
+	if slug == "" {
+		return services.Organizations.Active()
+	}
+	return services.Organizations.Lookup(slug)
 }
 
 // Orchestrator is the services plus the workflows and queries across them;

@@ -112,6 +112,6 @@ func newRootCommand(environment *commandEnvironment) *cobra.Command {
 	root.SetOut(environment.out)
 	root.SetErr(environment.errOut)
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newStatusCommand(environment), newOrgCommand(environment), newLintCommand(environment), newResetCommand(environment), newVersionCommand(environment))
+	root.AddCommand(newStatusCommand(environment), newOrgCommand(environment), newTeamCommand(environment), newProjectCommand(environment), newLintCommand(environment), newResetCommand(environment), newVersionCommand(environment))
 	return root
 }

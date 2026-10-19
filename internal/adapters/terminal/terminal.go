@@ -176,6 +176,98 @@ func (session *Session) Choose(question ports.Select) (string, error) {
 	}
 }
 
+// ChooseMany asks a selector that takes several choices, by numbers or names
+// separated by spaces or commas. Enter takes the default, or none when the
+// question is optional.
+func (session *Session) ChooseMany(question ports.Select) ([]string, error) {
+	defaults := splitAnswers(question.Default)
+	session.separate()
+	for {
+		session.printHeading(question.Title, question.Description)
+		for index, choice := range question.Choices {
+			line := fmt.Sprintf("  %d) %s", index+1, choice.Name)
+			if choice.Description != "" {
+				line += "  " + session.dim(choice.Description)
+			}
+			switch {
+			case choice.Unavailable != "":
+				line += "  " + session.dim(choice.Unavailable)
+			case containsAnswer(defaults, choice.Name):
+				line += "  " + session.dim("(default)")
+			}
+			fmt.Fprintln(session.out, line)
+		}
+		title := "Choose one or more"
+		if question.Optional {
+			title = "Choose any, or none"
+		}
+		if len(defaults) > 0 {
+			fmt.Fprintf(session.out, "%s [%s]: ", session.bold(title), strings.Join(defaults, ", "))
+		} else {
+			fmt.Fprintf(session.out, "%s: ", session.bold(title))
+		}
+		answer, err := session.readLine(question.Title)
+		if err != nil {
+			return nil, err
+		}
+		if answer == "?" {
+			session.explain(question.Explanation)
+			continue
+		}
+		tokens := splitAnswers(answer)
+		if len(tokens) == 0 {
+			switch {
+			case len(defaults) > 0:
+				tokens = defaults
+			case question.Optional:
+				fmt.Fprintln(session.out)
+				return nil, nil
+			default:
+				fmt.Fprintf(session.out, "%s\n\n", session.dim("At least one choice is required."))
+				continue
+			}
+		}
+		picked, reason := pickMany(question.Choices, tokens)
+		if reason != "" {
+			fmt.Fprintf(session.out, "%s\n\n", session.dim(reason))
+			continue
+		}
+		fmt.Fprintln(session.out)
+		return picked, nil
+	}
+}
+
+// pickMany resolves every token to a choice name, once each, or says why not.
+func pickMany(choices []ports.Choice, tokens []string) (picked []string, reason string) {
+	for _, token := range tokens {
+		choice, found := pick(choices, token)
+		if !found {
+			return nil, fmt.Sprintf("%q is not one of the choices; answer with numbers or names, separated by spaces or commas.", token)
+		}
+		if choice.Unavailable != "" {
+			return nil, fmt.Sprintf("%s: %s", choice.Name, choice.Unavailable)
+		}
+		if !containsAnswer(picked, choice.Name) {
+			picked = append(picked, choice.Name)
+		}
+	}
+	return picked, ""
+}
+
+// splitAnswers splits an answer on spaces and commas.
+func splitAnswers(text string) []string {
+	return strings.FieldsFunc(text, func(character rune) bool { return character == ',' || character == ' ' })
+}
+
+func containsAnswer(answers []string, candidate string) bool {
+	for _, answer := range answers {
+		if answer == candidate {
+			return true
+		}
+	}
+	return false
+}
+
 // Confirm asks a yes-or-no question; Enter means yes, and ? prints the
 // explanation of what a yes will do.
 func (session *Session) Confirm(question string, explanation string) (bool, error) {

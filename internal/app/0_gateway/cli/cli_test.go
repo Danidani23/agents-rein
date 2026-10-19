@@ -371,3 +371,54 @@ func TestOrgCreate(t *testing.T) {
 		}
 	})
 }
+
+func TestTeamAndProjectCreate(t *testing.T) {
+	t.Run("with flags and --yes both create records and say where", func(t *testing.T) {
+		fixture := newHarness(t)
+		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+		code, out, errOut := fixture.run("team", "create", "--name", "Web", "--yes")
+		if code != ExitWorked || !strings.Contains(out, "created team web (Web) in acme") || !strings.Contains(out, "record: declarations/organizations/acme/teams/web/team.yaml, pushed to main") {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+		code, out, errOut = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "language:go", "--yes")
+		if code != ExitWorked || !strings.Contains(out, "created project shop (Shop) in acme for the team(s) web") || !strings.Contains(out, "record: declarations/organizations/acme/projects/shop/project.yaml, pushed to main") {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+	})
+	t.Run("the project questions offer the teams and the registry, Enter takes the defaults", func(t *testing.T) {
+		fixture := newHarness(t)
+		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+		code, out, errOut := fixture.runInteractive("Web\n\n\n", "team", "create")
+		if code != ExitWorked || !strings.Contains(out, "[The Web team]") || !strings.Contains(out, "created team web (Web)") {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+		// name, description, teams (the one team is the default), then the categories in order: data none, kind none, language go; path, confirm
+		code, out, errOut = fixture.runInteractive("Shop\n\n\n\n\n2\n\n\n", "project", "create")
+		for _, expected := range []string{"1) web  ", "[web]", "Label data:", "Label kind:", "Label language:", "2) go", "[.]", "with labels language:go", "created project shop (Shop) in acme for the team(s) web"} {
+			if code != ExitWorked || !strings.Contains(out, expected) {
+				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
+			}
+		}
+	})
+	t.Run("refusals: no organisation, no teams yet, an unknown team, no terminal", func(t *testing.T) {
+		fixture := newHarness(t)
+		code, _, errOut := fixture.run("team", "create", "--name", "Web", "--yes")
+		if code != ExitRefused || !strings.Contains(errOut, "no active organisation") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+		code, _, errOut = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+		if code != ExitRefused || !strings.Contains(errOut, "has no teams yet") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+		_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+		code, _, errOut = fixture.run("project", "create", "--name", "Shop", "--team", "nope", "--yes")
+		if code != ExitRefused || !strings.Contains(errOut, `team "nope" does not exist in acme; teams are web`) {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+		code, _, errOut = fixture.run("project", "create", "--name", "Shop")
+		if code != ExitRefused || !strings.Contains(errOut, "--team") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+	})
+}

@@ -148,6 +148,19 @@ func TestWiring(t *testing.T) {
 		if code != cli.ExitWorked || !strings.Contains(out, "* acme  "+remote) {
 			t.Fatalf("list: code %d out %q", code, out)
 		}
+		code, out, errOut = run("team", "create", "--name", "Web", "--yes")
+		if code != cli.ExitWorked || !strings.Contains(out, "created team web (Web) in acme") {
+			t.Fatalf("team: code %d out %q err %q", code, out, errOut)
+		}
+		code, out, errOut = run("project", "create", "--name", "Shop", "--team", "web", "--label", "language:go", "--yes")
+		if code != cli.ExitWorked || !strings.Contains(out, "created project shop (Shop) in acme") {
+			t.Fatalf("project: code %d out %q err %q", code, out, errOut)
+		}
+		log := exec.Command("git", "--git-dir", remote, "rev-list", "--count", "main")
+		count, err := log.Output()
+		if err != nil || strings.TrimSpace(string(count)) != "3" {
+			t.Fatalf("remote commits %q err %v", count, err)
+		}
 	})
 	t.Run("org create reports a protection GitHub refuses and still connects", func(t *testing.T) {
 		isolate(t, "Danidani23")

@@ -46,7 +46,7 @@ func (orchestrator Orchestrator) CreateOrganization(request CreateOrganizationRe
 	if slug == "" {
 		return CreateResult{}, refusal.New("the name must contain at least one letter or digit")
 	}
-	organization := declaration.Organization{ID: scaffold.NewID(), Slug: slug, Name: request.Name, Description: request.Description, Host: "github"}
+	organization := declaration.Organization{ID: scaffold.NewID(), Slug: slug, Name: request.Name, Description: request.Description, Host: "github", CreatedAt: services.Clock()}
 	result := CreateResult{Owner: request.Owner, RepositoryName: request.RepositoryName, Private: request.Private}
 	var temporaryFolder string
 	err = runSteps([]Step{

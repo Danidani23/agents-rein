@@ -81,8 +81,14 @@ type Repository struct {
 	Slug        string
 	Fail        bool
 	FailPublish bool
+	FailPush    bool
 	Published   map[string]string
+	Commits     []string
 }
+
+// originMarker is the file in a fake clone that names its remote, as
+// .git/config does in a real one, so a moved clone keeps its origin.
+const originMarker = ".fake-origin"
 
 // Preflight always passes: the fake needs no git.
 func (*Repository) Preflight() error {
@@ -96,7 +102,11 @@ func (repository *Repository) Clone(remote string, directory string) error {
 	}
 	published, found := repository.Published[remote]
 	if found {
-		return copyTree(published, directory)
+		err := copyTree(published, directory)
+		if err != nil {
+			return err
+		}
+		return rememberOrigin(directory, remote)
 	}
 	slug := repository.Slug
 	if slug == "" {
@@ -104,6 +114,10 @@ func (repository *Repository) Clone(remote string, directory string) error {
 	}
 	folder := filepath.Join(directory, "declarations", "organizations", slug)
 	err := os.MkdirAll(folder, 0o755)
+	if err != nil {
+		return err
+	}
+	err = rememberOrigin(directory, remote)
 	if err != nil {
 		return err
 	}
@@ -119,6 +133,68 @@ func (repository *Repository) Publish(directory string, remote string, message s
 	if repository.FailPublish {
 		return errors.New("git push failed: remote rejected")
 	}
+	err := rememberOrigin(directory, remote)
+	if err != nil {
+		return err
+	}
+	repository.Commits = append(repository.Commits, message)
+	return repository.publish(directory, remote)
+}
+
+// Pull is a no-op: the fake remote never moves on its own.
+func (*Repository) Pull(directory string) error {
+	return nil
+}
+
+// CommitPaths records the message; the content counts at the push.
+func (repository *Repository) CommitPaths(directory string, relativePaths []string, message string) error {
+	repository.Commits = append(repository.Commits, message)
+	return nil
+}
+
+// Push publishes the clone's current content under its origin.
+func (repository *Repository) Push(directory string) error {
+	if repository.FailPush {
+		return errors.New("git push failed: remote rejected (protected branch)")
+	}
+	return repository.publish(directory, originOf(directory))
+}
+
+// ResetToRemote restores the clone from what its origin holds.
+func (repository *Repository) ResetToRemote(directory string) error {
+	remote := originOf(directory)
+	published, found := repository.Published[remote]
+	if !found {
+		return nil
+	}
+	err := os.RemoveAll(directory)
+	if err != nil {
+		return err
+	}
+	err = copyTree(published, directory)
+	if err != nil {
+		return err
+	}
+	return rememberOrigin(directory, remote)
+}
+
+func rememberOrigin(directory string, remote string) error {
+	err := os.MkdirAll(directory, 0o755)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(directory, originMarker), []byte(remote), 0o644)
+}
+
+func originOf(directory string) string {
+	remote, err := os.ReadFile(filepath.Join(directory, originMarker))
+	if err != nil {
+		return ""
+	}
+	return string(remote)
+}
+
+func (repository *Repository) publish(directory string, remote string) error {
 	if repository.Published == nil {
 		repository.Published = map[string]string{}
 	}

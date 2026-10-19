@@ -47,3 +47,23 @@ func TestFilesMakeAnOrgRepositoryTheLintAccepts(t *testing.T) {
 		t.Fatalf("codeowners %q readme %q record %q", codeowners, readme, record)
 	}
 }
+
+func TestTeamAndProjectRecordsPassTheLint(t *testing.T) {
+	organization := declaration.Organization{ID: NewID(), Slug: "acme", Name: "Acme", Host: "github"}
+	files, _ := Files(organization, "Danidani23")
+	root := t.TempDir()
+	_ = Write(root, files)
+	teamPath, teamContent, err := TeamRecord("acme", declaration.Team{ID: NewID(), Slug: "web", Name: "Web", Description: "the web team"})
+	if err != nil || teamPath != "declarations/organizations/acme/teams/web/team.yaml" {
+		t.Fatalf("team %q err %v", teamPath, err)
+	}
+	projectPath, projectContent, err := ProjectRecord("acme", declaration.Project{ID: NewID(), Slug: "shop", Name: "Shop", Teams: []string{"web"}, Labels: []string{"language:go", "kind:web-app"}, Path: "services/shop"})
+	if err != nil || projectPath != "declarations/organizations/acme/projects/shop/project.yaml" {
+		t.Fatalf("project %q err %v", projectPath, err)
+	}
+	_ = Write(root, map[string]string{teamPath: teamContent, projectPath: projectContent})
+	tree, problems, err := declaration.LoadTree(root)
+	if err != nil || len(problems) != 0 || tree.Teams["web"].Name != "Web" || tree.Projects["shop"].Path != "services/shop" {
+		t.Fatalf("tree err %v problems %+v teams %v projects %v", err, problems, tree.Teams, tree.Projects)
+	}
+}

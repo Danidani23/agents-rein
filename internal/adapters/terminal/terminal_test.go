@@ -197,3 +197,42 @@ func TestIsTerminal(t *testing.T) {
 		}
 	})
 }
+
+func TestChooseMany(t *testing.T) {
+	teams := ports.Select{Title: "Teams", Choices: []ports.Choice{{Name: "web", Description: "Web"}, {Name: "data", Description: "Data"}, {Name: "ops", Description: "Ops"}}}
+	t.Run("numbers and names, separated by spaces or commas, each once", func(t *testing.T) {
+		prompt, out := session("1, data web\n")
+		picked, err := prompt.ChooseMany(teams)
+		if err != nil || strings.Join(picked, "+") != "web+data" || !strings.Contains(out.String(), "Choose one or more") {
+			t.Fatalf("picked %v err %v out %q", picked, err, out.String())
+		}
+	})
+	t.Run("Enter takes the defaults, and asks again when there are none", func(t *testing.T) {
+		withDefault := teams
+		withDefault.Default = "web,ops"
+		prompt, out := session("\n")
+		picked, err := prompt.ChooseMany(withDefault)
+		if err != nil || strings.Join(picked, "+") != "web+ops" || !strings.Contains(out.String(), "[web, ops]") {
+			t.Fatalf("picked %v err %v out %q", picked, err, out.String())
+		}
+		prompt, out = session("\n2\n")
+		picked, err = prompt.ChooseMany(teams)
+		if err != nil || strings.Join(picked, "+") != "data" || !strings.Contains(out.String(), "At least one choice is required") {
+			t.Fatalf("picked %v err %v out %q", picked, err, out.String())
+		}
+	})
+	t.Run("an optional question takes none, and a wrong token asks again", func(t *testing.T) {
+		optional := teams
+		optional.Optional = true
+		prompt, out := session("\n")
+		picked, err := prompt.ChooseMany(optional)
+		if err != nil || len(picked) != 0 || !strings.Contains(out.String(), "Choose any, or none") {
+			t.Fatalf("picked %v err %v out %q", picked, err, out.String())
+		}
+		prompt, out = session("9\nops\n")
+		picked, err = prompt.ChooseMany(teams)
+		if err != nil || strings.Join(picked, "+") != "ops" || !strings.Contains(out.String(), "not one of the choices") {
+			t.Fatalf("picked %v err %v out %q", picked, err, out.String())
+		}
+	})
+}

@@ -67,6 +67,26 @@ func Files(organization declaration.Organization, codeowner string) (map[string]
 	return files, nil
 }
 
+// TeamRecord is the file of a team record, by path relative to the org
+// repository's root.
+func TeamRecord(organizationSlug string, team declaration.Team) (relativePath string, content string, err error) {
+	record, err := yaml.Marshal(team)
+	if err != nil {
+		return "", "", err
+	}
+	return path.Join("declarations", "organizations", organizationSlug, "teams", team.Slug, "team.yaml"), header + string(record), nil
+}
+
+// ProjectRecord is the file of a project record, by path relative to the
+// org repository's root.
+func ProjectRecord(organizationSlug string, project declaration.Project) (relativePath string, content string, err error) {
+	record, err := yaml.Marshal(project)
+	if err != nil {
+		return "", "", err
+	}
+	return path.Join("declarations", "organizations", organizationSlug, "projects", project.Slug, "project.yaml"), header + string(record), nil
+}
+
 // Write puts files under root.
 func Write(root string, files map[string]string) error {
 	for relative, content := range files {

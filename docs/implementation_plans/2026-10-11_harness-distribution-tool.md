@@ -182,8 +182,8 @@ committed instead of gitignored (D4).
   the raw material for `rein migrate`, which later turns a snapshot into declarations with an
   agent's help and offers them through `propose`. Connect places nothing (D4). Order: P2.4,
   then P2.7 with the snapshot, then P2.5.
-- 💬 **D12 — The mutation ledger, `restore` and `reset`.** Proposed 2026-10-16 from the user's
-  model, reworded 2026-10-19 on the user's question: rein records every mutation it makes on
+- ✅ **D12 — The mutation ledger, `restore` and `reset`.** Proposed 2026-10-16 from the user's
+  model, reworded and confirmed 2026-10-19 with its storage: rein records every mutation it makes on
   this machine, in an agent's home (`~/.claude/`) and in a project clone, the working copy of
   a project repository where `sync` writes files; the org repository clone under
   `~/.rein/orgs/` is rein's own cache and not a mutation of anything the user owns. It records
@@ -191,7 +191,10 @@ committed instead of gitignored (D4).
   repository, and what it placed in. `restore` removes everything rein placed and puts the
   moved-out files back, machine as before rein; `reset` restores first, then deletes the
   ledger, the snapshots, the clones and the registrations, so no placed file is ever
-  orphaned. To confirm: that `reset` implies `restore`.
+  orphaned. Storage, by the user: the ledger lives under `~/.rein/`; the removals, what rein
+  moved out of an agent's home or a project clone, in one file with a section per agent, their
+  contents in `~/.rein/snapshots/`; the inserts, what rein placed, in one file per
+  organisation, so disconnecting or destroying an organisation takes its inserts with it.
 - ✅ **D13 — The organisation's owner writes records directly.** Proposed 2026-10-16, confirmed
   2026-10-19. Teams
   and projects are records; the account that ran `org create` writes them to `main` while
@@ -949,9 +952,23 @@ from that project's snapshot.
 - 🟢 **P2.23 — The state file hardened (D19).** [PENDING] With P2.15, where the ledger lands:
   the header comment, `version`, validation on load, atomic write, lock file, previous copy,
   snapshot contents as files indexed from the state.
-- 🟢 **P2.16 — `team create` and `project create`.** [PENDING] Records written by the owner to
-  the org repository (D13): `team.yaml` with id, slug, name, description; `project.yaml` with
-  the same plus teams, labels chosen from the seeded registry, and path; committed and pushed.
+- ✅ **P2.16 — `team create` and `project create`.** [EXECUTED] 2026-10-19. Records written by
+  the owner to the org repository (D13): `team.yaml` with id, slug, name, description;
+  `project.yaml` with the same plus teams, labels chosen from the seeded registry, and path;
+  committed and pushed. Built as the workflows `CreateTeam` and `CreateProject` over the new
+  `records` service: pull the organisation's clone fast-forward only, check the tree (slug
+  free; for a project, the teams exist and the labels are registered, with the record's own
+  checks from `ParseProject`), write the record, commit it alone and push to `main`; a rejected
+  push puts the clone back to the remote's state. Every record now carries `created_at`
+  (D20), the organisation record included. The gateway: `rein team create` and `rein project
+  create`, interactive on the prompt package, with the project's teams offered as a
+  multi-select over the existing teams and one optional multi-select per label category,
+  the new `ChooseMany` of the prompter; the same as flags, `--team` and `--label` repeatable,
+  with `--yes`. `DescribeOrganization` is the query the questions are built from. A project
+  without a team is refused, and so is `project create` in an organisation without teams.
+  Tests on the fakes, whose repository now remembers origins, commits and pushes, and end to
+  end with real git into the stub's bare remote, three commits after the two creates. Gate:
+  `task rein:check` green.
 - 🟢 **P2.17 — `init` binds, snapshots and moves out.** [PENDING] Fingerprint, record binding,
   the snapshot of `CLAUDE.md`, `.claude/` and `.mcp.json` into `~/.rein/snapshots/`, their
   deletion from the working tree, the marked block in `.gitignore`, the commit (D14), the
@@ -964,7 +981,9 @@ from that project's snapshot.
   prose into cleaner rules through the judge port, comes later. Runs from a project: `rein
   distill` in the clone, or `--project <slug>`.
 - 🟢 **P2.15 — The ledger, `restore`, and `reset` on it (D12).** [PENDING] Supersedes the
-  undo half of P2.9; `org destroy` and `uninstall` stay there. Scope added 2026-10-19: the
+  undo half of P2.9; `org destroy` and `uninstall` stay there. Storage as D12 says: removals in
+  one file with a section per agent, inserts in one file per organisation, both under
+  `~/.rein/`. Scope added 2026-10-19: the
   placement record is generalised, since `sync` places into project clones as well as into
   an agent's home and the ledger treats both the same. It gains the agent whose home or
   clone it is, the scope (agent home or project clone) with the project and organisation it
@@ -1279,3 +1298,6 @@ writes is read from the next session on, not in the same one.
 - (2026-10-19) D12 reworded (a clone is a project clone), D13 and D14 confirmed. P2.7 executed:
   `org create` as a workflow with compensations over the new `hosting` and `snapshots`
   services and the `scaffold` library; the secret and the CI workflow moved to P2.13 and P2.8.
+- (2026-10-19) D12 confirmed with its storage. P2.16 executed: `team create` and `project
+  create` as workflows over the `records` service, `ChooseMany` in the prompter, `created_at`
+  on every record.

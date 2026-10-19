@@ -1,6 +1,8 @@
 package orchestration
 
 import (
+	"sort"
+
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
@@ -94,4 +96,63 @@ func (orchestrator Orchestrator) PlanReset(all bool) (ResetPlan, error) {
 		ImportsFolder:   services.Placements.ImportsFolder(),
 		OrgClonesFolder: services.Clones.OrgClonesFolder(),
 	}, nil
+}
+
+// TeamSummary is a team as a question lists it.
+type TeamSummary struct {
+	Slug string
+	Name string
+}
+
+// LabelValueSummary is one registered value of a category.
+type LabelValueSummary struct {
+	Value       string
+	Description string
+}
+
+// LabelCategorySummary is one category of the registry with its values.
+type LabelCategorySummary struct {
+	Category string
+	Values   []LabelValueSummary
+}
+
+// OrganizationDescription is an organisation as the gateway needs it to ask
+// its questions: its teams and its label registry, sorted.
+type OrganizationDescription struct {
+	Slug            string
+	Name            string
+	OrgClonePath    string
+	Teams           []TeamSummary
+	LabelCategories []LabelCategorySummary
+}
+
+// DescribeOrganization reads the organisation's clone, the named one or the
+// active one, and changes nothing.
+func (orchestrator Orchestrator) DescribeOrganization(slug string) (OrganizationDescription, error) {
+	services := orchestrator.Services
+	organization, orgClonePath, err := resolveOrganization(services, slug)
+	if err != nil {
+		return OrganizationDescription{}, err
+	}
+	tree, err := services.Records.Tree(orgClonePath)
+	if err != nil {
+		return OrganizationDescription{}, err
+	}
+	description := OrganizationDescription{Slug: organization.Slug, Name: tree.Organization.Name, OrgClonePath: orgClonePath}
+	for _, teamSlug := range sortedKeys(tree.Teams) {
+		description.Teams = append(description.Teams, TeamSummary{Slug: teamSlug, Name: tree.Teams[teamSlug].Name})
+	}
+	for _, category := range sortedKeys(tree.Labels) {
+		summary := LabelCategorySummary{Category: category}
+		registered := tree.Labels[category]
+		for _, value := range registered.LabelValues() {
+			summary.Values = append(summary.Values, LabelValueSummary{Value: value, Description: registered.Labels[value]})
+		}
+		description.LabelCategories = append(description.LabelCategories, summary)
+	}
+	return description, nil
+}
+
+func sortStrings(items []string) {
+	sort.Strings(items)
 }

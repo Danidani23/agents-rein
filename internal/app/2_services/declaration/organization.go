@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -41,6 +42,8 @@ type Organization struct {
 	Host        string `yaml:"host"`
 	// MinimumReinVersion makes an older rein refuse to sync (P2.8).
 	MinimumReinVersion string `yaml:"minimum_rein_version,omitempty"`
+	// CreatedAt is when the record was written (D20).
+	CreatedAt time.Time `yaml:"created_at,omitempty"`
 }
 
 // ParseOrganization reads the record; folder is the slug folder holding it.

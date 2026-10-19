@@ -48,6 +48,31 @@ func (ErrAlreadyConnected) Is(target error) bool {
 	return target == refusal.ErrRefused
 }
 
+// ErrNoActiveOrganization is returned when a command needs the active
+// organisation and none is connected.
+type ErrNoActiveOrganization struct{}
+
+func (ErrNoActiveOrganization) Error() string {
+	return "no active organisation; run rein org create, rein org connect <remote> or rein org use <slug> first"
+}
+
+// Is makes it a refusal.
+func (ErrNoActiveOrganization) Is(target error) bool {
+	return target == refusal.ErrRefused
+}
+
+// Active returns the active organisation and its clone.
+func (service Service) Active() (organization machine.OrganizationRef, orgClonePath string, err error) {
+	state, err := service.State.Load()
+	if err != nil {
+		return machine.OrganizationRef{}, "", err
+	}
+	if state.Active == "" {
+		return machine.OrganizationRef{}, "", ErrNoActiveOrganization{}
+	}
+	return service.Lookup(state.Active)
+}
+
 func (service Service) now() time.Time {
 	if service.Clock == nil {
 		return time.Now().UTC()

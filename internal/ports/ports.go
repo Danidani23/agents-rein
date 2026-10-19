@@ -50,6 +50,14 @@ type Repository interface {
 	// Publish makes directory a repository on main with one commit of
 	// everything in it, and pushes it to remote as origin.
 	Publish(directory string, remote string, message string) error
+	// Pull brings a clone up to date with its origin, fast-forward only.
+	Pull(directory string) error
+	// CommitPaths commits the given paths, relative to directory, as one commit.
+	CommitPaths(directory string, relativePaths []string, message string) error
+	// Push pushes the clone's main to its origin.
+	Push(directory string) error
+	// ResetToRemote discards every local change and commit, back to origin's main.
+	ResetToRemote(directory string) error
 }
 
 // Agent is one coding agent rein writes settings for.
@@ -92,13 +100,16 @@ type Choice struct {
 	Unavailable string
 }
 
-// Select is a question answered by picking one choice.
+// Select is a question answered by picking one choice, or several through
+// ChooseMany, where Default may name several separated by commas and
+// Optional allows none.
 type Select struct {
 	Title       string
 	Description string
 	Explanation string
 	Choices     []Choice
 	Default     string
+	Optional    bool
 }
 
 // Prompter asks the questions of one command.
@@ -107,5 +118,6 @@ type Prompter interface {
 	Intro(text string)
 	Ask(question Text) (string, error)
 	Choose(question Select) (string, error)
+	ChooseMany(question Select) ([]string, error)
 	Confirm(question string, explanation string) (bool, error)
 }

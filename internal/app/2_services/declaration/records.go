@@ -6,6 +6,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -14,10 +15,11 @@ import (
 
 // Team is the record of a team, team.yaml under teams/<slug>/.
 type Team struct {
-	ID          string `yaml:"id"`
-	Slug        string `yaml:"slug"`
-	Name        string `yaml:"name"`
-	Description string `yaml:"description,omitempty"`
+	ID          string    `yaml:"id"`
+	Slug        string    `yaml:"slug"`
+	Name        string    `yaml:"name"`
+	Description string    `yaml:"description,omitempty"`
+	CreatedAt   time.Time `yaml:"created_at,omitempty"`
 }
 
 // Project is the record of a project, project.yaml under projects/<slug>/.
@@ -27,23 +29,25 @@ type Team struct {
 // fingerprint is the sorted root commit hashes of its repository, empty
 // until the first init.
 type Project struct {
-	ID          string   `yaml:"id"`
-	Slug        string   `yaml:"slug"`
-	Name        string   `yaml:"name"`
-	Description string   `yaml:"description,omitempty"`
-	Teams       []string `yaml:"teams"`
-	Labels      []string `yaml:"labels,omitempty"`
-	Path        string   `yaml:"path,omitempty"`
-	Fingerprint []string `yaml:"fingerprint,omitempty"`
+	ID          string    `yaml:"id"`
+	Slug        string    `yaml:"slug"`
+	Name        string    `yaml:"name"`
+	Description string    `yaml:"description,omitempty"`
+	Teams       []string  `yaml:"teams"`
+	Labels      []string  `yaml:"labels,omitempty"`
+	Path        string    `yaml:"path,omitempty"`
+	Fingerprint []string  `yaml:"fingerprint,omitempty"`
+	CreatedAt   time.Time `yaml:"created_at,omitempty"`
 }
 
 // User is the record of a person, user.yaml under users/<slug>/. GitHub is
 // the login exactly as the host has it (D8); the slug is its lowercase form
 // and the folder name.
 type User struct {
-	Slug   string `yaml:"slug"`
-	GitHub string `yaml:"github"`
-	Name   string `yaml:"name,omitempty"`
+	Slug      string    `yaml:"slug"`
+	GitHub    string    `yaml:"github"`
+	Name      string    `yaml:"name,omitempty"`
+	CreatedAt time.Time `yaml:"created_at,omitempty"`
 }
 
 // LabelCategory is one file of the label registry, labels/<category>.yaml:

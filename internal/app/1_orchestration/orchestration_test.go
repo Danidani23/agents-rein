@@ -287,3 +287,106 @@ func TestCreateOrganization(t *testing.T) {
 		}
 	})
 }
+
+// withOrganization is a fixture with an organisation created and active.
+func withOrganization(t *testing.T) (*harness, CreateResult) {
+	t.Helper()
+	fixture := newHarness(t)
+	created, err := fixture.orchestrator().CreateOrganization(CreateOrganizationRequest{Name: "Acme", Owner: "Danidani23", RepositoryName: "acme-agent-settings", Private: true, Codeowner: "Danidani23"})
+	if err != nil {
+		t.Fatalf("create organisation: %v", err)
+	}
+	return fixture, created
+}
+
+func TestCreateTeam(t *testing.T) {
+	t.Run("writes the record, commits and pushes it; the remote has it", func(t *testing.T) {
+		fixture, created := withOrganization(t)
+		result, err := fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "Web Team", Description: "the web"})
+		if err != nil || result.Slug != "web-team" || result.Organization != "acme" || result.RelativePath != "declarations/organizations/acme/teams/web-team/team.yaml" {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		content, err := os.ReadFile(filepath.Join(created.Connected.OrgClonePath, filepath.FromSlash(result.RelativePath)))
+		if err != nil || !strings.Contains(string(content), "slug: web-team") || !strings.Contains(string(content), "created_at:") {
+			t.Fatalf("record %q err %v", content, err)
+		}
+		commits := fixture.repository.Commits
+		if commits[len(commits)-1] != "team web-team (rein team create)" {
+			t.Fatalf("commits %v", commits)
+		}
+		_, err = os.Stat(filepath.Join(fixture.repository.Published[created.Remote], filepath.FromSlash(result.RelativePath)))
+		if err != nil {
+			t.Fatalf("remote: %v", err)
+		}
+	})
+	t.Run("a second team with the same slug is refused; so is a missing organisation", func(t *testing.T) {
+		fixture, _ := withOrganization(t)
+		_, _ = fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "Web"})
+		_, err := fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "web"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "already exists") {
+			t.Fatalf("err %v", err)
+		}
+		_, err = newHarness(t).orchestrator().CreateTeam(CreateTeamRequest{Name: "Web"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "no active organisation") {
+			t.Fatalf("err %v", err)
+		}
+		_, err = fixture.orchestrator().CreateTeam(CreateTeamRequest{Organization: "nobody", Name: "Web"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "not connected") {
+			t.Fatalf("err %v", err)
+		}
+	})
+	t.Run("a rejected push puts the clone back and is not a refusal", func(t *testing.T) {
+		fixture, created := withOrganization(t)
+		fixture.repository.FailPush = true
+		result, err := fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "Web"})
+		if err == nil || errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "protected branch") {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		_, err = os.Stat(filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "teams"))
+		if err == nil {
+			t.Fatalf("the team record is still in the clone")
+		}
+	})
+}
+
+func TestCreateProject(t *testing.T) {
+	t.Run("writes the record with its teams, labels and path", func(t *testing.T) {
+		fixture, created := withOrganization(t)
+		_, _ = fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "Web"})
+		result, err := fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}, Labels: []string{"language:go", "kind:web-app"}, Path: "services/shop"})
+		if err != nil || result.Slug != "shop" || result.RelativePath != "declarations/organizations/acme/projects/shop/project.yaml" {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		content, _ := os.ReadFile(filepath.Join(created.Connected.OrgClonePath, filepath.FromSlash(result.RelativePath)))
+		for _, expected := range []string{"slug: shop", "- web", "- language:go", "path: services/shop", "created_at:"} {
+			if !strings.Contains(string(content), expected) {
+				t.Fatalf("record lacks %q: %q", expected, content)
+			}
+		}
+		description, err := fixture.orchestrator().DescribeOrganization("")
+		if err != nil || description.Slug != "acme" || len(description.Teams) != 1 || description.Teams[0].Slug != "web" || len(description.LabelCategories) != 3 || description.LabelCategories[0].Category != "data" {
+			t.Fatalf("description %+v err %v", description, err)
+		}
+	})
+	t.Run("a missing team, an unregistered label, no team and a bad path are refused before anything is written", func(t *testing.T) {
+		fixture, created := withOrganization(t)
+		_, _ = fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "Web"})
+		cases := map[string]CreateProjectRequest{
+			"does not exist":      {Name: "Shop", Teams: []string{"nope"}},
+			"not in the registry": {Name: "Shop", Teams: []string{"web"}, Labels: []string{"language:cobol"}},
+			"names no category":   {Name: "Shop", Teams: []string{"web"}, Labels: []string{"colour:red"}},
+			"teams is required":   {Name: "Shop"},
+			"relative path":       {Name: "Shop", Teams: []string{"web"}, Path: "../outside"},
+		}
+		for expected, request := range cases {
+			_, err := fixture.orchestrator().CreateProject(request)
+			if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), expected) {
+				t.Fatalf("%s: err %v", expected, err)
+			}
+		}
+		_, err := os.Stat(filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "projects"))
+		if err == nil {
+			t.Fatalf("a project record was written")
+		}
+	})
+}
