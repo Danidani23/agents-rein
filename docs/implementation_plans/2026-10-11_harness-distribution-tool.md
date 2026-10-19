@@ -1091,7 +1091,13 @@ from that project's snapshot.
   2026-10-19 from the user's model, in four steps that each leave a working tool. (a) The
   declaration formats for tool servers, permissions and hooks with their lint, executed
   2026-10-19 (the [formats](#declaration-formats-tool-servers-permissions-hooks)). (b) The
-  mechanical distill: the project's snapshot, the harness it held, becomes candidate
+  mechanical distill, executed 2026-10-19 as the `distill` library (`ConvertClaudeCode`,
+  `Identity`, `LoadCatalogue`, `Compare`), the `distillations` service, the workflow
+  `DistillHarness` and `rein distill`, which takes the initialised project's folder,
+  `--project`, `--home` for the user's level, or `--snapshot`; a literal secret in `.mcp.json`
+  becomes a `${REIN_...}` reference with its variable described; agents and unknown files are
+  listed as skipped; the candidates pass the lint. As planned: the project's snapshot, the
+  harness it held, becomes candidate
   declarations at the project's level, `CLAUDE.md` and `.claude/rules/*.md` rules,
   `.claude/skills/` skills, `settings.json` permissions and hooks, `.mcp.json` tool servers,
   written to `~/.rein/distill/<project>-<time>/` with a report that compares each candidate
@@ -1443,3 +1449,5 @@ writes is read from the next session on, not in the same one.
   the clone only, secrets by `REIN_` reference told and checked, the judge's backends with the
   organisation's provider winning. P2.18 replanned in four steps; step (a) executed: the
   tool server, permission set and hook formats with their lint.
+- (2026-10-19) P2.18 step (b) executed: `rein distill` turns the latest snapshot into
+  candidates under `~/.rein/distill/` with the structural comparison report.

@@ -547,3 +547,81 @@ func TestInitializeProject(t *testing.T) {
 		}
 	})
 }
+
+// claudeCodeSnapshot stores a snapshot of a Claude Code harness for the
+// project address, as init would have taken it.
+func claudeCodeSnapshot(t *testing.T, fixture *harness, project string) string {
+	t.Helper()
+	folder := t.TempDir()
+	for relative, content := range map[string]string{"CLAUDE.md": "# Shop\n\nBe brief.\n", ".claude/rules/go.md": "Two-line errors.\n", ".mcp.json": `{"mcpServers":{"docs":{"type":"http","url":"https://docs.example/mcp"}}}`} {
+		path := filepath.Join(folder, filepath.FromSlash(relative))
+		_ = os.MkdirAll(filepath.Dir(path), 0o755)
+		_ = os.WriteFile(path, []byte(content), 0o644)
+	}
+	snapshotPath, _, err := fixture.orchestrator().Snapshots.Take("claude-code", project, folder, []string{"CLAUDE.md", ".claude", ".mcp.json"})
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	return snapshotPath
+}
+
+func TestDistillHarness(t *testing.T) {
+	t.Run("an initialised project's latest snapshot becomes candidates with verdicts, written for propose", func(t *testing.T) {
+		fixture, created := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		folder := projectClone(t)
+		_, err := fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
+		if err != nil {
+			t.Fatalf("init: %v", err)
+		}
+		snapshotPath := claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop")
+		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "rules", "go.md")
+		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
+		_ = os.WriteFile(existing, []byte("Two-line errors.\n"), 0o644)
+		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Directory: folder})
+		if err != nil || result.Level != "organizations.acme.projects.shop" || len(result.Candidates) != 3 || len(result.Report.Snapshots) != 2 || len(result.Report.Skipped) != 1 {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		verdicts := map[string]string{}
+		for _, summary := range result.Report.Candidates {
+			verdicts[summary.Kind+"/"+summary.ID] = summary.Verdict
+		}
+		if verdicts["rules/go"] != "identical" || verdicts["rules/instructions"] != "new" || verdicts["mcpservers/docs"] != "new" || !strings.Contains(strings.Join(result.Report.Snapshots, ","), snapshotPath) {
+			t.Fatalf("verdicts %v snapshots %v", verdicts, result.Report.Snapshots)
+		}
+		if !strings.HasPrefix(result.Folder, filepath.Join(fixture.home, "distill", "shop-")) {
+			t.Fatalf("folder %q", result.Folder)
+		}
+		for _, relative := range []string{"rules/instructions.md", "rules/go.md", "mcpservers/docs.yaml", "report.yaml"} {
+			_, err = os.Stat(filepath.Join(result.Folder, filepath.FromSlash(relative)))
+			if err != nil {
+				t.Fatalf("%s: %v", relative, err)
+			}
+		}
+		report, _ := os.ReadFile(filepath.Join(result.Folder, "report.yaml"))
+		if !strings.Contains(string(report), "level: organizations.acme.projects.shop") || !strings.Contains(string(report), "verdict: identical") {
+			t.Fatalf("report %q", report)
+		}
+	})
+	t.Run("the home becomes the user's level, a named snapshot its own, and the refusals", func(t *testing.T) {
+		fixture, _ := withTeam(t)
+		snapshotPath := claudeCodeSnapshot(t, fixture, "")
+		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Home: true})
+		if err != nil || result.Level != "users.danidani23" || len(result.Candidates) != 3 {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		result, err = fixture.orchestrator().DistillHarness(DistillRequest{SnapshotPath: snapshotPath})
+		if err != nil || result.Level != "users.danidani23" {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		_, err = fixture.orchestrator().DistillHarness(DistillRequest{Directory: projectClone(t)})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "not initialised") {
+			t.Fatalf("err %v", err)
+		}
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Bare", Teams: []string{"web"}})
+		_, err = fixture.orchestrator().DistillHarness(DistillRequest{Project: "bare"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "no snapshot") {
+			t.Fatalf("err %v", err)
+		}
+	})
+}

@@ -67,3 +67,35 @@ func TestTakeAgentHomes(t *testing.T) {
 		}
 	})
 }
+
+func TestListAndLatest(t *testing.T) {
+	folder := t.TempDir()
+	writeFile(t, filepath.Join(folder, "INSTRUCTIONS.md"), []byte("x"))
+	agent := &fake.Agent{Present: true, HomePath: folder}
+	clock := time.Date(2026, 10, 19, 9, 0, 0, 0, time.UTC)
+	service := Service{Home: t.TempDir(), Agents: []ports.Agent{agent}, Clock: func() time.Time { clock = clock.Add(time.Minute); return clock }}
+	_, _, _ = service.Take("fake-agent", "organizations.acme.projects.shop", folder, agent.HarnessPaths())
+	_, _, _ = service.Take("fake-agent", "organizations.acme.projects.shop", folder, agent.HarnessPaths())
+	_, _, _ = service.Take("fake-agent", "", folder, agent.HarnessPaths())
+	_, _, _ = service.Take("claude-code", "organizations.acme.projects.shop", folder, agent.HarnessPaths())
+	stored, err := service.List()
+	if err != nil || len(stored) != 4 || !stored[0].TakenAt.Before(stored[3].TakenAt) {
+		t.Fatalf("stored %d err %v", len(stored), err)
+	}
+	latest, err := service.Latest("organizations.acme.projects.shop")
+	if err != nil || len(latest) != 2 || latest[0].Agent != "claude-code" || latest[1].Agent != "fake-agent" || latest[1].TakenAt != clock.Add(-2*time.Minute) {
+		t.Fatalf("latest %+v err %v", latest, err)
+	}
+	home, err := service.Latest("")
+	if err != nil || len(home) != 1 || home[0].Project != "" {
+		t.Fatalf("home %+v err %v", home, err)
+	}
+	read, err := service.Read(home[0].Path)
+	if err != nil || read.Agent != "fake-agent" || read.Files["INSTRUCTIONS.md"] != "x" {
+		t.Fatalf("read %+v err %v", read, err)
+	}
+	empty, err := Service{Home: t.TempDir()}.List()
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("empty %v err %v", empty, err)
+	}
+}

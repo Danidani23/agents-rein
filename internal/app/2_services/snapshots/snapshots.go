@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 	"unicode/utf8"
 
@@ -87,6 +88,77 @@ func (service Service) Take(agent string, project string, folder string, harness
 	}
 	snapshotPath, err = service.write(name, Snapshot{Agent: agent, Folder: folder, Project: project, TakenAt: service.now(), Files: files})
 	return snapshotPath, files, err
+}
+
+// Stored is a snapshot on disk with its path.
+type Stored struct {
+	Path string
+	Snapshot
+}
+
+// List reads every snapshot, oldest first.
+func (service Service) List() ([]Stored, error) {
+	entries, err := os.ReadDir(service.Folder())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var stored []Stored
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		snapshotPath := filepath.Join(service.Folder(), entry.Name())
+		content, err := os.ReadFile(snapshotPath)
+		if err != nil {
+			return nil, err
+		}
+		var snapshot Snapshot
+		err = json.Unmarshal(content, &snapshot)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", snapshotPath, err)
+		}
+		stored = append(stored, Stored{Path: snapshotPath, Snapshot: snapshot})
+	}
+	sort.Slice(stored, func(left, right int) bool { return stored[left].TakenAt.Before(stored[right].TakenAt) })
+	return stored, nil
+}
+
+// Read loads one snapshot file.
+func (Service) Read(snapshotPath string) (Stored, error) {
+	content, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		return Stored{}, err
+	}
+	var snapshot Snapshot
+	err = json.Unmarshal(content, &snapshot)
+	if err != nil {
+		return Stored{}, fmt.Errorf("%s: %w", snapshotPath, err)
+	}
+	return Stored{Path: snapshotPath, Snapshot: snapshot}, nil
+}
+
+// Latest is the newest snapshot per agent that matches: the project's when
+// project is set, the agents' homes when it is empty.
+func (service Service) Latest(project string) ([]Stored, error) {
+	stored, err := service.List()
+	if err != nil {
+		return nil, err
+	}
+	newest := map[string]Stored{}
+	for _, candidate := range stored {
+		if candidate.Project == project {
+			newest[candidate.Agent] = candidate
+		}
+	}
+	var latest []Stored
+	for _, candidate := range newest {
+		latest = append(latest, candidate)
+	}
+	sort.Slice(latest, func(left, right int) bool { return latest[left].Agent < latest[right].Agent })
+	return latest, nil
 }
 
 // Remove deletes a snapshot file: the compensation of a failed workflow.

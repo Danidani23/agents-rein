@@ -202,6 +202,10 @@ func TestWiring(t *testing.T) {
 		if git("--git-dir", remote, "rev-list", "--count", "main") != "4" {
 			t.Fatalf("the binding was not pushed")
 		}
+		code, out, errOut = run("distill", "--path", project)
+		if code != cli.ExitWorked || !strings.Contains(out, "distilled 3 candidates for organizations.acme.projects.shop") || !strings.Contains(out, "rules/go") || !strings.Contains(out, "written to "+filepath.Join(reinHome, "distill")) {
+			t.Fatalf("distill: code %d out %q err %q", code, out, errOut)
+		}
 	})
 	t.Run("org create reports a protection GitHub refuses and still connects", func(t *testing.T) {
 		isolate(t, "Danidani23")

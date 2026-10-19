@@ -475,3 +475,27 @@ func TestInit(t *testing.T) {
 		}
 	})
 }
+
+func TestDistill(t *testing.T) {
+	fixture := newHarness(t)
+	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+	home := t.TempDir()
+	_ = os.WriteFile(filepath.Join(home, "CLAUDE.md"), []byte("be brief"), 0o644)
+	orchestrator, _ := fixture.orchestrate()
+	_, _, err := orchestrator.Snapshots.Take("claude-code", "organizations.acme.projects.shop", home, []string{"CLAUDE.md"})
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	code, out, errOut := fixture.run("distill", "--project", "shop")
+	for _, expected := range []string{"distilled 1 candidates for organizations.acme.projects.shop", "new        rules/instructions", "1 new, 0 identical", "written to " + filepath.Join(fixture.home, "distill", "shop-"), "next: rein propose"} {
+		if code != ExitWorked || !strings.Contains(out, expected) {
+			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
+		}
+	}
+	code, _, errOut = fixture.run("distill", "--path", t.TempDir())
+	if code != ExitRefused || !strings.Contains(errOut, "--project") {
+		t.Fatalf("code %d err %q", code, errOut)
+	}
+}
