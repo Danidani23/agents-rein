@@ -113,6 +113,18 @@ type Agent interface {
 	Unplace(placed machine.Placement) (removed bool, reason string, err error)
 }
 
+// Judge is the model that reads prose for rein: one brief in, one answer
+// out, no memory between calls (D23). The organisation's provider decides
+// which backend stands here; the agent's own CLI is the local fallback.
+type Judge interface {
+	// Name says which backend answers, for the report.
+	Name() string
+	// Available says whether the backend can answer on this machine, or why not.
+	Available() (reason string, ok bool)
+	// Ask sends the brief and returns the answer's text.
+	Ask(brief string) (answer string, err error)
+}
+
 // State persists the machine model.
 type State interface {
 	Load() (machine.State, error)

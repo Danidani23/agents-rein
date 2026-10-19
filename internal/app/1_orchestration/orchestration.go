@@ -14,6 +14,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distillations"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/hosting"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/identity"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/judge"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/ledger"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/organizations"
@@ -40,6 +41,7 @@ type Services struct {
 	Ledger        ledger.Service
 	Distillations distillations.Service
 	Proposals     proposals.Service
+	Judge         judge.Service
 	// Clock stamps every record a workflow writes (D20).
 	Clock func() time.Time
 }
@@ -47,9 +49,10 @@ type Services struct {
 // NewServices builds the services over the ports: identity over the host,
 // organisations over the state, clones over the repository, placements over
 // the state and the agents, hosting over the host and the repository,
-// snapshots over the agents. Nothing runs here; main calls it once with the
-// real adapters and the tests with the fakes.
-func NewServices(home string, host ports.Host, repository ports.Repository, state ports.State, agents []ports.Agent) Services {
+// snapshots over the agents, the judge over its backend, which may be nil.
+// Nothing runs here; main calls it once with the real adapters and the
+// tests with the fakes.
+func NewServices(home string, host ports.Host, repository ports.Repository, state ports.State, agents []ports.Agent, judgeBackend ports.Judge) Services {
 	return Services{
 		Home:          home,
 		Identity:      identity.Service{Host: host},
@@ -63,6 +66,7 @@ func NewServices(home string, host ports.Host, repository ports.Repository, stat
 		Ledger:        ledger.Service{Home: home, Clock: time.Now},
 		Distillations: distillations.Service{Home: home, Clock: time.Now},
 		Proposals:     proposals.Service{Repository: repository, Host: host},
+		Judge:         judge.Service{Judge: judgeBackend},
 		Clock:         time.Now,
 	}
 }

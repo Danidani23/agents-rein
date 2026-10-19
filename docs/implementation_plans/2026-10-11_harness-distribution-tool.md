@@ -1087,7 +1087,17 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
-- 🔨 **P2.18 — `distill`, the minimal `propose`, and the judge.** [IN PROGRESS] Planned
+- ✅ **P2.18 — `distill`, the minimal `propose`, and the judge.** [EXECUTED] 2026-10-19, in
+  four steps, the last the judge: the `Judge` port with the `agent-cli` backend in the Claude
+  Code adapter (`claude -p --output-format json --max-turns 1`, the brief on its standard
+  input), the `judge` service that asks, validates and asks once more with the problems, the
+  corpus (`LoadCorpus`: the resolved set whole, other teams' declarations through the label
+  and word prefilter, trimmed to a budget with the dropped addresses in the report), the brief
+  (`Brief`), the answer (`ParseAnswer`, with or without a code fence, `Validate` for the
+  vocabulary, the addresses and the verbatim quotes, `Apply`), the judgements in the
+  candidates, the report and the pull request's table, `--judge none` and `--dry-run` on
+  `distill`, and an unavailable judge reported as skipped. The `api` backend and the
+  `providers` declaration are P2.13's. Planned
   2026-10-19 from the user's model, in four steps that each leave a working tool. (a) The
   declaration formats for tool servers, permissions and hooks with their lint, executed
   2026-10-19 (the [formats](#declaration-formats-tool-servers-permissions-hooks)). (b) The
@@ -1461,3 +1471,6 @@ writes is read from the next session on, not in the same one.
   candidates under `~/.rein/distill/` with the structural comparison report.
 - (2026-10-19) P2.18 step (c) executed: `rein propose` lints, compares, branches, pushes and
   opens the pull request; the only writer of declarations into an org repository.
+- (2026-10-19) P2.18 step (d) executed, closing P2.18: the judge port behind `claude -p`, the
+  corpus, the brief, the validated answer, the judgements in `distill`'s report and in the
+  pull request `propose` opens.

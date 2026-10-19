@@ -460,3 +460,35 @@ func (state *State) Save(updated machine.State) error {
 	state.Current = updated
 	return nil
 }
+
+// Judge answers from a script: each Ask takes the next answer; an empty
+// list means the backend is not available.
+type Judge struct {
+	Answers     []string
+	Unavailable string
+	Briefs      []string
+}
+
+// Name is the fake's name.
+func (*Judge) Name() string {
+	return "fake-judge"
+}
+
+// Available is false with a reason when Unavailable is set.
+func (judge *Judge) Available() (string, bool) {
+	if judge.Unavailable != "" {
+		return judge.Unavailable, false
+	}
+	return "", true
+}
+
+// Ask records the brief and returns the next scripted answer.
+func (judge *Judge) Ask(brief string) (string, error) {
+	judge.Briefs = append(judge.Briefs, brief)
+	if len(judge.Answers) == 0 {
+		return "", errors.New("fake judge has no answer left")
+	}
+	answer := judge.Answers[0]
+	judge.Answers = judge.Answers[1:]
+	return answer, nil
+}

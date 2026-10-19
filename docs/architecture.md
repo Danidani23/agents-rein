@@ -26,11 +26,11 @@ flowchart TB
             runner["saga runner"]
         end
         subgraph services["2_services"]
-            svc["services<br/>identity, organizations, clones, placements, hosting, snapshots, records, workingcopy, ledger, distillations, proposals"]
+            svc["services<br/>identity, organizations, clones, placements, hosting, snapshots, records, workingcopy, ledger, distillations, proposals, judge"]
             libs["libraries<br/>address, declaration, lint, exchange, machine, refusal, scaffold, distill"]
         end
     end
-    ports["internal/ports<br/>Host, Repository, Agent, State, Prompter"]
+    ports["internal/ports<br/>Host, Repository, Agent, State, Prompter, Judge"]
     adapters["internal/adapters<br/>github, git, claudecode, localstate, terminal, execute<br/>fake, for the tests"]
 
     main --> gateway

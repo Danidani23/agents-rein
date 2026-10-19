@@ -9,6 +9,7 @@ import (
 
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 )
 
 func newDistillCommand(environment *commandEnvironment) *cobra.Command {
@@ -34,6 +35,8 @@ func newDistillCommand(environment *commandEnvironment) *cobra.Command {
 	command.Flags().StringVar(&request.Project, "project", "", "the project's slug, instead of the folder")
 	command.Flags().BoolVar(&request.Home, "home", false, "distill your agent's home into your user level instead of a project")
 	command.Flags().StringVar(&request.SnapshotPath, "snapshot", "", "a snapshot file to distill, instead of the latest")
+	command.Flags().StringVar(&request.Judge, "judge", "", "agent-cli to ask your agent's CLI, none to skip the model pass (default: the organisation's provider, else agent-cli)")
+	command.Flags().BoolVar(&request.DryRun, "dry-run", false, "print the brief that would go to the judge and write nothing")
 	return command
 }
 
@@ -50,9 +53,19 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 	if err != nil {
 		return err
 	}
+	switch request.Judge {
+	case "", "agent-cli", "none":
+	default:
+		return refusal.New(fmt.Sprintf("--judge %q is not agent-cli or none", request.Judge))
+	}
 	result, err := orchestrator.DistillHarness(request)
 	if err != nil {
 		return err
+	}
+	if request.DryRun {
+		fmt.Fprintf(environment.out, "%s", result.Brief)
+		fmt.Fprintf(environment.errOut, "dry run: the brief above would go to the judge; nothing was written\n")
+		return nil
 	}
 	counts := map[string]int{}
 	for _, candidate := range result.Candidates {
@@ -68,6 +81,16 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 		for _, note := range summary.Notes {
 			fmt.Fprintf(environment.out, "             note: %s\n", note)
 		}
+		if summary.Judgement != nil {
+			fmt.Fprintf(environment.out, "             judge: %s\n", describeJudgementLine(*summary.Judgement))
+		}
+	}
+	if result.Report.Judge != nil {
+		line := fmt.Sprintf("judge: %s %s", result.Report.Judge.Backend, result.Report.Judge.Status)
+		if len(result.Report.Judge.Problems) > 0 {
+			line += ": " + strings.Join(result.Report.Judge.Problems, "; ")
+		}
+		fmt.Fprintln(environment.out, line)
 	}
 	for _, skipped := range result.Report.Skipped {
 		fmt.Fprintf(environment.out, "  skipped    %s\n", skipped)
@@ -75,4 +98,17 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 	fmt.Fprintf(environment.out, "%d new, %d identical to an existing declaration, %d sharing an id with another level\n", counts[distill.VerdictNew], counts[distill.VerdictIdentical], counts[distill.VerdictSameID])
 	fmt.Fprintf(environment.out, "written to %s\nnext: rein propose %s, once it exists, opens the pull request\n", result.Folder, result.Folder)
 	return nil
+}
+
+// describeJudgementLine renders a judgement on one line.
+func describeJudgementLine(judgement distill.Judgement) string {
+	line := judgement.Verdict
+	if len(judgement.Related) > 0 {
+		line += " with " + strings.Join(judgement.Related, ", ")
+	}
+	line += "; " + judgement.Suggestion
+	if judgement.Suggestion == "lift" && judgement.Level != "" {
+		line += " to the " + judgement.Level + " level"
+	}
+	return line + ": " + judgement.Reason
 }

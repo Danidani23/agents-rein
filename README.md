@@ -119,14 +119,13 @@ GitHub account, and the agents on your machine are detected.
 | `rein org connect <remote>`, `list`, `use <slug>`, `disconnect <slug>` | Clones an org repository and remembers it, snapshotting your agents' homes into `~/.rein/snapshots/` as the record of what was there before rein; lists the connected ones with the active one marked; switches; forgets one and removes its clone without touching the remote. |
 | `rein team create`, `rein project create` | Write a team or a project record into the active organisation's clone and push it to `main`, the owner's way: name, description, and for a project its teams, labels from the registry and path, asked or given as flags. |
 | `rein init` | In a project clone: binds it to its project record by the repository's root commits, picking or creating the record when none carries them; moves `CLAUDE.md`, `.claude/` and `.mcp.json` into a snapshot under `~/.rein/snapshots/`, records the removal, adds a marked block to `.gitignore`, registers the clone and commits the move-out. |
-| `rein distill` | Turns the snapshot of an initialised project's harness, or of your agent's home with `--home`, into candidate declarations at that level, compares each with what the organisation already declares, and writes them with a report under `~/.rein/distill/` for `rein propose`. |
+| `rein distill` | Turns the snapshot of an initialised project's harness, or of your agent's home with `--home`, into candidate declarations at that level, compares each with what the organisation already declares by content and id, asks the judge, your agent's CLI until the organisation declares a provider, to compare the prose and suggest keep, drop, merge or lift, and writes it all with a report under `~/.rein/distill/` for `rein propose`. `--dry-run` shows the brief, `--judge none` skips the model. |
 | `rein propose <folder or zip>` | The one way declarations enter an org repository: lints the candidates, leaves out what the organisation already has, writes the rest on a branch of its clone, pushes it and opens the pull request with the comparison as its body. A distillation knows its level; anything else goes to your user level unless `--level` says otherwise. |
 | `rein lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, skills that share a name, and in an org repository every record: organisation, teams, projects, users and the label registry, with their references. Needs no identity, so CI runs it on an org repository. |
 | `rein reset` | Removes everything rein placed into an agent's home; `--all` forgets the organisations and projects too, leaving the machine as before rein. |
 | `rein version` | Prints the version. |
 
-Planned, in the board's order: the judge behind `distill` and `rein review`; `rein sync`,
-which writes a clone's harness;
+Planned, in the board's order: `rein sync`, which writes a clone's harness;
 `rein restore`; `rein org destroy`; `rein import` and `rein export`, which move a level into
 and out of an org repository; `rein propose` and `rein review`; `rein label`; `rein migrate`;
 `rein update`.

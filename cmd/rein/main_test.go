@@ -45,7 +45,9 @@ func isolate(t *testing.T, login string) (reinHome string) {
 	if err != nil {
 		t.Fatalf("stub gh: %v", err)
 	}
-	err = os.WriteFile(filepath.Join(directory, "claude"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	// the stub claude answers a judge brief with a canned verdict for the three rules of the init test
+	claudeStub := "#!/bin/sh\nif [ \"$1\" = \"-p\" ]; then\n  cat >/dev/null\n  printf '%s' '" + stubJudgeAnswer + "'\nfi\nexit 0\n"
+	err = os.WriteFile(filepath.Join(directory, "claude"), []byte(claudeStub), 0o755)
 	if err != nil {
 		t.Fatalf("stub claude: %v", err)
 	}
@@ -63,6 +65,9 @@ func isolate(t *testing.T, login string) (reinHome string) {
 	}
 	return reinHome
 }
+
+// stubJudgeAnswer is claude's JSON envelope around a judge answer.
+const stubJudgeAnswer = `{"result":"{\"version\":1,\"candidates\":[{\"candidate\":\"rules/go\",\"verdict\":\"new\",\"suggestion\":\"keep\",\"reason\":\"fine\"},{\"candidate\":\"rules/instructions\",\"verdict\":\"new\",\"suggestion\":\"keep\",\"reason\":\"fine\"},{\"candidate\":\"rules/local-instructions\",\"verdict\":\"new\",\"suggestion\":\"drop\",\"reason\":\"personal\"}]}","is_error":false}`
 
 func scratchOrgRepository(t *testing.T) string {
 	t.Helper()
@@ -204,7 +209,7 @@ func TestWiring(t *testing.T) {
 			t.Fatalf("the binding was not pushed")
 		}
 		code, out, errOut = run("distill", "--path", project)
-		if code != cli.ExitWorked || !strings.Contains(out, "distilled 3 candidates for organizations.acme.projects.shop") || !strings.Contains(out, "rules/go") || !strings.Contains(out, "written to "+filepath.Join(reinHome, "distill")) {
+		if code != cli.ExitWorked || !strings.Contains(out, "distilled 3 candidates for organizations.acme.projects.shop") || !strings.Contains(out, "rules/go") || !strings.Contains(out, "written to "+filepath.Join(reinHome, "distill")) || !strings.Contains(out, "judge: agent-cli:claude answered") || !strings.Contains(out, "judge: new; drop: personal") {
 			t.Fatalf("distill: code %d out %q err %q", code, out, errOut)
 		}
 		distilled := ""

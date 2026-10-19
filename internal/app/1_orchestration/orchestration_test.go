@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Danidani23/agents-rein/internal/adapters/fake"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/ports"
@@ -23,6 +24,7 @@ type harness struct {
 	repository *fake.Repository
 	state      *fake.State
 	agent      *fake.Agent
+	judge      *fake.Judge
 }
 
 func newHarness(t *testing.T) *harness {
@@ -33,11 +35,12 @@ func newHarness(t *testing.T) *harness {
 		repository: &fake.Repository{Record: validRecord},
 		state:      fake.NewState(),
 		agent:      &fake.Agent{Present: true, HomePath: t.TempDir()},
+		judge:      &fake.Judge{Unavailable: "no judge in this test"},
 	}
 }
 
 func (fixture *harness) orchestrator() Orchestrator {
-	return New(NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}))
+	return New(NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge))
 }
 
 func (fixture *harness) orgCloneFolders(t *testing.T) []string {
@@ -143,7 +146,7 @@ func TestDisconnectOrganization(t *testing.T) {
 func TestStatus(t *testing.T) {
 	t.Run("a logged-out host is reported, not refused", func(t *testing.T) {
 		fixture := newHarness(t)
-		orchestrator := New(NewServices(fixture.home, &fake.Host{}, fixture.repository, fixture.state, []ports.Agent{fixture.agent}))
+		orchestrator := New(NewServices(fixture.home, &fake.Host{}, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge))
 		report, err := orchestrator.Status()
 		if err != nil || !strings.Contains(report.IdentityError, "gh auth login") || report.Identity.Login != "" {
 			t.Fatalf("report %+v err %v", report, err)
@@ -725,6 +728,66 @@ func TestProposeDeclarations(t *testing.T) {
 		}
 		if len(fixture.repository.RemoteDeleted) != 1 || len(fixture.repository.Deleted) != 1 || fixture.repository.Current != "main" || len(fixture.repository.Published) != 1 {
 			t.Fatalf("repository %+v remote %s", fixture.repository, created.Remote)
+		}
+	})
+}
+
+func TestDistillWithTheJudge(t *testing.T) {
+	answer := `{"version":1,"candidates":[
+	 {"candidate":"rules/instructions","verdict":"new","suggestion":"keep","reason":"nothing covers it"},
+	 {"candidate":"rules/go","verdict":"duplicate","related":["organizations.acme.rules.go"],"quotes":[{"address":"organizations.acme.rules.go","text":"Two-line errors."}],"suggestion":"drop","reason":"the organisation says it"},
+	 {"candidate":"mcpservers/docs","verdict":"new","suggestion":"lift","level":"organization","reason":"everyone reads the docs"}]}`
+	prepare := func(t *testing.T) (*harness, CreateResult) {
+		t.Helper()
+		fixture, created := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop")
+		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "rules", "go.md")
+		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
+		_ = os.WriteFile(existing, []byte("Two-line errors.\n"), 0o644)
+		return fixture, created
+	}
+	t.Run("the judge's answer lands in the candidates, the report and the pull request", func(t *testing.T) {
+		fixture, _ := prepare(t)
+		fixture.judge = &fake.Judge{Answers: []string{answer}}
+		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		if err != nil || result.Report.Judge == nil || result.Report.Judge.Status != "answered" || result.Report.Judge.Backend != "fake-judge" {
+			t.Fatalf("result %+v err %v", result.Report.Judge, err)
+		}
+		if !strings.Contains(fixture.judge.Briefs[0], "## organizations.acme.rules.go (applies)") || !strings.Contains(fixture.judge.Briefs[0], "## rules/instructions") {
+			t.Fatalf("brief %q", fixture.judge.Briefs[0])
+		}
+		judged := map[string]*distill.Judgement{}
+		for _, summary := range result.Report.Candidates {
+			judged[summary.Kind+"/"+summary.ID] = summary.Judgement
+		}
+		if judged["rules/go"] == nil || judged["rules/go"].Verdict != "duplicate" || judged["mcpservers/docs"].Level != "organization" {
+			t.Fatalf("judged %+v", judged)
+		}
+		report, _ := os.ReadFile(filepath.Join(result.Folder, "report.yaml"))
+		if !strings.Contains(string(report), "judgement:") || !strings.Contains(string(report), "status: answered") {
+			t.Fatalf("report %q", report)
+		}
+		proposed, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: result.Folder})
+		if err != nil || !strings.Contains(fixture.host.PullRequests[0].Body, "| the judge |") || !strings.Contains(fixture.host.PullRequests[0].Body, "lift to the organization level: everyone reads the docs") || !strings.Contains(fixture.host.PullRequests[0].Body, "Judge: fake-judge, answered") {
+			t.Fatalf("proposed %+v err %v body %q", proposed, err, fixture.host.PullRequests[0].Body)
+		}
+	})
+	t.Run("an unavailable judge is reported and skipped, none skips it silently, a dry run writes nothing", func(t *testing.T) {
+		fixture, _ := prepare(t)
+		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		if err != nil || result.Report.Judge == nil || result.Report.Judge.Status != "skipped" || !strings.Contains(result.Report.Judge.Problems[0], "no judge in this test") {
+			t.Fatalf("result %+v err %v", result.Report.Judge, err)
+		}
+		result, err = fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop", Judge: "none"})
+		if err != nil || result.Report.Judge != nil || result.Brief != "" {
+			t.Fatalf("result %+v err %v", result.Report, err)
+		}
+		before, _ := os.ReadDir(filepath.Join(fixture.home, "distill"))
+		result, err = fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop", DryRun: true})
+		after, _ := os.ReadDir(filepath.Join(fixture.home, "distill"))
+		if err != nil || result.Folder != "" || !strings.Contains(result.Brief, "# Candidates") || len(after) != len(before) {
+			t.Fatalf("result folder %q brief %d err %v", result.Folder, len(result.Brief), err)
 		}
 	})
 }

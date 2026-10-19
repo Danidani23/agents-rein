@@ -21,6 +21,12 @@ type DistillRequest struct {
 	Project      string
 	Home         bool
 	SnapshotPath string
+	// Judge is "agent-cli" or empty for the wired backend, "none" to skip
+	// the model pass.
+	Judge string
+	// DryRun stops before asking the judge and before writing anything,
+	// with the brief in the result.
+	DryRun bool
 }
 
 // DistillResult is what DistillHarness did.
@@ -29,6 +35,7 @@ type DistillResult struct {
 	Folder     string
 	Report     distill.Report
 	Candidates []distill.Candidate
+	Brief      string
 }
 
 // DistillHarness turns the harness a snapshot holds into candidate
@@ -68,8 +75,28 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 		report.Skipped = append(report.Skipped, skipped...)
 	}
 	distill.Compare(candidates, catalogue, level)
+	result := DistillResult{Level: level, Candidates: candidates}
+	if request.Judge != "none" && len(candidates) > 0 {
+		corpus, err := distill.LoadCorpus(orgClonePath, level, teamsOfLevel(services, orgClonePath, level), userSlugOf(services), candidates)
+		if err != nil {
+			return DistillResult{}, err
+		}
+		result.Brief = distill.Brief(level, candidates, corpus)
+		if request.DryRun {
+			report.Candidates = distill.Summarise(level, candidates)
+			result.Report = report
+			return result, nil
+		}
+		reason, available := services.Judge.Available()
+		if available {
+			run := services.Judge.JudgeCandidates(level, candidates, corpus)
+			report.Judge = &run
+		} else {
+			report.Judge = &distill.JudgeRun{Backend: services.Judge.Name(), Status: distill.JudgeSkipped, Problems: []string{reason}}
+		}
+	}
 	report.Candidates = distill.Summarise(level, candidates)
-	result := DistillResult{Level: level, Report: report, Candidates: candidates}
+	result.Report = report
 	err = runSteps([]Step{
 		{
 			Name: "write",
@@ -162,4 +189,33 @@ func organizationOfAddress(services Services, declarationAddress string) (machin
 	}
 	organization, _, err := services.Organizations.Lookup(segments[1])
 	return organization, err
+}
+
+// teamsOfLevel are the teams a project level belongs to, for the resolved
+// set; a team level is its own team; other levels have none.
+func teamsOfLevel(services Services, orgClonePath string, level string) []string {
+	segments := strings.Split(level, ".")
+	if len(segments) != 4 || segments[0] != "organizations" {
+		return nil
+	}
+	switch segments[2] {
+	case "teams":
+		return []string{segments[3]}
+	case "projects":
+		tree, err := services.Records.Tree(orgClonePath)
+		if err != nil {
+			return nil
+		}
+		return tree.Projects[segments[3]].Teams
+	}
+	return nil
+}
+
+// userSlugOf is the user's slug when the host answers, else empty.
+func userSlugOf(services Services) string {
+	who, err := services.Identity.Who()
+	if err != nil {
+		return ""
+	}
+	return who.Slug
 }

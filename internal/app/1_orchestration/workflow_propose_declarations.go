@@ -262,9 +262,22 @@ func userRecordIfMissing(orgClonePath string, levelPath string, userSlug string,
 func pullRequestBody(source string, level string, result ProposeResult, report *distill.Report) string {
 	var body strings.Builder
 	fmt.Fprintf(&body, "Proposed by `rein propose` from `%s` to the level `%s`.\n\n", filepath.Base(source), level)
-	fmt.Fprintf(&body, "| kind | id | compared with the organisation |\n|---|---|---|\n")
+	judged := map[string]*distill.Judgement{}
+	if report != nil {
+		for _, summary := range report.Candidates {
+			judged[summary.Kind+"/"+summary.ID] = summary.Judgement
+		}
+	}
+	fmt.Fprintf(&body, "| kind | id | compared with the organisation | the judge |\n|---|---|---|---|\n")
 	for _, summary := range result.Included {
-		fmt.Fprintf(&body, "| %s | %s | %s |\n", summary.Kind, summary.ID, describeVerdict(summary))
+		fmt.Fprintf(&body, "| %s | %s | %s | %s |\n", summary.Kind, summary.ID, describeVerdict(summary), describeJudgement(judged[summary.Kind+"/"+summary.ID]))
+	}
+	if report != nil && report.Judge != nil {
+		fmt.Fprintf(&body, "\nJudge: %s, %s", report.Judge.Backend, report.Judge.Status)
+		if len(report.Judge.Problems) > 0 {
+			fmt.Fprintf(&body, ": %s", strings.Join(report.Judge.Problems, "; "))
+		}
+		fmt.Fprintf(&body, "\n")
 	}
 	if len(result.LeftOut) > 0 {
 		fmt.Fprintf(&body, "\nLeft out, identical to what the organisation has:\n")
@@ -294,6 +307,26 @@ func pullRequestBody(source string, level string, result ProposeResult, report *
 	}
 	fmt.Fprintf(&body, "\n`rein lint` passed on these files before the proposal; `rein review` judges the prose against the levels it meets.\n")
 	return body.String()
+}
+
+// describeJudgement renders the judge's entry for the table, quotes included.
+func describeJudgement(judgement *distill.Judgement) string {
+	if judgement == nil {
+		return "not judged"
+	}
+	text := judgement.Verdict
+	if len(judgement.Related) > 0 {
+		text += " with " + strings.Join(judgement.Related, ", ")
+	}
+	text += "; " + judgement.Suggestion
+	if judgement.Suggestion == "lift" && judgement.Level != "" {
+		text += " to the " + judgement.Level + " level"
+	}
+	text += ": " + judgement.Reason
+	for _, quote := range judgement.Quotes {
+		text += fmt.Sprintf(" (%s: “%s”)", quote.Address, quote.Text)
+	}
+	return strings.ReplaceAll(text, "|", "\\|")
 }
 
 func describeVerdict(summary distill.CandidateSummary) string {

@@ -57,6 +57,7 @@ type harness struct {
 	repository *fake.Repository
 	state      *fake.State
 	agent      *fake.Agent
+	judge      *fake.Judge
 }
 
 func newHarness(t *testing.T) *harness {
@@ -67,11 +68,12 @@ func newHarness(t *testing.T) *harness {
 		repository: &fake.Repository{Record: validRecord},
 		state:      fake.NewState(),
 		agent:      &fake.Agent{Present: true, HomePath: t.TempDir()},
+		judge:      &fake.Judge{Unavailable: "no judge in this test"},
 	}
 }
 
 func (fixture *harness) orchestrate() (orchestration.Orchestrator, error) {
-	return orchestration.New(orchestration.NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent})), nil
+	return orchestration.New(orchestration.NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge)), nil
 }
 
 // seedConnectedOrganization leaves the state as a connect of acme would, with a clone folder
@@ -520,5 +522,37 @@ func TestPropose(t *testing.T) {
 	if code != ExitWorked || !strings.Contains(out, "Continue?") {
 		// the level's team need not exist for the proposal; the review decides
 		t.Fatalf("code %d out %q err %q", code, out, errOut)
+	}
+}
+
+func TestDistillJudgeFlags(t *testing.T) {
+	fixture := newHarness(t)
+	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+	home := t.TempDir()
+	_ = os.WriteFile(filepath.Join(home, "CLAUDE.md"), []byte("be brief"), 0o644)
+	orchestrator, _ := fixture.orchestrate()
+	_, _, _ = orchestrator.Snapshots.Take("claude-code", "organizations.acme.projects.shop", home, []string{"CLAUDE.md"})
+	code, out, _ := fixture.run("distill", "--project", "shop")
+	if code != ExitWorked || !strings.Contains(out, "judge: fake-judge skipped: no judge in this test") {
+		t.Fatalf("code %d out %q", code, out)
+	}
+	fixture.judge = &fake.Judge{Answers: []string{`{"version":1,"candidates":[{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"organization","reason":"general"}]}`}}
+	code, out, _ = fixture.run("distill", "--project", "shop")
+	if code != ExitWorked || !strings.Contains(out, "judge: new; lift to the organization level: general") || !strings.Contains(out, "judge: fake-judge answered") {
+		t.Fatalf("code %d out %q", code, out)
+	}
+	code, out, _ = fixture.run("distill", "--project", "shop", "--judge", "none")
+	if code != ExitWorked || strings.Contains(out, "judge:") {
+		t.Fatalf("code %d out %q", code, out)
+	}
+	code, out, errOut := fixture.run("distill", "--project", "shop", "--dry-run")
+	if code != ExitWorked || !strings.Contains(out, "# Candidates") || !strings.Contains(out, "## rules/instructions") || !strings.Contains(errOut, "dry run") {
+		t.Fatalf("code %d out %q err %q", code, out, errOut)
+	}
+	code, _, errOut = fixture.run("distill", "--project", "shop", "--judge", "oracle")
+	if code != ExitRefused || !strings.Contains(errOut, "not agent-cli or none") {
+		t.Fatalf("code %d err %q", code, errOut)
 	}
 }

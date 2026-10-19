@@ -44,8 +44,14 @@ func Preflight(name string) error {
 // Run runs name with arguments in directory and returns what it printed. A
 // non-zero exit is a Failure. Git is told never to prompt for credentials.
 func Run(directory string, name string, arguments ...string) (Result, error) {
+	return RunWithInput(directory, "", name, arguments...)
+}
+
+// RunWithInput is Run with text on the program's standard input.
+func RunWithInput(directory string, input string, name string, arguments ...string) (Result, error) {
 	command := exec.Command(name, arguments...)
 	command.Dir = directory
+	command.Stdin = strings.NewReader(input)
 	command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout

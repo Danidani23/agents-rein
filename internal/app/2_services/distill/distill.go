@@ -30,7 +30,9 @@ type Candidate struct {
 	Notes   []string `yaml:"notes,omitempty"`
 	Verdict string   `yaml:"verdict,omitempty"`
 	Related []string `yaml:"related,omitempty"`
-	Files   map[string]string
+	// Judgement is what the judge said, when it ran.
+	Judgement *Judgement `yaml:"judgement,omitempty"`
+	Files     map[string]string
 }
 
 // Verdicts of the structural comparison.
@@ -54,24 +56,26 @@ type Report struct {
 	Snapshots  []string           `yaml:"snapshots"`
 	Candidates []CandidateSummary `yaml:"candidates"`
 	Skipped    []string           `yaml:"skipped,omitempty"`
+	Judge      *JudgeRun          `yaml:"judge,omitempty"`
 }
 
 // CandidateSummary is a candidate without its files.
 type CandidateSummary struct {
-	Kind    string   `yaml:"kind"`
-	ID      string   `yaml:"id"`
-	Address string   `yaml:"address"`
-	Verdict string   `yaml:"verdict"`
-	Related []string `yaml:"related,omitempty"`
-	Notes   []string `yaml:"notes,omitempty"`
-	Sources []string `yaml:"sources"`
+	Kind      string     `yaml:"kind"`
+	ID        string     `yaml:"id"`
+	Address   string     `yaml:"address"`
+	Verdict   string     `yaml:"verdict"`
+	Related   []string   `yaml:"related,omitempty"`
+	Notes     []string   `yaml:"notes,omitempty"`
+	Sources   []string   `yaml:"sources"`
+	Judgement *Judgement `yaml:"judgement,omitempty"`
 }
 
 // Summarise lists the candidates for the report, addressed under level.
 func Summarise(level string, candidates []Candidate) []CandidateSummary {
 	var summaries []CandidateSummary
 	for _, candidate := range candidates {
-		summaries = append(summaries, CandidateSummary{Kind: candidate.Kind, ID: candidate.ID, Address: level + "." + candidate.Kind + "." + candidate.ID, Verdict: candidate.Verdict, Related: candidate.Related, Notes: candidate.Notes, Sources: candidate.Sources})
+		summaries = append(summaries, CandidateSummary{Kind: candidate.Kind, ID: candidate.ID, Address: level + "." + candidate.Kind + "." + candidate.ID, Verdict: candidate.Verdict, Related: candidate.Related, Notes: candidate.Notes, Sources: candidate.Sources, Judgement: candidate.Judgement})
 	}
 	return summaries
 }
