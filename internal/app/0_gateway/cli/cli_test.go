@@ -422,3 +422,56 @@ func TestTeamAndProjectCreate(t *testing.T) {
 		}
 	})
 }
+
+func TestInit(t *testing.T) {
+	const rootCommit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	projectClone := func(t *testing.T) string {
+		t.Helper()
+		folder, _ := filepath.EvalSymlinks(t.TempDir())
+		_ = fake.NewProjectClone(folder, []string{rootCommit}, []string{"INSTRUCTIONS.md"})
+		_ = os.WriteFile(filepath.Join(folder, "INSTRUCTIONS.md"), []byte("be brief"), 0o644)
+		return folder
+	}
+	t.Run("with --project and --yes it binds, moves out and commits, and says so", func(t *testing.T) {
+		fixture := newHarness(t)
+		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+		_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+		_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+		folder := projectClone(t)
+		code, out, errOut := fixture.run("init", "--path", folder, "--project", "shop", "--yes")
+		for _, expected := range []string{"bound " + folder + " to organizations.acme.projects.shop (fingerprint: 1 root commit(s))", "moved out for fake-agent: INSTRUCTIONS.md", "snapshot: " + filepath.Join(fixture.home, "snapshots"), ".gitignore: rein block added", "committed f4ce000: move agent settings out to rein", "next: rein sync"} {
+			if code != ExitWorked || !strings.Contains(out, expected) {
+				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
+			}
+		}
+		code, _, errOut = fixture.run("init", "--path", folder, "--yes")
+		if code != ExitRefused || !strings.Contains(errOut, "already initialised as organizations.acme.projects.shop") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+	})
+	t.Run("without a terminal and without a match it names --project; outside a repository it refuses", func(t *testing.T) {
+		fixture := newHarness(t)
+		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+		code, _, errOut := fixture.run("init", "--path", projectClone(t), "--yes")
+		if code != ExitRefused || !strings.Contains(errOut, "--project") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+		code, _, errOut = fixture.run("init", "--path", t.TempDir(), "--yes")
+		if code != ExitRefused || !strings.Contains(errOut, "not inside a git repository") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+	})
+	t.Run("interactively it offers to create the project and asks its questions", func(t *testing.T) {
+		fixture := newHarness(t)
+		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+		_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+		folder := projectClone(t)
+		// project choice (create, the default), name, description, teams, data, kind, language, confirm
+		code, out, errOut := fixture.runInteractive("\nShop\n\n\n\n\n2\n\n", "init", "--path", folder)
+		for _, expected := range []string{"1) create a new project", "Project name", "This will create the project \"Shop\" in acme and bind it", "created and bound " + folder + " to organizations.acme.projects.shop"} {
+			if code != ExitWorked || !strings.Contains(out, expected) {
+				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
+			}
+		}
+	})
+}

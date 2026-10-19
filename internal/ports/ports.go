@@ -58,6 +58,20 @@ type Repository interface {
 	Push(directory string) error
 	// ResetToRemote discards every local change and commit, back to origin's main.
 	ResetToRemote(directory string) error
+	// Root is the top folder of the repository that holds directory.
+	Root(directory string) (string, error)
+	// RootCommits are the hashes of the commits without parents: the
+	// fingerprint of a repository, which survives renames and forks.
+	RootCommits(directory string) ([]string, error)
+	// TrackedPaths are the paths among relativePaths that the repository
+	// tracks, the files under a folder included.
+	TrackedPaths(directory string, relativePaths []string) ([]string, error)
+	// StagePaths stages the paths: additions, changes and deletions alike.
+	StagePaths(directory string, relativePaths []string) error
+	// HasStagedChanges reports whether a commit would have content.
+	HasStagedChanges(directory string) (bool, error)
+	// CommitStaged commits what is staged and returns the commit's hash.
+	CommitStaged(directory string, message string) (hash string, err error)
 }
 
 // Agent is one coding agent rein writes settings for.
@@ -71,6 +85,9 @@ type Agent interface {
 	// HarnessPaths are the files and folders under Home that hold settings:
 	// instructions, rules, skills, permissions; never transcripts or caches.
 	HarnessPaths() []string
+	// ProjectHarnessPaths are the files and folders of a project clone the
+	// agent reads its settings from, which init moves out and sync writes.
+	ProjectHarnessPaths() []string
 	// Unplace removes one placement rein made, when it is still what rein
 	// made; removed is false with an empty reason when nothing is there.
 	Unplace(placed machine.Placement) (removed bool, reason string, err error)

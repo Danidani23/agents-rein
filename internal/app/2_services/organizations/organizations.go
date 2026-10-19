@@ -73,6 +73,53 @@ func (service Service) Active() (organization machine.OrganizationRef, orgCloneP
 	return service.Lookup(state.Active)
 }
 
+// ErrProjectInitialized is returned when a clone is initialised twice.
+type ErrProjectInitialized struct {
+	ClonePath string
+	Address   string
+}
+
+func (err ErrProjectInitialized) Error() string {
+	return fmt.Sprintf("%s is already initialised as %s; run rein sync", err.ClonePath, err.Address)
+}
+
+// Is makes it a refusal.
+func (ErrProjectInitialized) Is(target error) bool {
+	return target == refusal.ErrRefused
+}
+
+// RegisterProject remembers an initialised clone, stamped with the time.
+func (service Service) RegisterProject(project machine.Project) error {
+	state, err := service.State.Load()
+	if err != nil {
+		return err
+	}
+	for _, registered := range state.Projects {
+		if registered.ClonePath == project.ClonePath {
+			return ErrProjectInitialized{ClonePath: project.ClonePath, Address: registered.Address}
+		}
+	}
+	project.InitializedAt = service.now()
+	state.Projects = append(state.Projects, project)
+	return service.State.Save(state)
+}
+
+// UnregisterProject forgets a clone: the compensation of a failed init.
+func (service Service) UnregisterProject(clonePath string) error {
+	state, err := service.State.Load()
+	if err != nil {
+		return err
+	}
+	var kept []machine.Project
+	for _, registered := range state.Projects {
+		if registered.ClonePath != clonePath {
+			kept = append(kept, registered)
+		}
+	}
+	state.Projects = kept
+	return service.State.Save(state)
+}
+
 func (service Service) now() time.Time {
 	if service.Clock == nil {
 		return time.Now().UTC()

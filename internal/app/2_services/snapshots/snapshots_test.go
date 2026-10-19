@@ -42,7 +42,7 @@ func TestTakeAgentHomes(t *testing.T) {
 		content, _ := os.ReadFile(snapshotPaths[0])
 		var snapshot Snapshot
 		err = json.Unmarshal(content, &snapshot)
-		if err != nil || snapshot.Agent != "fake-agent" || snapshot.Home != agentHome || !snapshot.TakenAt.Equal(takenAt) {
+		if err != nil || snapshot.Agent != "fake-agent" || snapshot.Folder != agentHome || !snapshot.TakenAt.Equal(takenAt) {
 			t.Fatalf("snapshot %+v err %v", snapshot, err)
 		}
 		if len(snapshot.Files) != 2 || snapshot.Files["INSTRUCTIONS.md"] != "be brief" || snapshot.Files["skills/commit/SKILL.md"] == "" || info.Mode().Perm() != 0o600 {

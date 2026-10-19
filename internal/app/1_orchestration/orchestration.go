@@ -13,11 +13,13 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/clones"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/hosting"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/identity"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/ledger"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/organizations"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/placements"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/records"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/snapshots"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/workingcopy"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
@@ -32,6 +34,8 @@ type Services struct {
 	Hosting       hosting.Service
 	Snapshots     snapshots.Service
 	Records       records.Service
+	WorkingCopy   workingcopy.Service
+	Ledger        ledger.Service
 	// Clock stamps every record a workflow writes (D20).
 	Clock func() time.Time
 }
@@ -51,6 +55,8 @@ func NewServices(home string, host ports.Host, repository ports.Repository, stat
 		Hosting:       hosting.Service{Host: host, Repository: repository},
 		Snapshots:     snapshots.Service{Home: home, Agents: agents, Clock: time.Now},
 		Records:       records.Service{Repository: repository},
+		WorkingCopy:   workingcopy.Service{Repository: repository},
+		Ledger:        ledger.Service{Home: home, Clock: time.Now},
 		Clock:         time.Now,
 	}
 }

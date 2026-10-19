@@ -45,6 +45,16 @@ func (Service) Write(orgClonePath string, relativePath string, content string) e
 	return os.WriteFile(target, []byte(content), 0o644)
 }
 
+// Rewrite replaces an existing record file; a missing one is an error.
+func (Service) Rewrite(orgClonePath string, relativePath string, content string) error {
+	target := filepath.Join(orgClonePath, filepath.FromSlash(relativePath))
+	_, err := os.Stat(target)
+	if err != nil {
+		return fmt.Errorf("%s: %w", relativePath, err)
+	}
+	return os.WriteFile(target, []byte(content), 0o644)
+}
+
 // Publish commits the paths and pushes main.
 func (service Service) Publish(orgClonePath string, relativePaths []string, message string) error {
 	err := service.Repository.CommitPaths(orgClonePath, relativePaths, message)

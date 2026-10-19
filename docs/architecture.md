@@ -26,7 +26,7 @@ flowchart TB
             runner["saga runner"]
         end
         subgraph services["2_services"]
-            svc["services<br/>identity, organizations, clones, placements, hosting, snapshots, records"]
+            svc["services<br/>identity, organizations, clones, placements, hosting, snapshots, records, workingcopy, ledger"]
             libs["libraries<br/>address, declaration, lint, exchange, machine, refusal, scaffold"]
         end
     end
@@ -79,7 +79,8 @@ holds this table as its `allowed` map and fails on any import outside it.
    organisations section of the machine state, `placements` the placements and imports,
    `clones` the folders under `~/.rein/orgs/`, `snapshots` the files under
    `~/.rein/snapshots/`, `hosting` the repositories on the host, `records` the record files
-   in an org clone and their publication, `identity` the answer to "who". A service
+   in an org clone and their publication, `workingcopy` a project's working copy, `ledger`
+   the removals file, `identity` the answer to "who". A service
    reaches the outside only through a port, so a test gives it a memory state or a fake host.
    Enforced by the test: a service package may import the ports and the libraries, never a
    sibling service.

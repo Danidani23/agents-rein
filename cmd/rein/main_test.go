@@ -161,6 +161,47 @@ func TestWiring(t *testing.T) {
 		if err != nil || strings.TrimSpace(string(count)) != "3" {
 			t.Fatalf("remote commits %q err %v", count, err)
 		}
+		// init on a real project repository: tracked agent files and an untracked one
+		project, _ := filepath.EvalSymlinks(t.TempDir())
+		git := func(arguments ...string) string {
+			command := exec.Command("git", arguments...)
+			command.Dir = project
+			output, err := command.CombinedOutput()
+			if err != nil {
+				t.Fatalf("git %v: %v\n%s", arguments, err, output)
+			}
+			return strings.TrimSpace(string(output))
+		}
+		git("init", "-q")
+		_ = os.MkdirAll(filepath.Join(project, ".claude", "rules"), 0o755)
+		_ = os.WriteFile(filepath.Join(project, "CLAUDE.md"), []byte("be brief"), 0o644)
+		_ = os.WriteFile(filepath.Join(project, ".claude", "rules", "go.md"), []byte("rule"), 0o644)
+		_ = os.WriteFile(filepath.Join(project, "main.go"), []byte("package main"), 0o644)
+		git("add", "-A")
+		git("commit", "-q", "-m", "first")
+		_ = os.WriteFile(filepath.Join(project, "CLAUDE.local.md"), []byte("mine"), 0o644)
+		code, out, errOut = run("init", "--path", project, "--project", "shop", "--yes")
+		if code != cli.ExitWorked || !strings.Contains(out, "bound "+project+" to organizations.acme.projects.shop") || !strings.Contains(out, "moved out for claude-code: CLAUDE.md, CLAUDE.local.md, .claude") || !strings.Contains(out, "committed ") {
+			t.Fatalf("init: code %d out %q err %q", code, out, errOut)
+		}
+		for _, gone := range []string{"CLAUDE.md", "CLAUDE.local.md", ".claude"} {
+			_, err = os.Stat(filepath.Join(project, gone))
+			if err == nil {
+				t.Fatalf("%s still in the clone", gone)
+			}
+		}
+		if git("rev-list", "--count", "HEAD") != "2" || git("status", "--porcelain") != "" || !strings.Contains(git("log", "-1", "--format=%s"), "move agent settings out to rein") {
+			t.Fatalf("commit missing or tree dirty: %q", git("status", "--porcelain"))
+		}
+		ignore, _ := os.ReadFile(filepath.Join(project, ".gitignore"))
+		state, _ := os.ReadFile(filepath.Join(reinHome, "state.yaml"))
+		removals, _ := os.ReadFile(filepath.Join(reinHome, "removals.yaml"))
+		if !strings.Contains(string(ignore), "# >>> rein") || !strings.Contains(string(state), "organizations.acme.projects.shop") || !strings.Contains(string(removals), filepath.Join(project, "CLAUDE.md")) {
+			t.Fatalf("ignore %q state %q removals %q", ignore, state, removals)
+		}
+		if git("--git-dir", remote, "rev-list", "--count", "main") != "4" {
+			t.Fatalf("the binding was not pushed")
+		}
 	})
 	t.Run("org create reports a protection GitHub refuses and still connects", func(t *testing.T) {
 		isolate(t, "Danidani23")

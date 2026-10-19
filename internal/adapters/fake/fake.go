@@ -82,13 +82,36 @@ type Repository struct {
 	Fail        bool
 	FailPublish bool
 	FailPush    bool
+	FailCommit  bool
 	Published   map[string]string
 	Commits     []string
+	Staged      []string
 }
 
 // originMarker is the file in a fake clone that names its remote, as
 // .git/config does in a real one, so a moved clone keeps its origin.
 const originMarker = ".fake-origin"
+
+// gitMarker makes a folder a fake project repository; it lists the root
+// commits, one per line. trackedMarker lists the tracked paths.
+const (
+	gitMarker     = ".fake-git"
+	trackedMarker = ".fake-tracked"
+)
+
+// NewProjectClone makes folder a fake repository with the given root commits
+// and tracked paths.
+func NewProjectClone(folder string, rootCommits []string, trackedPaths []string) error {
+	err := os.MkdirAll(folder, 0o755)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(filepath.Join(folder, gitMarker), []byte(strings.Join(rootCommits, "\n")), 0o644)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(folder, trackedMarker), []byte(strings.Join(trackedPaths, "\n")), 0o644)
+}
 
 // Preflight always passes: the fake needs no git.
 func (*Repository) Preflight() error {
@@ -176,6 +199,75 @@ func (repository *Repository) ResetToRemote(directory string) error {
 		return err
 	}
 	return rememberOrigin(directory, remote)
+}
+
+// Root walks up from directory to the folder with the git marker.
+func (*Repository) Root(directory string) (string, error) {
+	for folder := directory; ; folder = filepath.Dir(folder) {
+		_, err := os.Stat(filepath.Join(folder, gitMarker))
+		if err == nil {
+			return folder, nil
+		}
+		if filepath.Dir(folder) == folder {
+			return "", errors.New("fatal: not a git repository")
+		}
+	}
+}
+
+// RootCommits reads the git marker.
+func (repository *Repository) RootCommits(directory string) ([]string, error) {
+	root, err := repository.Root(directory)
+	if err != nil {
+		return nil, err
+	}
+	content, err := os.ReadFile(filepath.Join(root, gitMarker))
+	if err != nil {
+		return nil, err
+	}
+	commits := strings.Fields(string(content))
+	if len(commits) == 0 {
+		return nil, errors.New("fatal: your current branch 'main' does not have any commits yet")
+	}
+	return commits, nil
+}
+
+// TrackedPaths reads the tracked marker and keeps what lies under the paths.
+func (repository *Repository) TrackedPaths(directory string, relativePaths []string) ([]string, error) {
+	root, err := repository.Root(directory)
+	if err != nil {
+		return nil, err
+	}
+	content, _ := os.ReadFile(filepath.Join(root, trackedMarker))
+	var tracked []string
+	for _, candidate := range strings.Fields(string(content)) {
+		for _, relativePath := range relativePaths {
+			if candidate == relativePath || strings.HasPrefix(candidate, strings.TrimSuffix(relativePath, "/")+"/") {
+				tracked = append(tracked, candidate)
+			}
+		}
+	}
+	return tracked, nil
+}
+
+// StagePaths records what was staged.
+func (repository *Repository) StagePaths(directory string, relativePaths []string) error {
+	repository.Staged = append(repository.Staged, relativePaths...)
+	return nil
+}
+
+// HasStagedChanges is true when something was staged.
+func (repository *Repository) HasStagedChanges(directory string) (bool, error) {
+	return len(repository.Staged) > 0, nil
+}
+
+// CommitStaged records the commit and returns a fixed hash.
+func (repository *Repository) CommitStaged(directory string, message string) (string, error) {
+	if repository.FailCommit {
+		return "", errors.New("git commit failed: gpg failed to sign the data")
+	}
+	repository.Commits = append(repository.Commits, message)
+	repository.Staged = nil
+	return "f4ce0000f4ce0000f4ce0000f4ce0000f4ce0000", nil
 }
 
 func rememberOrigin(directory string, remote string) error {
@@ -266,6 +358,11 @@ func (agent *Agent) HarnessPaths() []string {
 		return []string{"INSTRUCTIONS.md", "skills"}
 	}
 	return agent.HarnessFiles
+}
+
+// ProjectHarnessPaths are what the fake agent reads in a project.
+func (*Agent) ProjectHarnessPaths() []string {
+	return []string{"INSTRUCTIONS.md", ".fake-agent"}
 }
 
 // Unplace records the request and removes everything but a foreign path.

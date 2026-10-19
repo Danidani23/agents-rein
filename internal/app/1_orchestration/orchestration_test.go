@@ -390,3 +390,160 @@ func TestCreateProject(t *testing.T) {
 		}
 	})
 }
+
+const rootCommit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+// projectClone makes a fake repository with the fake agent's files in it:
+// two tracked, one not.
+func projectClone(t *testing.T) string {
+	t.Helper()
+	// resolved, since git reports real paths and the location is compared to it
+	folder, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("temp dir: %v", err)
+	}
+	err = fake.NewProjectClone(folder, []string{rootCommit}, []string{"INSTRUCTIONS.md", ".fake-agent/rules.md", "main.go"})
+	if err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	for relative, content := range map[string]string{"INSTRUCTIONS.md": "be brief", ".fake-agent/rules.md": "rule", ".fake-agent/local.md": "mine", "main.go": "package main"} {
+		path := filepath.Join(folder, filepath.FromSlash(relative))
+		_ = os.MkdirAll(filepath.Dir(path), 0o755)
+		_ = os.WriteFile(path, []byte(content), 0o644)
+	}
+	return folder
+}
+
+// withTeam is an organisation with the team web.
+func withTeam(t *testing.T) (*harness, CreateResult) {
+	t.Helper()
+	fixture, created := withOrganization(t)
+	_, err := fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "Web"})
+	if err != nil {
+		t.Fatalf("team: %v", err)
+	}
+	return fixture, created
+}
+
+func TestInitializeProject(t *testing.T) {
+	t.Run("binds to a named unbound record, moves the agent's files out, records, ignores, registers and commits", func(t *testing.T) {
+		fixture, created := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		folder := projectClone(t)
+		location, err := fixture.orchestrator().LocateProject(folder)
+		if err != nil || len(location.Matches) != 0 || len(location.Unbound) != 1 || location.Unbound[0].Project != "shop" || location.Initialized != "" {
+			t.Fatalf("location %+v err %v", location, err)
+		}
+		result, err := fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
+		if err != nil || !result.Bound || result.Created || result.Address != "organizations.acme.projects.shop" || result.Path != "." {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		if len(result.MovedOut) != 1 || strings.Join(result.MovedOut[0].Paths, ",") != "INSTRUCTIONS.md,.fake-agent" || result.MovedOut[0].SnapshotPath == "" {
+			t.Fatalf("moved out %+v", result.MovedOut)
+		}
+		for _, gone := range []string{"INSTRUCTIONS.md", ".fake-agent"} {
+			_, err = os.Stat(filepath.Join(folder, gone))
+			if err == nil {
+				t.Fatalf("%s still there", gone)
+			}
+		}
+		_, err = os.Stat(filepath.Join(folder, "main.go"))
+		if err != nil {
+			t.Fatalf("main.go gone")
+		}
+		ignore, _ := os.ReadFile(filepath.Join(folder, ".gitignore"))
+		if !result.IgnoreChanged || !strings.Contains(string(ignore), "INSTRUCTIONS.md\n.fake-agent\n") {
+			t.Fatalf("ignore %v %q", result.IgnoreChanged, ignore)
+		}
+		removals, _ := fixture.orchestrator().Ledger.Load()
+		if len(removals.Agents["fake-agent"]) != 2 || removals.Agents["fake-agent"][0].Project != result.Address || removals.Agents["fake-agent"][0].Snapshot != result.MovedOut[0].SnapshotPath {
+			t.Fatalf("removals %+v", removals)
+		}
+		projects, _ := fixture.orchestrator().Organizations.Projects()
+		if len(projects) != 1 || projects[0].ClonePath != folder || projects[0].Fingerprint != rootCommit || projects[0].InitializedAt.IsZero() || projects[0].Organization != fixture.state.Current.Organizations[0].ID {
+			t.Fatalf("projects %+v", projects)
+		}
+		if result.Commit == "" || result.CommitError != "" || fixture.repository.Commits[len(fixture.repository.Commits)-1] != moveOutCommitMessage {
+			t.Fatalf("commit %q error %q commits %v", result.Commit, result.CommitError, fixture.repository.Commits)
+		}
+		record, _ := os.ReadFile(filepath.Join(fixture.repository.Published[created.Remote], "declarations", "organizations", "acme", "projects", "shop", "project.yaml"))
+		if !strings.Contains(string(record), rootCommit) {
+			t.Fatalf("the remote's record has no fingerprint: %q", record)
+		}
+		_, err = fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "already initialised") {
+			t.Fatalf("err %v", err)
+		}
+		second := projectClone(t)
+		location, _ = fixture.orchestrator().LocateProject(second)
+		result, err = fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: second})
+		if err != nil || len(location.Matches) != 1 || result.Bound || result.Created || result.Address != "organizations.acme.projects.shop" {
+			t.Fatalf("second clone: location %+v result %+v err %v", location, result, err)
+		}
+	})
+	t.Run("creates the project on the spot with the fingerprint and path", func(t *testing.T) {
+		fixture, created := withTeam(t)
+		folder := projectClone(t)
+		result, err := fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Create: &CreateProjectRequest{Name: "Shop", Teams: []string{"web"}, Labels: []string{"language:go"}}, NoCommit: true})
+		if err != nil || !result.Created || result.Address != "organizations.acme.projects.shop" || result.Commit != "" || len(fixture.repository.Staged) != 0 {
+			t.Fatalf("result %+v err %v staged %v", result, err, fixture.repository.Staged)
+		}
+		record, _ := os.ReadFile(filepath.Join(fixture.repository.Published[created.Remote], "declarations", "organizations", "acme", "projects", "shop", "project.yaml"))
+		if !strings.Contains(string(record), rootCommit) || !strings.Contains(string(record), "- language:go") {
+			t.Fatalf("record %q", record)
+		}
+	})
+	t.Run("refusals: no matching record without a name, an unknown record, a record bound elsewhere, no repository", func(t *testing.T) {
+		fixture, _ := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Other", Teams: []string{"web"}, Fingerprint: []string{"cccccccccccccccccccccccccccccccccccccccc"}})
+		folder := projectClone(t)
+		cases := map[string]InitializeProjectRequest{
+			"no project of acme carries": {Directory: folder},
+			"does not exist":             {Directory: folder, Project: "nope"},
+			"bound to another":           {Directory: folder, Project: "other"},
+			"not inside a git":           {Directory: t.TempDir(), Project: "other"},
+		}
+		for expected, request := range cases {
+			_, err := fixture.orchestrator().InitializeProject(request)
+			if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), expected) {
+				t.Fatalf("%s: err %v", expected, err)
+			}
+		}
+		_, err := os.Stat(filepath.Join(folder, "INSTRUCTIONS.md"))
+		if err != nil {
+			t.Fatalf("a refused init moved files out")
+		}
+	})
+	t.Run("a failure before the commit puts everything back", func(t *testing.T) {
+		fixture, _ := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		folder := projectClone(t)
+		fixture.state.FailSaves = 1
+		_, err := fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
+		if err == nil || errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "disk full") {
+			t.Fatalf("err %v", err)
+		}
+		for relative, content := range map[string]string{"INSTRUCTIONS.md": "be brief", ".fake-agent/rules.md": "rule", ".fake-agent/local.md": "mine"} {
+			restored, err := os.ReadFile(filepath.Join(folder, filepath.FromSlash(relative)))
+			if err != nil || string(restored) != content {
+				t.Fatalf("%s: %q err %v", relative, restored, err)
+			}
+		}
+		_, err = os.Stat(filepath.Join(folder, ".gitignore"))
+		snapshots, _ := os.ReadDir(filepath.Join(fixture.home, "snapshots"))
+		removals, _ := fixture.orchestrator().Ledger.Load()
+		if err == nil || len(snapshots) != 0 || len(removals.Agents) != 0 || len(fixture.state.Current.Projects) != 0 {
+			t.Fatalf("ignore err %v snapshots %v removals %+v projects %v", err, snapshots, removals, fixture.state.Current.Projects)
+		}
+	})
+	t.Run("a failed commit is reported, the rest stands", func(t *testing.T) {
+		fixture, _ := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		folder := projectClone(t)
+		fixture.repository.FailCommit = true
+		result, err := fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
+		if err != nil || result.Commit != "" || !strings.Contains(result.CommitError, "gpg") || len(fixture.state.Current.Projects) != 1 {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+	})
+}

@@ -18,6 +18,8 @@ type CreateProjectRequest struct {
 	Teams        []string
 	Labels       []string
 	Path         string
+	// Fingerprint binds a clone at once, when init creates the project.
+	Fingerprint []string
 }
 
 // CreateProjectResult is what CreateProject did.
@@ -42,7 +44,7 @@ func (orchestrator Orchestrator) CreateProject(request CreateProjectRequest) (Cr
 	if slug == "" {
 		return CreateProjectResult{}, refusal.New("the name must contain at least one letter or digit")
 	}
-	project := declaration.Project{ID: scaffold.NewID(), Slug: slug, Name: request.Name, Description: request.Description, Teams: request.Teams, Labels: request.Labels, Path: request.Path, CreatedAt: services.Clock()}
+	project := declaration.Project{ID: scaffold.NewID(), Slug: slug, Name: request.Name, Description: request.Description, Teams: request.Teams, Labels: request.Labels, Path: request.Path, Fingerprint: request.Fingerprint, CreatedAt: services.Clock()}
 	relativePath, content, err := scaffold.ProjectRecord(organization.Slug, project)
 	if err != nil {
 		return CreateProjectResult{}, err

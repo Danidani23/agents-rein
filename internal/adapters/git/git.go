@@ -2,8 +2,10 @@
 package git
 
 import (
+	"errors"
 	"github.com/Danidani23/agents-rein/internal/adapters/execute"
 	"github.com/Danidani23/agents-rein/internal/ports"
+	"strings"
 )
 
 // Repository runs git on this machine.
@@ -70,6 +72,68 @@ func (Repository) ResetToRemote(directory string) error {
 	}
 	_, err = execute.Run(directory, "git", "clean", "-qfd")
 	return err
+}
+
+// Root is the repository's top folder.
+func (Repository) Root(directory string) (string, error) {
+	result, err := execute.Run(directory, "git", "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(result.Stdout), nil
+}
+
+// RootCommits lists the parentless commits reachable from HEAD.
+func (Repository) RootCommits(directory string) ([]string, error) {
+	result, err := execute.Run(directory, "git", "rev-list", "--max-parents=0", "HEAD")
+	if err != nil {
+		return nil, err
+	}
+	return strings.Fields(result.Stdout), nil
+}
+
+// TrackedPaths asks the index which of the paths it holds.
+func (Repository) TrackedPaths(directory string, relativePaths []string) ([]string, error) {
+	arguments := append([]string{"ls-files", "--"}, relativePaths...)
+	result, err := execute.Run(directory, "git", arguments...)
+	if err != nil {
+		return nil, err
+	}
+	return strings.Fields(result.Stdout), nil
+}
+
+// StagePaths stages additions, changes and deletions under the paths.
+func (Repository) StagePaths(directory string, relativePaths []string) error {
+	arguments := append([]string{"add", "-A", "--"}, relativePaths...)
+	_, err := execute.Run(directory, "git", arguments...)
+	return err
+}
+
+// HasStagedChanges is git diff --cached --quiet, which exits 1 when there is
+// something to commit.
+func (Repository) HasStagedChanges(directory string) (bool, error) {
+	_, err := execute.Run(directory, "git", "diff", "--cached", "--quiet")
+	if err == nil {
+		return false, nil
+	}
+	var failure *execute.Failure
+	if errors.As(err, &failure) && failure.Stderr == "" {
+		return true, nil
+	}
+	return false, err
+}
+
+// CommitStaged commits with the user's identity and returns the hash.
+func (Repository) CommitStaged(directory string, message string) (string, error) {
+	_, err := execute.Run(directory, "git", "commit", "-q", "-m", message)
+	if err != nil {
+		return "", err
+	}
+	result, err := execute.Run(directory, "git", "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(result.Stdout), nil
 }
 
 func (Repository) Clone(remote string, directory string) error {

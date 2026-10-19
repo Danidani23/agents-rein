@@ -32,13 +32,16 @@ type Placement struct {
 	Source string `yaml:"source,omitempty"`
 }
 
-// Project is a project repository registered on this machine.
+// Project is a project clone initialised on this machine: ClonePath is the
+// project's folder, the repository's root or, in a monorepo, the project's
+// path under it; Fingerprint the root commits joined with commas.
 type Project struct {
-	Organization string `yaml:"organization"`
-	Address      string `yaml:"address"`
-	ClonePath    string `yaml:"clone_path"`
-	Fingerprint  string `yaml:"fingerprint,omitempty"`
-	LastSync     string `yaml:"last_sync,omitempty"`
+	Organization  string    `yaml:"organization"`
+	Address       string    `yaml:"address"`
+	ClonePath     string    `yaml:"clone_path"`
+	Fingerprint   string    `yaml:"fingerprint,omitempty"`
+	LastSync      string    `yaml:"last_sync,omitempty"`
+	InitializedAt time.Time `yaml:"initialized_at,omitempty"`
 }
 
 // Import is a level unpacked on this machine by the import of 2026-10-15,

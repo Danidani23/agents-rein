@@ -1,7 +1,8 @@
-// Package snapshots is the service that records what an agent's home held
-// before rein touched it (D11): the harness files, path to content, as JSON
-// under <home>/snapshots/. Never transcripts, memory or caches. A snapshot
-// is the raw material of migrate and the record restore relies on.
+// Package snapshots is the service that records what an agent's home or a
+// project clone held before rein touched it (D11): the harness files, path
+// to content, as JSON under <home>/snapshots/. Never transcripts, memory or
+// caches. A snapshot is the raw material of migrate and the content restore
+// puts back.
 package snapshots
 
 import (
@@ -21,18 +22,19 @@ import (
 // settings file.
 const maxFileSize = 1 << 20
 
-// Service takes snapshots of the agents' homes. Clock stamps them (D20);
-// nil means the wall clock.
+// Service takes snapshots. Clock stamps them (D20); nil means the wall clock.
 type Service struct {
 	Home   string
 	Agents []ports.Agent
 	Clock  func() time.Time
 }
 
-// Snapshot is one agent home at one time.
+// Snapshot is one folder's harness files at one time: an agent's home, or a
+// project's folder when Project is set.
 type Snapshot struct {
 	Agent   string            `json:"agent"`
-	Home    string            `json:"home"`
+	Folder  string            `json:"folder"`
+	Project string            `json:"project,omitempty"`
 	TakenAt time.Time         `json:"taken_at"`
 	Files   map[string]string `json:"files"`
 }
@@ -57,25 +59,46 @@ func (service Service) TakeAgentHomes() (snapshotPaths []string, err error) {
 		if err != nil {
 			return nil, err
 		}
-		files, err := collect(agentHome, agent.HarnessPaths())
+		snapshotPath, files, err := service.Take(agent.Name(), "", agentHome, agent.HarnessPaths())
 		if err != nil {
 			return nil, err
 		}
-		if len(files) == 0 {
-			continue
+		if len(files) > 0 {
+			snapshotPaths = append(snapshotPaths, snapshotPath)
 		}
-		takenAt := service.now()
-		snapshotPath, err := service.write(Snapshot{Agent: agent.Name(), Home: agentHome, TakenAt: takenAt, Files: files})
-		if err != nil {
-			return nil, err
-		}
-		snapshotPaths = append(snapshotPaths, snapshotPath)
 	}
 	return snapshotPaths, nil
 }
 
-// write stores the snapshot as <agent>-<time>.json, readable by the user only.
-func (service Service) write(snapshot Snapshot) (string, error) {
+// Take snapshots the harness paths under folder for one agent, named after
+// the project when there is one. Nothing is written when no file is there;
+// the files are returned either way, so the caller knows what was taken.
+func (service Service) Take(agent string, project string, folder string, harnessPaths []string) (snapshotPath string, files map[string]string, err error) {
+	files, err = collect(folder, harnessPaths)
+	if err != nil {
+		return "", nil, err
+	}
+	if len(files) == 0 {
+		return "", files, nil
+	}
+	name := agent
+	if project != "" {
+		name = project + "-" + agent
+	}
+	snapshotPath, err = service.write(name, Snapshot{Agent: agent, Folder: folder, Project: project, TakenAt: service.now(), Files: files})
+	return snapshotPath, files, err
+}
+
+// Remove deletes a snapshot file: the compensation of a failed workflow.
+func (Service) Remove(snapshotPath string) error {
+	if snapshotPath == "" {
+		return nil
+	}
+	return os.Remove(snapshotPath)
+}
+
+// write stores the snapshot as <name>-<time>.json, readable by the user only.
+func (service Service) write(name string, snapshot Snapshot) (string, error) {
 	err := os.MkdirAll(service.Folder(), 0o700)
 	if err != nil {
 		return "", err
@@ -86,11 +109,11 @@ func (service Service) write(snapshot Snapshot) (string, error) {
 	}
 	stamp := snapshot.TakenAt.UTC().Format("20060102-150405")
 	for attempt := 0; ; attempt++ {
-		name := fmt.Sprintf("%s-%s.json", snapshot.Agent, stamp)
+		fileName := fmt.Sprintf("%s-%s.json", name, stamp)
 		if attempt > 0 {
-			name = fmt.Sprintf("%s-%s-%d.json", snapshot.Agent, stamp, attempt)
+			fileName = fmt.Sprintf("%s-%s-%d.json", name, stamp, attempt)
 		}
-		snapshotPath := filepath.Join(service.Folder(), name)
+		snapshotPath := filepath.Join(service.Folder(), fileName)
 		file, err := os.OpenFile(snapshotPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if errors.Is(err, fs.ErrExist) {
 			continue
@@ -107,13 +130,13 @@ func (service Service) write(snapshot Snapshot) (string, error) {
 	}
 }
 
-// collect reads the text files under the harness paths of a home, keyed by
-// their path relative to the home with forward slashes. A missing path is
-// skipped; so is a file that is not text or larger than settings get.
-func collect(agentHome string, harnessPaths []string) (map[string]string, error) {
+// collect reads the text files under the harness paths of a folder, keyed by
+// their path relative to it with forward slashes. A missing path is skipped;
+// so is a file that is not text or larger than settings get.
+func collect(folder string, harnessPaths []string) (map[string]string, error) {
 	files := map[string]string{}
 	for _, harnessPath := range harnessPaths {
-		root := filepath.Join(agentHome, harnessPath)
+		root := filepath.Join(folder, harnessPath)
 		info, err := os.Stat(root)
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
@@ -122,7 +145,7 @@ func collect(agentHome string, harnessPaths []string) (map[string]string, error)
 			return nil, err
 		}
 		if !info.IsDir() {
-			err = collectFile(agentHome, root, files)
+			err = collectFile(folder, root, files)
 			if err != nil {
 				return nil, err
 			}
@@ -143,7 +166,7 @@ func collect(agentHome string, harnessPaths []string) (map[string]string, error)
 			if err != nil {
 				return err
 			}
-			return collectFile(agentHome, path, files)
+			return collectFile(folder, path, files)
 		})
 		if err != nil {
 			return nil, err
@@ -152,7 +175,7 @@ func collect(agentHome string, harnessPaths []string) (map[string]string, error)
 	return files, nil
 }
 
-func collectFile(agentHome string, path string, files map[string]string) error {
+func collectFile(folder string, path string, files map[string]string) error {
 	info, err := os.Stat(path)
 	if err != nil {
 		return err
@@ -167,7 +190,7 @@ func collectFile(agentHome string, path string, files map[string]string) error {
 	if !utf8.Valid(content) {
 		return nil
 	}
-	relative, err := filepath.Rel(agentHome, path)
+	relative, err := filepath.Rel(folder, path)
 	if err != nil {
 		return err
 	}

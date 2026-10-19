@@ -969,11 +969,30 @@ from that project's snapshot.
   Tests on the fakes, whose repository now remembers origins, commits and pushes, and end to
   end with real git into the stub's bare remote, three commits after the two creates. Gate:
   `task rein:check` green.
-- 🟢 **P2.17 — `init` binds, snapshots and moves out.** [PENDING] Fingerprint, record binding,
-  the snapshot of `CLAUDE.md`, `.claude/` and `.mcp.json` into `~/.rein/snapshots/`, their
-  deletion from the working tree, the marked block in `.gitignore`, the commit (D14), the
-  registration in state. Refuses outside a git repository and in a clone that matches two
-  organisations (C2).
+- ✅ **P2.17 — `init` binds, snapshots and moves out.** [EXECUTED] 2026-10-19, as planned the
+  same day with the user's addition: when no record carries the fingerprint, `init` offers
+  the unbound projects of the active organisation and the creation of a new one on the spot,
+  with the questions of `project create`. The workflow `InitializeProject`: locate the
+  repository and fingerprint it (the root commits, sorted; the project's path is the folder
+  under the root, `.` at it); bind, by the record that carries fingerprint and path, by the
+  record named with `--project`, which gets the fingerprint written and pushed, or by
+  creating the record with the fingerprint in it; per agent, snapshot the project harness
+  paths (`CLAUDE.md`, `CLAUDE.local.md`, `.claude`, `.mcp.json` for Claude Code) into
+  `~/.rein/snapshots/<project>-<agent>-<time>.json`, delete them, and record each removal in
+  `~/.rein/removals.yaml`, the ledger's removals file with a section per agent (D12), written
+  through a temporary file and a rename (D19); write the marked block into the project
+  folder's `.gitignore`; register the clone in the state with `initialized_at` (D20); then
+  commit exactly the tracked removed paths and `.gitignore` (D14), `--no-commit` leaving them
+  staged, a failed commit reported with everything else standing. A failure before the commit
+  puts every file back, removes the snapshot, forgets the removals, takes the block out and
+  unregisters. Refusals: outside a repository or without a commit, an initialised clone, a
+  record bound to another repository, a fingerprint matched in two organisations (C2). New:
+  the `workingcopy` and `ledger` services; `Root`, `RootCommits`, `TrackedPaths`,
+  `StagePaths`, `HasStagedChanges` and `CommitStaged` on the repository port;
+  `ProjectHarnessPaths` on the agent port; `LocateProject` as the query the gateway decides
+  on. Tests on the fakes, whose repository now fakes a project clone through marker files,
+  and end to end with real git: a clone with tracked and untracked agent files, the move-out
+  committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
 - 🟢 **P2.18 — `distill`.** [PENDING] Pure and mechanical first: `CLAUDE.md` and each rule file
   become rules, skills stay skills, `settings.json` permissions and hooks become permissions
   and hooks declarations, `.mcp.json` servers become server declarations, each at the
@@ -1301,3 +1320,6 @@ writes is read from the next session on, not in the same one.
 - (2026-10-19) D12 confirmed with its storage. P2.16 executed: `team create` and `project
   create` as workflows over the `records` service, `ChooseMany` in the prompter, `created_at`
   on every record.
+- (2026-10-19) P2.17 executed: `rein init` binds by fingerprint, by a named record or by
+  creating the project, moves the agent files out into a snapshot, starts the ledger's
+  removals file, adds the `.gitignore` block, registers the clone and commits the move-out.
