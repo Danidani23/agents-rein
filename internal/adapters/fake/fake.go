@@ -5,6 +5,7 @@ package fake
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -26,6 +27,8 @@ type Host struct {
 	ProtectionRefusal string
 	FailProtection    bool
 	ProtectedBranches []string
+	PullRequests      []ports.PullRequest
+	FailPullRequest   bool
 }
 
 // Identity returns the account or the error that names the way in.
@@ -71,21 +74,35 @@ func (host *Host) ProtectMainBranch(owner string, name string) (string, error) {
 	return "", nil
 }
 
+// CreatePullRequest records the request and returns a fake URL.
+func (host *Host) CreatePullRequest(directory string, request ports.PullRequest) (string, error) {
+	if host.FailPullRequest {
+		return "", errors.New("gh pr create failed: a pull request for this branch already exists")
+	}
+	host.PullRequests = append(host.PullRequests, request)
+	return fmt.Sprintf("https://github.com/fake/pull/%d", len(host.PullRequests)), nil
+}
+
 // Repository "clones" by writing an org repository with the organisation
 // record it was given under declarations/organizations/<Slug>/, unless the
 // remote was published through it, in which case it copies what was
 // published. An empty Record writes the folder without a record, Fail fails
 // the clone, FailPublish fails the publish.
 type Repository struct {
-	Record      string
-	Slug        string
-	Fail        bool
-	FailPublish bool
-	FailPush    bool
-	FailCommit  bool
-	Published   map[string]string
-	Commits     []string
-	Staged      []string
+	Record         string
+	Slug           string
+	Fail           bool
+	FailPublish    bool
+	FailPush       bool
+	FailCommit     bool
+	FailPushBranch bool
+	Published      map[string]string
+	Commits        []string
+	Staged         []string
+	Branches       []string
+	Current        string
+	Deleted        []string
+	RemoteDeleted  []string
 }
 
 // originMarker is the file in a fake clone that names its remote, as
@@ -268,6 +285,44 @@ func (repository *Repository) CommitStaged(directory string, message string) (st
 	repository.Commits = append(repository.Commits, message)
 	repository.Staged = nil
 	return "f4ce0000f4ce0000f4ce0000f4ce0000f4ce0000", nil
+}
+
+// CreateBranch records the branch and makes it current.
+func (repository *Repository) CreateBranch(directory string, branch string) error {
+	repository.Branches = append(repository.Branches, branch)
+	repository.Current = branch
+	return nil
+}
+
+// Checkout makes the branch current; back on main the working tree is what
+// the remote's main holds, as git drops the branch's files.
+func (repository *Repository) Checkout(directory string, branch string) error {
+	repository.Current = branch
+	if branch == "main" {
+		return repository.ResetToRemote(directory)
+	}
+	return nil
+}
+
+// DeleteBranch records the deletion.
+func (repository *Repository) DeleteBranch(directory string, branch string) error {
+	repository.Deleted = append(repository.Deleted, branch)
+	return nil
+}
+
+// PushBranch publishes the clone's content under origin#branch.
+func (repository *Repository) PushBranch(directory string, branch string) error {
+	if repository.FailPushBranch {
+		return errors.New("git push failed: could not read from remote")
+	}
+	return repository.publish(directory, originOf(directory)+"#"+branch)
+}
+
+// DeleteRemoteBranch records the deletion on the remote.
+func (repository *Repository) DeleteRemoteBranch(directory string, branch string) error {
+	repository.RemoteDeleted = append(repository.RemoteDeleted, branch)
+	delete(repository.Published, originOf(directory)+"#"+branch)
+	return nil
 }
 
 func rememberOrigin(directory string, remote string) error {

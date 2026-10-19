@@ -136,6 +136,36 @@ func (Repository) CommitStaged(directory string, message string) (string, error)
 	return strings.TrimSpace(result.Stdout), nil
 }
 
+// CreateBranch is git checkout -b.
+func (Repository) CreateBranch(directory string, branch string) error {
+	_, err := execute.Run(directory, "git", "checkout", "-q", "-b", branch)
+	return err
+}
+
+// Checkout switches branches.
+func (Repository) Checkout(directory string, branch string) error {
+	_, err := execute.Run(directory, "git", "checkout", "-q", branch)
+	return err
+}
+
+// DeleteBranch is git branch -D.
+func (Repository) DeleteBranch(directory string, branch string) error {
+	_, err := execute.Run(directory, "git", "branch", "-q", "-D", branch)
+	return err
+}
+
+// PushBranch pushes the branch to origin.
+func (Repository) PushBranch(directory string, branch string) error {
+	_, err := execute.Run(directory, "git", "push", "-q", "-u", "origin", branch)
+	return err
+}
+
+// DeleteRemoteBranch removes the branch from origin.
+func (Repository) DeleteRemoteBranch(directory string, branch string) error {
+	_, err := execute.Run(directory, "git", "push", "-q", "origin", "--delete", branch)
+	return err
+}
+
 func (Repository) Clone(remote string, directory string) error {
 	_, err := execute.Run("", "git", "clone", "--quiet", remote, directory)
 	return err

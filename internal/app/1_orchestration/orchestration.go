@@ -18,6 +18,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/organizations"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/placements"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/proposals"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/records"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/snapshots"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/workingcopy"
@@ -38,6 +39,7 @@ type Services struct {
 	WorkingCopy   workingcopy.Service
 	Ledger        ledger.Service
 	Distillations distillations.Service
+	Proposals     proposals.Service
 	// Clock stamps every record a workflow writes (D20).
 	Clock func() time.Time
 }
@@ -60,6 +62,7 @@ func NewServices(home string, host ports.Host, repository ports.Repository, stat
 		WorkingCopy:   workingcopy.Service{Repository: repository},
 		Ledger:        ledger.Service{Home: home, Clock: time.Now},
 		Distillations: distillations.Service{Home: home, Clock: time.Now},
+		Proposals:     proposals.Service{Repository: repository, Host: host},
 		Clock:         time.Now,
 	}
 }

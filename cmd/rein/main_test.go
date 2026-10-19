@@ -39,6 +39,7 @@ func isolate(t *testing.T, login string) (reinHome string) {
 		"  \"repo view \"*) name=\"${3#*/}\"; echo \"$REMOTES/$name.git\";;\n" +
 		"  \"repo delete \"*) name=\"${3#*/}\"; rm -rf \"$REMOTES/$name.git\";;\n" +
 		"  \"api -X PUT \"*) if [ \"$GH_STUB_PROTECTION\" = 403 ]; then echo 'gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)' >&2; exit 1; fi;;\n" +
+		"  \"pr create \"*) echo https://github.com/Danidani23/acme-agent-settings/pull/1;;\n" +
 		"  *) exit 1;;\nesac\n"
 	err := os.WriteFile(filepath.Join(directory, "gh"), []byte(script), 0o755)
 	if err != nil {
@@ -205,6 +206,27 @@ func TestWiring(t *testing.T) {
 		code, out, errOut = run("distill", "--path", project)
 		if code != cli.ExitWorked || !strings.Contains(out, "distilled 3 candidates for organizations.acme.projects.shop") || !strings.Contains(out, "rules/go") || !strings.Contains(out, "written to "+filepath.Join(reinHome, "distill")) {
 			t.Fatalf("distill: code %d out %q err %q", code, out, errOut)
+		}
+		distilled := ""
+		for _, line := range strings.Split(out, "\n") {
+			if strings.HasPrefix(line, "written to ") {
+				distilled = strings.TrimPrefix(line, "written to ")
+			}
+		}
+		code, out, errOut = run("propose", distilled, "--yes")
+		if code != cli.ExitWorked || !strings.Contains(out, "proposed 3 declarations to organizations.acme.projects.shop on branch rein/propose-shop-") || !strings.Contains(out, "pull request: https://github.com/Danidani23/acme-agent-settings/pull/1") {
+			t.Fatalf("propose: code %d out %q err %q", code, out, errOut)
+		}
+		branches := exec.Command("git", "--git-dir", remote, "branch", "--list", "rein/propose-*")
+		listed, err := branches.Output()
+		if err != nil || !strings.Contains(string(listed), "rein/propose-shop-") {
+			t.Fatalf("remote branches %q err %v", listed, err)
+		}
+		clone := filepath.Join(reinHome, "orgs", entries[0].Name())
+		head := exec.Command("git", "-C", clone, "rev-parse", "--abbrev-ref", "HEAD")
+		current, err := head.Output()
+		if err != nil || strings.TrimSpace(string(current)) != "main" {
+			t.Fatalf("clone on %q err %v", current, err)
 		}
 	})
 	t.Run("org create reports a protection GitHub refuses and still connects", func(t *testing.T) {

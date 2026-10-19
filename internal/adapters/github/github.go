@@ -5,6 +5,7 @@ package github
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/Danidani23/agents-rein/internal/adapters/execute"
@@ -98,6 +99,30 @@ func (Host) ProtectMainBranch(owner string, name string) (refusedReason string, 
 		return strings.TrimSpace(failure.Stderr), nil
 	}
 	return "", err
+}
+
+// CreatePullRequest runs gh in the clone, so the repository is the clone's
+// origin; the body goes through a file, since it is Markdown of any length.
+func (Host) CreatePullRequest(directory string, request ports.PullRequest) (string, error) {
+	bodyFile, err := os.CreateTemp("", "rein-pull-request-*.md")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(bodyFile.Name())
+	_, err = bodyFile.WriteString(request.Body)
+	if err != nil {
+		bodyFile.Close()
+		return "", err
+	}
+	err = bodyFile.Close()
+	if err != nil {
+		return "", err
+	}
+	result, err := execute.Run(directory, "gh", "pr", "create", "--head", request.Branch, "--title", request.Title, "--body-file", bodyFile.Name())
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(result.Stdout), nil
 }
 
 // SlugOf derives the address segment from a login: lowercase, because macOS

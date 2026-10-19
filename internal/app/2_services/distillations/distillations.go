@@ -22,9 +22,6 @@ type Service struct {
 	Clock func() time.Time
 }
 
-// ReportFile is the report's name inside a distillation.
-const ReportFile = "report.yaml"
-
 // Folder is where the distillations live.
 func (service Service) Folder() string {
 	return filepath.Join(service.Home, "distill")
@@ -77,7 +74,7 @@ func (service Service) Write(name string, candidates []distill.Candidate, report
 		return "", err
 	}
 	header := "# Written by rein distill: what the harness became, and how each candidate compares with the organisation.\n"
-	err = os.WriteFile(filepath.Join(folder, ReportFile), append([]byte(header), encoded...), 0o600)
+	err = os.WriteFile(filepath.Join(folder, distill.ReportFile), append([]byte(header), encoded...), 0o600)
 	if err != nil {
 		return "", err
 	}

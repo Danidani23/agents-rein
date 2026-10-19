@@ -26,7 +26,7 @@ flowchart TB
             runner["saga runner"]
         end
         subgraph services["2_services"]
-            svc["services<br/>identity, organizations, clones, placements, hosting, snapshots, records, workingcopy, ledger, distillations"]
+            svc["services<br/>identity, organizations, clones, placements, hosting, snapshots, records, workingcopy, ledger, distillations, proposals"]
             libs["libraries<br/>address, declaration, lint, exchange, machine, refusal, scaffold, distill"]
         end
     end

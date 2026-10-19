@@ -44,6 +44,9 @@ const (
 	VerdictSameID = "same-id"
 )
 
+// ReportFile is the report's name inside a distillation folder.
+const ReportFile = "report.yaml"
+
 // Report is what a distillation found, written beside the candidates.
 type Report struct {
 	Version    int                `yaml:"version"`

@@ -1096,7 +1096,15 @@ from that project's snapshot.
   `DistillHarness` and `rein distill`, which takes the initialised project's folder,
   `--project`, `--home` for the user's level, or `--snapshot`; a literal secret in `.mcp.json`
   becomes a `${REIN_...}` reference with its variable described; agents and unknown files are
-  listed as skipped; the candidates pass the lint. As planned: the project's snapshot, the
+  listed as skipped; the candidates pass the lint. (c) The minimal `propose`, executed
+  2026-10-19 as the `proposals` service, the workflow `ProposeDeclarations` and `rein
+  propose <folder or zip>`: the candidates are linted in a scratch tree, compared with the
+  catalogue, the identical ones left out and named in the pull request, the rest written on
+  `rein/propose-<level>-<time>`, committed, pushed and opened through `gh pr create` with the
+  comparison and the distillation's notes as the body; a user's level gets the user record
+  when the org repository has none; a failure after the push deletes the branch on the
+  remote too, and the clone ends on main either way. `CreatePullRequest` on the host port,
+  branch operations on the repository port. As planned: the project's snapshot, the
   harness it held, becomes candidate
   declarations at the project's level, `CLAUDE.md` and `.claude/rules/*.md` rules,
   `.claude/skills/` skills, `settings.json` permissions and hooks, `.mcp.json` tool servers,
@@ -1451,3 +1459,5 @@ writes is read from the next session on, not in the same one.
   tool server, permission set and hook formats with their lint.
 - (2026-10-19) P2.18 step (b) executed: `rein distill` turns the latest snapshot into
   candidates under `~/.rein/distill/` with the structural comparison report.
+- (2026-10-19) P2.18 step (c) executed: `rein propose` lints, compares, branches, pushes and
+  opens the pull request; the only writer of declarations into an org repository.

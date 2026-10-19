@@ -499,3 +499,26 @@ func TestDistill(t *testing.T) {
 		t.Fatalf("code %d err %q", code, errOut)
 	}
 }
+
+func TestPropose(t *testing.T) {
+	fixture := newHarness(t)
+	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+	folder := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(folder, "rules"), 0o755)
+	_ = os.WriteFile(filepath.Join(folder, "rules", "brief.md"), []byte("Be brief.\n"), 0o644)
+	code, _, errOut := fixture.run("propose", folder)
+	if code != ExitRefused || !strings.Contains(errOut, "--yes") {
+		t.Fatalf("code %d err %q", code, errOut)
+	}
+	code, out, errOut := fixture.run("propose", folder, "--level", "organizations.acme", "--yes")
+	for _, expected := range []string{"proposed 1 declarations to organizations.acme on branch rein/propose-acme-", "new        rules/brief", "pull request: https://github.com/fake/pull/1"} {
+		if code != ExitWorked || !strings.Contains(out, expected) {
+			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
+		}
+	}
+	code, out, errOut = fixture.runInteractive("\n", "propose", folder, "--level", "organizations.acme.teams.nowhere")
+	if code != ExitWorked || !strings.Contains(out, "Continue?") {
+		// the level's team need not exist for the proposal; the review decides
+		t.Fatalf("code %d out %q err %q", code, out, errOut)
+	}
+}

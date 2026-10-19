@@ -625,3 +625,106 @@ func TestDistillHarness(t *testing.T) {
 		}
 	})
 }
+
+func TestProposeDeclarations(t *testing.T) {
+	t.Run("a distillation goes to its level on a branch, as a pull request, and the clone ends on main", func(t *testing.T) {
+		fixture, created := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop")
+		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "rules", "go.md")
+		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
+		_ = os.WriteFile(existing, []byte("Two-line errors.\n"), 0o644)
+		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		if err != nil {
+			t.Fatalf("distill: %v", err)
+		}
+		result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.Folder})
+		if err != nil || result.Level != "organizations.acme.projects.shop" || len(result.Included) != 2 || len(result.LeftOut) != 1 || !strings.HasPrefix(result.Branch, "rein/propose-shop-") || result.PullRequestURL != "https://github.com/fake/pull/1" {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		if result.LeftOut[0].ID != "go" || result.LeftOut[0].Related[0] != "organizations.acme.rules.go" {
+			t.Fatalf("left out %+v", result.LeftOut)
+		}
+		pullRequest := fixture.host.PullRequests[0]
+		if pullRequest.Branch != result.Branch || !strings.Contains(pullRequest.Title, "Propose 2 declarations to organizations.acme.projects.shop") || !strings.Contains(pullRequest.Body, "| rules | instructions | new |") || !strings.Contains(pullRequest.Body, "Left out, identical") {
+			t.Fatalf("pull request %+v", pullRequest)
+		}
+		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
+		for _, relative := range []string{"declarations/organizations/acme/projects/shop/rules/instructions.md", "declarations/organizations/acme/projects/shop/mcpservers/docs.yaml"} {
+			_, err = os.Stat(filepath.Join(published, filepath.FromSlash(relative)))
+			if err != nil {
+				t.Fatalf("%s not on the branch: %v", relative, err)
+			}
+		}
+		_, err = os.Stat(filepath.Join(published, "declarations", "organizations", "acme", "projects", "shop", "rules", "go.md"))
+		if err == nil {
+			t.Fatalf("the identical rule was proposed")
+		}
+		if fixture.repository.Current != "main" || strings.Join(fixture.repository.Deleted, ",") != result.Branch {
+			t.Fatalf("clone on %q deleted %v", fixture.repository.Current, fixture.repository.Deleted)
+		}
+	})
+	t.Run("a plain folder goes to the user's level with the user record, and a zip is read too", func(t *testing.T) {
+		fixture, created := withTeam(t)
+		folder := t.TempDir()
+		_ = os.MkdirAll(filepath.Join(folder, "rules"), 0o755)
+		_ = os.WriteFile(filepath.Join(folder, "rules", "brief.md"), []byte("Be brief.\n"), 0o644)
+		result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: folder, Title: "My rules"})
+		if err != nil || result.Level != "users.danidani23" || len(result.Included) != 1 || fixture.host.PullRequests[0].Title != "My rules" {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
+		record, err := os.ReadFile(filepath.Join(published, "declarations", "users", "danidani23", "user.yaml"))
+		if err != nil || !strings.Contains(string(record), "github: Danidani23") || !strings.Contains(string(record), "created_at:") {
+			t.Fatalf("user record %q err %v", record, err)
+		}
+	})
+	t.Run("refusals: no declarations, a bad level, a level of another organisation, the lint, nothing new", func(t *testing.T) {
+		fixture, created := withTeam(t)
+		empty := t.TempDir()
+		_, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: empty})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "holds no declarations") {
+			t.Fatalf("err %v", err)
+		}
+		folder := t.TempDir()
+		_ = os.MkdirAll(filepath.Join(folder, "rules"), 0o755)
+		_ = os.WriteFile(filepath.Join(folder, "rules", "brief.md"), []byte("Be brief.\n"), 0o644)
+		for expected, request := range map[string]ProposeRequest{
+			"is not a level": {Source: folder, Level: "organizations.acme.rules.x"},
+			"not connected":  {Source: folder, Level: "organizations.other"},
+		} {
+			_, err = fixture.orchestrator().ProposeDeclarations(request)
+			if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), expected) {
+				t.Fatalf("%s: err %v", expected, err)
+			}
+		}
+		bad := t.TempDir()
+		_ = os.MkdirAll(filepath.Join(bad, "mcpservers"), 0o755)
+		_ = os.WriteFile(filepath.Join(bad, "mcpservers", "x.yaml"), []byte("transport: carrier-pigeon\n"), 0o644)
+		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: bad, Level: "organizations.acme"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "do not pass the lint") || !strings.Contains(err.Error(), "carrier-pigeon") {
+			t.Fatalf("err %v", err)
+		}
+		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "rules", "brief.md")
+		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
+		_ = os.WriteFile(existing, []byte("Be brief.\n"), 0o644)
+		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: folder, Level: "organizations.acme.teams.web"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "nothing new") || len(fixture.repository.Branches) != 0 {
+			t.Fatalf("err %v branches %v", err, fixture.repository.Branches)
+		}
+	})
+	t.Run("a failed pull request abandons the branch locally and on the remote", func(t *testing.T) {
+		fixture, created := withTeam(t)
+		folder := t.TempDir()
+		_ = os.MkdirAll(filepath.Join(folder, "rules"), 0o755)
+		_ = os.WriteFile(filepath.Join(folder, "rules", "brief.md"), []byte("Be brief.\n"), 0o644)
+		fixture.host.FailPullRequest = true
+		_, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: folder, Level: "organizations.acme"})
+		if err == nil || errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "already exists") {
+			t.Fatalf("err %v", err)
+		}
+		if len(fixture.repository.RemoteDeleted) != 1 || len(fixture.repository.Deleted) != 1 || fixture.repository.Current != "main" || len(fixture.repository.Published) != 1 {
+			t.Fatalf("repository %+v remote %s", fixture.repository, created.Remote)
+		}
+	})
+}

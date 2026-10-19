@@ -11,10 +11,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 const header = "# Written by rein org create. Change it through a pull request; rein lint checks it.\n"
@@ -85,6 +87,17 @@ func ProjectRecord(organizationSlug string, project declaration.Project) (relati
 		return "", "", err
 	}
 	return path.Join("declarations", "organizations", organizationSlug, "projects", project.Slug, "project.yaml"), header + string(record), nil
+}
+
+// UserRecord is the file of a user record, by path relative to the org
+// repository's root: the login exactly as the host has it, the slug its
+// lowercase form (D8), stamped with the time (D20).
+func UserRecord(identity ports.Identity, createdAt time.Time) (relativePath string, content string, err error) {
+	record, err := yaml.Marshal(declaration.User{Slug: identity.Slug, GitHub: identity.Login, CreatedAt: createdAt})
+	if err != nil {
+		return "", "", err
+	}
+	return path.Join("declarations", "users", identity.Slug, "user.yaml"), header + string(record), nil
 }
 
 // Write puts files under root.

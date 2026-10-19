@@ -21,6 +21,13 @@ type NewRepository struct {
 	Private     bool
 }
 
+// PullRequest describes a pull request to open from a branch of a clone.
+type PullRequest struct {
+	Branch string
+	Title  string
+	Body   string
+}
+
 // Host is the forge that holds org repositories and identities.
 type Host interface {
 	// Identity returns the active account, or an error that says how to log in.
@@ -37,6 +44,9 @@ type Host interface {
 	// the default branch, administrators excepted (D13). A host that refuses
 	// it for the account's plan returns the reason and no error.
 	ProtectMainBranch(owner string, name string) (refusedReason string, err error)
+	// CreatePullRequest opens a pull request for the pushed branch of the
+	// clone at directory, against its default branch, and returns its URL.
+	CreatePullRequest(directory string, request PullRequest) (url string, err error)
 }
 
 // Repository is version control on this machine.
@@ -72,6 +82,16 @@ type Repository interface {
 	HasStagedChanges(directory string) (bool, error)
 	// CommitStaged commits what is staged and returns the commit's hash.
 	CommitStaged(directory string, message string) (hash string, err error)
+	// CreateBranch makes a branch from the current one and switches to it.
+	CreateBranch(directory string, branch string) error
+	// Checkout switches to a branch.
+	Checkout(directory string, branch string) error
+	// DeleteBranch deletes a local branch, merged or not.
+	DeleteBranch(directory string, branch string) error
+	// PushBranch pushes a branch to origin.
+	PushBranch(directory string, branch string) error
+	// DeleteRemoteBranch deletes a branch on origin.
+	DeleteRemoteBranch(directory string, branch string) error
 }
 
 // Agent is one coding agent rein writes settings for.
