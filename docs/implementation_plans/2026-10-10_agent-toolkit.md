@@ -146,3 +146,7 @@ the project-specific lines kept in its own instructions, its `CLAUDE.md` index u
   session. `w2going`'s `CLAUDE.md` still names `install.sh` (you).
 - (2026-10-15) The harness tool was renamed to Agents Rein, command `rein`; entries above keep
   the old name.
+- (2026-10-19) The `go-style` skill's Naming section rewritten on the user's rule from the
+  rein work: names are descriptive everywhere, subject, kind and role, no abbreviations, no
+  single letters beyond `err`, `ok`, `ctx`, `t` and positions; receivers are nouns. Reaches
+  every repository's next session.

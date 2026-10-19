@@ -8,13 +8,13 @@ import (
 	"github.com/Danidani23/agents-rein/internal/version"
 )
 
-func newVersionCommand(env *environment) *cobra.Command {
+func newVersionCommand(environment *commandEnvironment) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print the rein version",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			fmt.Fprintf(env.out, "rein %s\n", version.String())
+			fmt.Fprintf(environment.out, "rein %s\n", version.String())
 			return nil
 		},
 	}

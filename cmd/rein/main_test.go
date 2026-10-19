@@ -26,13 +26,20 @@ func isolate(t *testing.T, login string) (reinHome string) {
 	t.Setenv("REIN_HOME", reinHome)
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), ".claude"))
 	directory := t.TempDir()
-	script := "#!/bin/sh\ncase \"$*\" in\n  \"api user --jq .login\")"
+	remotes := filepath.Join(reinHome, "stub-remotes")
+	_ = os.MkdirAll(remotes, 0o755)
+	script := "#!/bin/sh\nREMOTES=\"" + remotes + "\"\ncase \"$*\" in\n  \"api user --jq .login\")"
 	if login == "" {
 		script += " echo 'gh: not logged in' >&2; exit 1;;\n"
 	} else {
 		script += " echo " + login + ";;\n"
 	}
-	script += "  *) exit 1;;\nesac\n"
+	script += "  \"config get git_protocol\") echo https;;\n" +
+		"  \"repo create \"*) name=\"${3#*/}\"; git init -q --bare \"$REMOTES/$name.git\" && git --git-dir=\"$REMOTES/$name.git\" symbolic-ref HEAD refs/heads/main;;\n" +
+		"  \"repo view \"*) name=\"${3#*/}\"; echo \"$REMOTES/$name.git\";;\n" +
+		"  \"repo delete \"*) name=\"${3#*/}\"; rm -rf \"$REMOTES/$name.git\";;\n" +
+		"  \"api -X PUT \"*) if [ \"$GH_STUB_PROTECTION\" = 403 ]; then echo 'gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)' >&2; exit 1; fi;;\n" +
+		"  *) exit 1;;\nesac\n"
 	err := os.WriteFile(filepath.Join(directory, "gh"), []byte(script), 0o755)
 	if err != nil {
 		t.Fatalf("stub gh: %v", err)
@@ -42,6 +49,17 @@ func isolate(t *testing.T, login string) (reinHome string) {
 		t.Fatalf("stub claude: %v", err)
 	}
 	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// git commits need an identity and must not read the machine's config
+	emptyConfig := filepath.Join(t.TempDir(), "gitconfig")
+	_ = os.WriteFile(emptyConfig, nil, 0o644)
+	t.Setenv("GIT_CONFIG_GLOBAL", emptyConfig)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	for _, variable := range []string{"GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"} {
+		t.Setenv(variable, "test")
+	}
+	for _, variable := range []string{"GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"} {
+		t.Setenv(variable, "test@example.com")
+	}
 	return reinHome
 }
 
@@ -106,6 +124,37 @@ func TestWiring(t *testing.T) {
 		_, err = os.Stat(filepath.Join(reinHome, "orgs"))
 		if err == nil {
 			t.Fatalf("orgs folder still there")
+		}
+	})
+	t.Run("org create runs through the stubbed gh and real git, and snapshots the agent home", func(t *testing.T) {
+		reinHome := isolate(t, "Danidani23")
+		claudeHome := os.Getenv("CLAUDE_CONFIG_DIR")
+		_ = os.MkdirAll(claudeHome, 0o755)
+		_ = os.WriteFile(filepath.Join(claudeHome, "CLAUDE.md"), []byte("be brief"), 0o644)
+		code, out, errOut := run("org", "create", "--name", "Acme", "--yes")
+		remote := filepath.Join(reinHome, "stub-remotes", "acme-agent-settings.git")
+		if code != cli.ExitWorked || !strings.Contains(out, "created Danidani23/acme-agent-settings (private) at "+remote) || !strings.Contains(out, "protected main") || !strings.Contains(out, "connected acme (Acme) at") || !strings.Contains(out, "snapshot of an agent's home: "+filepath.Join(reinHome, "snapshots")) {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+		entries, _ := os.ReadDir(filepath.Join(reinHome, "orgs"))
+		if len(entries) != 1 || strings.HasPrefix(entries[0].Name(), ".create-") {
+			t.Fatalf("orgs: %v", entries)
+		}
+		_, err := os.Stat(filepath.Join(reinHome, "orgs", entries[0].Name(), "CODEOWNERS"))
+		if err != nil {
+			t.Fatalf("clone: %v", err)
+		}
+		code, out, _ = run("org", "list")
+		if code != cli.ExitWorked || !strings.Contains(out, "* acme  "+remote) {
+			t.Fatalf("list: code %d out %q", code, out)
+		}
+	})
+	t.Run("org create reports a protection GitHub refuses and still connects", func(t *testing.T) {
+		isolate(t, "Danidani23")
+		t.Setenv("GH_STUB_PROTECTION", "403")
+		code, out, errOut := run("org", "create", "--name", "Acme", "--yes")
+		if code != cli.ExitWorked || !strings.Contains(errOut, "warning: main is not protected; GitHub said: gh: Upgrade to GitHub Pro") || !strings.Contains(out, "connected acme (Acme)") {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
 	})
 	t.Run("a remote that cannot be cloned exits 3", func(t *testing.T) {

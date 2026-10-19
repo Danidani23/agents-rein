@@ -13,10 +13,30 @@ type Identity struct {
 	Slug  string
 }
 
+// NewRepository describes a repository to create on the host.
+type NewRepository struct {
+	Owner       string
+	Name        string
+	Description string
+	Private     bool
+}
+
 // Host is the forge that holds org repositories and identities.
 type Host interface {
 	// Identity returns the active account, or an error that says how to log in.
 	Identity() (Identity, error)
+	// GitProtocol is what the user's host tooling clones and pushes with,
+	// "ssh" or "https".
+	GitProtocol() (string, error)
+	// CreateRepository creates the repository and returns the remote URL to
+	// push to and clone from.
+	CreateRepository(repository NewRepository) (remote string, err error)
+	// DeleteRepository deletes owner/name: the compensation of a failed create.
+	DeleteRepository(owner string, name string) error
+	// ProtectMainBranch requires a pull request with a code-owner review on
+	// the default branch, administrators excepted (D13). A host that refuses
+	// it for the account's plan returns the reason and no error.
+	ProtectMainBranch(owner string, name string) (refusedReason string, err error)
 }
 
 // Repository is version control on this machine.
@@ -27,6 +47,9 @@ type Repository interface {
 	// Clone clones remote into directory, which must not exist, without ever
 	// prompting.
 	Clone(remote string, directory string) error
+	// Publish makes directory a repository on main with one commit of
+	// everything in it, and pushes it to remote as origin.
+	Publish(directory string, remote string, message string) error
 }
 
 // Agent is one coding agent rein writes settings for.
@@ -35,6 +58,11 @@ type Agent interface {
 	Name() string
 	// Installed reports whether the agent's command is on this machine.
 	Installed() bool
+	// Home is the folder the agent reads its user-level settings from.
+	Home() (string, error)
+	// HarnessPaths are the files and folders under Home that hold settings:
+	// instructions, rules, skills, permissions; never transcripts or caches.
+	HarnessPaths() []string
 	// Unplace removes one placement rein made, when it is still what rein
 	// made; removed is false with an empty reason when nothing is there.
 	Unplace(placed machine.Placement) (removed bool, reason string, err error)

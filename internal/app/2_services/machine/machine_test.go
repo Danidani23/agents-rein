@@ -4,7 +4,7 @@ import "testing"
 
 func TestState(t *testing.T) {
 	t.Run("Empty has a usable clones map", func(t *testing.T) {
-		if Empty().Clones == nil {
+		if Empty().OrgClonePaths == nil {
 			t.Fatalf("nil clones")
 		}
 	})

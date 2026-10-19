@@ -28,5 +28,5 @@ func wire() (orchestration.Orchestrator, error) {
 		return orchestration.Orchestrator{}, err
 	}
 	services := orchestration.NewServices(home, github.Host{}, git.Repository{}, localstate.Store{Home: home}, []ports.Agent{claudecode.Agent{}})
-	return orchestration.NewLocal(services), nil
+	return orchestration.New(services), nil
 }

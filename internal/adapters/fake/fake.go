@@ -1,0 +1,234 @@
+// Package fake holds in-memory adapters for every port, for the tests of the
+// services, the orchestration and the gateway. A fake is an adapter too: it
+// implements a port, only without the machine behind it.
+package fake
+
+import (
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
+	"github.com/Danidani23/agents-rein/internal/ports"
+)
+
+// Host is a version-control host with one account; an empty Login is a
+// logged-out host and answers as gh does. It records the repositories it
+// was asked to create and delete.
+type Host struct {
+	Login             string
+	Protocol          string
+	Created           []ports.NewRepository
+	Deleted           []string
+	FailCreate        bool
+	ProtectionRefusal string
+	FailProtection    bool
+	ProtectedBranches []string
+}
+
+// Identity returns the account or the error that names the way in.
+func (host *Host) Identity() (ports.Identity, error) {
+	if host.Login == "" {
+		return ports.Identity{}, errors.New("gh is not logged in to GitHub; run gh auth login, then try again")
+	}
+	return ports.Identity{Login: host.Login, Slug: strings.ToLower(host.Login)}, nil
+}
+
+// GitProtocol is the configured protocol, https by default.
+func (host *Host) GitProtocol() (string, error) {
+	if host.Protocol == "" {
+		return "https", nil
+	}
+	return host.Protocol, nil
+}
+
+// CreateRepository records the request and returns a fake remote.
+func (host *Host) CreateRepository(repository ports.NewRepository) (string, error) {
+	if host.FailCreate {
+		return "", errors.New("gh repo create failed: name already exists on this account")
+	}
+	host.Created = append(host.Created, repository)
+	return "fake://" + repository.Owner + "/" + repository.Name, nil
+}
+
+// DeleteRepository records the deletion.
+func (host *Host) DeleteRepository(owner string, name string) error {
+	host.Deleted = append(host.Deleted, owner+"/"+name)
+	return nil
+}
+
+// ProtectMainBranch records the protection, or refuses or fails on demand.
+func (host *Host) ProtectMainBranch(owner string, name string) (string, error) {
+	if host.FailProtection {
+		return "", errors.New("gh api failed: network down")
+	}
+	if host.ProtectionRefusal != "" {
+		return host.ProtectionRefusal, nil
+	}
+	host.ProtectedBranches = append(host.ProtectedBranches, owner+"/"+name+"/main")
+	return "", nil
+}
+
+// Repository "clones" by writing an org repository with the organisation
+// record it was given under declarations/organizations/<Slug>/, unless the
+// remote was published through it, in which case it copies what was
+// published. An empty Record writes the folder without a record, Fail fails
+// the clone, FailPublish fails the publish.
+type Repository struct {
+	Record      string
+	Slug        string
+	Fail        bool
+	FailPublish bool
+	Published   map[string]string
+}
+
+// Preflight always passes: the fake needs no git.
+func (*Repository) Preflight() error {
+	return nil
+}
+
+// Clone writes the fake org repository into directory.
+func (repository *Repository) Clone(remote string, directory string) error {
+	if repository.Fail {
+		return errors.New("git clone failed: repository not found")
+	}
+	published, found := repository.Published[remote]
+	if found {
+		return copyTree(published, directory)
+	}
+	slug := repository.Slug
+	if slug == "" {
+		slug = "acme"
+	}
+	folder := filepath.Join(directory, "declarations", "organizations", slug)
+	err := os.MkdirAll(folder, 0o755)
+	if err != nil {
+		return err
+	}
+	if repository.Record == "" {
+		return nil
+	}
+	return os.WriteFile(filepath.Join(folder, "organization.yaml"), []byte(repository.Record), 0o644)
+}
+
+// Publish remembers directory as the content of remote, so a later clone of
+// the remote returns it.
+func (repository *Repository) Publish(directory string, remote string, message string) error {
+	if repository.FailPublish {
+		return errors.New("git push failed: remote rejected")
+	}
+	if repository.Published == nil {
+		repository.Published = map[string]string{}
+	}
+	copied, err := os.MkdirTemp("", "fake-remote-*")
+	if err != nil {
+		return err
+	}
+	err = copyTree(directory, copied)
+	if err != nil {
+		return err
+	}
+	repository.Published[remote] = copied
+	return nil
+}
+
+// copyTree copies every regular file under source into destination.
+func copyTree(source string, destination string) error {
+	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(destination, relative)
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, content, 0o644)
+	})
+}
+
+// Agent is an agent that records what it was asked to unplace, with a home
+// folder the tests fill. A placement whose path contains "foreign" is
+// reported as not rein's and kept.
+type Agent struct {
+	Present      bool
+	HomePath     string
+	HarnessFiles []string
+	Unplaced     []string
+}
+
+// Name is the agent's name.
+func (*Agent) Name() string {
+	return "fake-agent"
+}
+
+// Installed says whether the agent counts as installed.
+func (agent *Agent) Installed() bool {
+	return agent.Present
+}
+
+// Home is the test's folder for the agent.
+func (agent *Agent) Home() (string, error) {
+	if agent.HomePath == "" {
+		return "", errors.New("fake agent has no home")
+	}
+	return agent.HomePath, nil
+}
+
+// HarnessPaths are the test's harness files, or the instructions file.
+func (agent *Agent) HarnessPaths() []string {
+	if len(agent.HarnessFiles) == 0 {
+		return []string{"INSTRUCTIONS.md", "skills"}
+	}
+	return agent.HarnessFiles
+}
+
+// Unplace records the request and removes everything but a foreign path.
+func (agent *Agent) Unplace(placed machine.Placement) (removed bool, reason string, err error) {
+	agent.Unplaced = append(agent.Unplaced, placed.Path)
+	if strings.Contains(placed.Path, "foreign") {
+		return false, "links elsewhere", nil
+	}
+	return true, "", nil
+}
+
+// State keeps the machine state in memory and fails the next loads or saves
+// on demand, which is how a crash and a compensation get exercised.
+type State struct {
+	Current   machine.State
+	FailLoads int
+	FailSaves int
+}
+
+// NewState is an empty state.
+func NewState() *State {
+	return &State{Current: machine.Empty()}
+}
+
+// Load returns the state or fails when asked to.
+func (state *State) Load() (machine.State, error) {
+	if state.FailLoads > 0 {
+		state.FailLoads--
+		return machine.State{}, errors.New("state: cannot read state.yaml")
+	}
+	return state.Current, nil
+}
+
+// Save keeps the state or fails when asked to.
+func (state *State) Save(updated machine.State) error {
+	if state.FailSaves > 0 {
+		state.FailSaves--
+		return errors.New("state: disk full")
+	}
+	state.Current = updated
+	return nil
+}

@@ -9,7 +9,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 )
 
-func newStatusCommand(env *environment) *cobra.Command {
+func newStatusCommand(environment *commandEnvironment) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Show who you are to rein and what it has set up on this machine",
@@ -21,63 +21,63 @@ func newStatusCommand(env *environment) *cobra.Command {
 			"says so and still shows the rest.",
 		Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			orchestrator, err := env.orchestrate()
+			orchestrator, err := environment.orchestrate()
 			if err != nil {
 				return err
 			}
-			report, err := orchestrator.Queries.Status()
+			report, err := orchestrator.Status()
 			if err != nil {
 				return err
 			}
-			printStatus(env, report)
+			printStatus(environment, report)
 			return nil
 		},
 	}
 }
 
-func printStatus(env *environment, report orchestration.StatusReport) {
+func printStatus(environment *commandEnvironment, report orchestration.StatusReport) {
 	if report.IdentityError != "" {
-		fmt.Fprintf(env.out, "github      none: %s\n", report.IdentityError)
+		fmt.Fprintf(environment.out, "github      none: %s\n", report.IdentityError)
 	} else {
-		fmt.Fprintf(env.out, "github      %s  (active gh account; slug %s)\n", report.Identity.Login, report.Identity.Slug)
+		fmt.Fprintf(environment.out, "github      %s  (active gh account; slug %s)\n", report.Identity.Login, report.Identity.Slug)
 	}
 	if len(report.Agents) == 0 {
-		fmt.Fprintf(env.out, "agents      none found; this build writes for claude-code\n")
+		fmt.Fprintf(environment.out, "agents      none found; this build writes for claude-code\n")
 	} else {
-		fmt.Fprintf(env.out, "agents      %s\n", strings.Join(report.Agents, ", "))
+		fmt.Fprintf(environment.out, "agents      %s\n", strings.Join(report.Agents, ", "))
 	}
-	fmt.Fprintf(env.out, "home        %s\n", report.Home)
-	fmt.Fprintf(env.out, "\nplacements  %d\n", len(report.Placements))
+	fmt.Fprintf(environment.out, "home        %s\n", report.Home)
+	fmt.Fprintf(environment.out, "\nplacements  %d\n", len(report.Placements))
 	for _, placed := range report.Placements {
 		mark := "ok     "
 		if !placed.TargetExists {
 			mark = "missing"
 		}
-		fmt.Fprintf(env.out, "  %s  %-6s %-4s %s -> %s\n", mark, placed.Owner, placed.Mode, placed.Path, placed.Target)
+		fmt.Fprintf(environment.out, "  %s  %-6s %-4s %s -> %s\n", mark, placed.Owner, placed.Mode, placed.Path, placed.Target)
 	}
 	if report.Missing > 0 {
-		fmt.Fprintf(env.out, "  %d targets are missing; run rein reset to remove the dangling links\n", report.Missing)
+		fmt.Fprintf(environment.out, "  %d targets are missing; run rein reset to remove the dangling links\n", report.Missing)
 	}
-	fmt.Fprintf(env.out, "\norganisations  %d\n", len(report.Organizations))
+	fmt.Fprintf(environment.out, "\norganisations  %d\n", len(report.Organizations))
 	for _, ref := range report.Organizations {
 		marker := " "
 		if ref.Slug == report.Active {
 			marker = "*"
 		}
-		fmt.Fprintf(env.out, "  %s %s  %s\n", marker, ref.Slug, ref.Remote)
+		fmt.Fprintf(environment.out, "  %s %s  %s\n", marker, ref.Slug, ref.Remote)
 	}
-	fmt.Fprintf(env.out, "\nprojects  %d\n", len(report.Projects))
+	fmt.Fprintf(environment.out, "\nprojects  %d\n", len(report.Projects))
 	for _, project := range report.Projects {
-		fmt.Fprintf(env.out, "  %s  %s\n", project.Address, project.ClonePath)
+		fmt.Fprintf(environment.out, "  %s  %s\n", project.Address, project.ClonePath)
 	}
 	if len(report.Imports) > 0 {
-		fmt.Fprintf(env.out, "\nimports  %d\n", len(report.Imports))
+		fmt.Fprintf(environment.out, "\nimports  %d\n", len(report.Imports))
 		for _, imported := range report.Imports {
 			origin := imported.Source
 			if imported.FromUser != "" {
 				origin = "from " + imported.FromUser
 			}
-			fmt.Fprintf(env.out, "  %s  %s  %s\n", imported.Hash[:12], origin, imported.Path)
+			fmt.Fprintf(environment.out, "  %s  %s  %s\n", imported.Hash[:12], origin, imported.Path)
 		}
 	}
 }

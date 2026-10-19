@@ -23,6 +23,17 @@ func (service Service) ImportsFolder() string {
 	return filepath.Join(service.Home, "imports")
 }
 
+// InstalledAgents names the agents found on this machine.
+func (service Service) InstalledAgents() []string {
+	var names []string
+	for _, agent := range service.Agents {
+		if agent.Installed() {
+			names = append(names, agent.Name())
+		}
+	}
+	return names
+}
+
 // List returns the recorded placements and imports.
 func (service Service) List() (placements []machine.Placement, imports []machine.Import, err error) {
 	state, err := service.State.Load()

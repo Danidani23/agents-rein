@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 )
 
 const resetExplanation = "A placement is one link (a copy on Windows) that rein made in your agent's home folder,\n" +
@@ -14,7 +16,7 @@ const resetExplanation = "A placement is one link (a copy on Windows) that rein 
 	"design rein writes nothing into the agent's home: every level reaches a project clone through\n" +
 	"rein sync, so after reset nothing needs bringing back."
 
-func newResetCommand(env *environment) *cobra.Command {
+func newResetCommand(environment *commandEnvironment) *cobra.Command {
 	var all, yes bool
 	command := &cobra.Command{
 		Use:   "reset",
@@ -29,7 +31,7 @@ func newResetCommand(env *environment) *cobra.Command {
 		Example: "  rein reset\n  rein reset --all --yes",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			return runReset(env, all, yes)
+			return runReset(environment, all, yes)
 		},
 	}
 	command.Flags().BoolVar(&all, "all", false, "also forget organisations, delete their clones and the project registrations")
@@ -37,59 +39,59 @@ func newResetCommand(env *environment) *cobra.Command {
 	return command
 }
 
-func runReset(env *environment, all bool, yes bool) error {
-	orchestrator, err := env.orchestrate()
+func runReset(environment *commandEnvironment, all bool, yes bool) error {
+	orchestrator, err := environment.orchestrate()
 	if err != nil {
 		return err
 	}
-	plan, err := orchestrator.Queries.PlanReset(all)
+	plan, err := orchestrator.PlanReset(all)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(env.out, "This will remove:\n")
-	fmt.Fprintf(env.out, "- %d placements: the links rein made in your agent's home so the agent reads your rules\n  and skills. Removing them takes those away from the agent; your own files are untouched.\n", len(plan.Placements))
+	fmt.Fprintf(environment.out, "This will remove:\n")
+	fmt.Fprintf(environment.out, "- %d placements: the links rein made in your agent's home so the agent reads your rules\n  and skills. Removing them takes those away from the agent; your own files are untouched.\n", len(plan.Placements))
 	for _, placed := range plan.Placements {
-		fmt.Fprintf(env.out, "    %s\n", placed.Path)
+		fmt.Fprintf(environment.out, "    %s\n", placed.Path)
 	}
 	if len(plan.Imports) > 0 {
-		fmt.Fprintf(env.out, "- %d imports: copies under %s that the placements point at,\n  from before import went through the org repository.\n", len(plan.Imports), plan.ImportsFolder)
+		fmt.Fprintf(environment.out, "- %d imports: copies under %s that the placements point at,\n  from before import went through the org repository.\n", len(plan.Imports), plan.ImportsFolder)
 	}
 	if plan.All {
-		fmt.Fprintf(env.out, "- %d organisations with their clones under %s, and %d project registrations:\n  what this machine knows about them. The remotes on GitHub are not touched.\n", len(plan.Organizations), plan.OrgsFolder, len(plan.Projects))
+		fmt.Fprintf(environment.out, "- %d organisations with their clones under %s, and %d project registrations:\n  what this machine knows about them. The remotes on GitHub are not touched.\n", len(plan.Organizations), plan.OrgClonesFolder, len(plan.Projects))
 	}
 	if !yes {
-		prompter := env.prompter()
+		prompter := environment.prompter()
 		if !prompter.CanAsk() {
-			return refuse("no terminal to confirm on; pass --yes")
+			return refusal.New("no terminal to confirm on; pass --yes")
 		}
 		confirmed, err := prompter.Confirm("Continue?", resetExplanation)
 		if err != nil {
-			return refuse(err.Error())
+			return refusal.New(err.Error())
 		}
 		if !confirmed {
-			return refuse("nothing changed")
+			return refusal.New("nothing changed")
 		}
 	}
-	result, err := orchestrator.Workflows.ResetMachine(plan)
+	result, err := orchestrator.ResetMachine(plan)
 	if err != nil {
 		return err
 	}
 	for _, unplaced := range result.Placements {
 		switch {
 		case unplaced.Removed:
-			fmt.Fprintf(env.out, "removed  %s\n", unplaced.Path)
+			fmt.Fprintf(environment.out, "removed  %s\n", unplaced.Path)
 		case unplaced.Reason != "":
-			fmt.Fprintf(env.errOut, "skipped  %s: %s\n", unplaced.Path, unplaced.Reason)
+			fmt.Fprintf(environment.errOut, "skipped  %s: %s\n", unplaced.Path, unplaced.Reason)
 		default:
-			fmt.Fprintf(env.out, "gone     %s\n", unplaced.Path)
+			fmt.Fprintf(environment.out, "gone     %s\n", unplaced.Path)
 		}
 	}
-	for _, id := range result.RemovedClones {
-		fmt.Fprintf(env.out, "removed  clone %s\n", id)
+	for _, organizationID := range result.RemovedOrgClones {
+		fmt.Fprintf(environment.out, "removed  clone %s\n", organizationID)
 	}
-	fmt.Fprintf(env.out, "reset done; %d placements kept because they were not rein's\n", result.Kept)
+	fmt.Fprintf(environment.out, "reset done; %d placements kept because they were not rein's\n", result.Kept)
 	if result.Kept > 0 {
-		return refuse(fmt.Sprintf("%d placements skipped", result.Kept))
+		return refusal.New(fmt.Sprintf("%d placements skipped", result.Kept))
 	}
 	return nil
 }

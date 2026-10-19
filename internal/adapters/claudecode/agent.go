@@ -30,6 +30,19 @@ func (Agent) Installed() bool {
 	return err == nil
 }
 
+// Home is CLAUDE_CONFIG_DIR when set, else ~/.claude.
+func (Agent) Home() (string, error) {
+	return ClaudeHome()
+}
+
+// HarnessPaths are the settings under the home: the global instructions,
+// the settings file with permissions and hooks, and the folders Claude Code
+// reads rules, skills, agents and commands from. Transcripts, memory, todos
+// and plugin caches are left out.
+func (Agent) HarnessPaths() []string {
+	return []string{"CLAUDE.md", "settings.json", "rules", "skills", "agents", "commands"}
+}
+
 // Unplace removes one placement when it is still what rein made: a link
 // whose target is the recorded one, dangling or not, or a recorded copy.
 func (Agent) Unplace(placed machine.Placement) (removed bool, reason string, err error) {

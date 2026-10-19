@@ -52,8 +52,8 @@ func (store Store) Load() (machine.State, error) {
 	if err != nil {
 		return machine.State{}, fmt.Errorf("%s: %w", filepath.Join(store.Home, stateFile), err)
 	}
-	if state.Clones == nil {
-		state.Clones = map[string]string{}
+	if state.OrgClonePaths == nil {
+		state.OrgClonePaths = map[string]string{}
 	}
 	return state, nil
 }

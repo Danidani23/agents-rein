@@ -1,22 +1,29 @@
 // Package machine is the model of what rein remembers about one machine: the
-// connected organisations, the active one, the clones, the project
-// registrations and the placements it made. It is a cache (D9), rebuildable
-// from the clones and from sync, and it never holds an identity or a secret.
+// connected organisations and since when, the active one, where their clones
+// are, the project registrations and the placements it made. Every record
+// carries the time it was written (D20). It never holds an identity or a
+// secret.
 package machine
+
+import "time"
 
 // OrganizationRef is a connected organisation. Host is the forge named in
 // its record, mirrored here so the right adapter is picked without reading
 // the clone.
 type OrganizationRef struct {
-	ID     string `yaml:"id"`
-	Slug   string `yaml:"slug"`
-	Remote string `yaml:"remote"`
-	Host   string `yaml:"host,omitempty"`
+	ID          string    `yaml:"id"`
+	Slug        string    `yaml:"slug"`
+	Remote      string    `yaml:"remote"`
+	Host        string    `yaml:"host,omitempty"`
+	ConnectedAt time.Time `yaml:"connected_at,omitempty"`
 }
 
-// Placement is one link or copy rein made in an agent's home. Owner is the
-// command that made it and Source what it placed it from; a command may
-// replace only its own placements from the same source.
+// Placement is one link or copy rein made in an agent's home and, from sync
+// on, in a project clone. Owner is the command that made it and Source what
+// it placed it from; a command may replace only its own placements from the
+// same source. This is the agent-home case only; P2.15 grows it into the
+// ledger's record with the agent, the scope, the time and what was there
+// before.
 type Placement struct {
 	Path   string `yaml:"path"`
 	Target string `yaml:"target"`
@@ -48,7 +55,7 @@ type Import struct {
 type State struct {
 	Organizations []OrganizationRef `yaml:"organizations"`
 	Active        string            `yaml:"active,omitempty"`
-	Clones        map[string]string `yaml:"clones"`
+	OrgClonePaths map[string]string `yaml:"org_clone_paths"`
 	Projects      []Project         `yaml:"projects"`
 	Placements    []Placement       `yaml:"placements"`
 	Imports       []Import          `yaml:"imports,omitempty"`
@@ -56,11 +63,11 @@ type State struct {
 
 // Empty is the state of a machine rein has never touched.
 func Empty() State {
-	return State{Clones: map[string]string{}}
+	return State{OrgClonePaths: map[string]string{}}
 }
 
 // Organization finds a connected organisation by slug.
-func (state State) Organization(slug string) (ref OrganizationRef, found bool) {
+func (state State) Organization(slug string) (organization OrganizationRef, found bool) {
 	for _, candidate := range state.Organizations {
 		if candidate.Slug == slug {
 			return candidate, true

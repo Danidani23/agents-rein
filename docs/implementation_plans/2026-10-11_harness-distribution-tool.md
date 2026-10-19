@@ -183,18 +183,23 @@ committed instead of gitignored (D4).
   agent's help and offers them through `propose`. Connect places nothing (D4). Order: P2.4,
   then P2.7 with the snapshot, then P2.5.
 - 💬 **D12 — The mutation ledger, `restore` and `reset`.** Proposed 2026-10-16 from the user's
-  model: rein records every mutation it makes on this machine, per agent home and per clone,
+  model, reworded 2026-10-19 on the user's question: rein records every mutation it makes on
+  this machine, in an agent's home (`~/.claude/`) and in a project clone, the working copy of
+  a project repository where `sync` writes files; the org repository clone under
+  `~/.rein/orgs/` is rein's own cache and not a mutation of anything the user owns. It records
   what it moved out, kept only in `~/.rein/snapshots/` as path to content and never in any
   repository, and what it placed in. `restore` removes everything rein placed and puts the
   moved-out files back, machine as before rein; `reset` restores first, then deletes the
   ledger, the snapshots, the clones and the registrations, so no placed file is ever
   orphaned. To confirm: that `reset` implies `restore`.
-- 💬 **D13 — The organisation's owner writes records directly.** Proposed 2026-10-16. Teams
+- ✅ **D13 — The organisation's owner writes records directly.** Proposed 2026-10-16, confirmed
+  2026-10-19. Teams
   and projects are records; the account that ran `org create` writes them to `main` while
   setting the organisation up, and branch protection exempts the owner for records only, since
   a pull request approved by its own author is ceremony. Declarations always go through
-  `propose`. To confirm.
-- 💬 **D14 — `init` commits the move-out itself.** Proposed 2026-10-16, reversing the
+  `propose`. In `org create` it is the protection of `main` with administrators not enforced.
+- ✅ **D14 — `init` commits the move-out itself.** Proposed 2026-10-16, confirmed 2026-10-19,
+  reversing the
   "commits nothing" part of D4 for this one case. After the move-out the deleted paths are
   still tracked in `HEAD`, a `.gitignore` entry does not ignore a tracked file, and the
   generated files `sync` writes at those paths would show as modifications and could be
@@ -202,7 +207,7 @@ committed instead of gitignored (D4).
   `init` stages exactly the paths it touched, commits with a fixed message, verifies the
   commit, offers `--no-commit`, and on a failed commit reports, leaves the paths staged and
   records the clone as not committed; `sync` refuses to write at tracked paths until then.
-  Pushing stays the user's. To confirm.
+  Pushing stays the user's.
 - ✅ **D16 — Gateway, orchestration, services: one modular monolith behind interfaces.**
   Decided 2026-10-16, on D15. The gateway depends on the orchestration through one interface
   per area, `Organizations` and `Machine` today, `Projects`, `Review` and `Distill` to come,
@@ -215,7 +220,7 @@ committed instead of gitignored (D4).
   `architecture` and `version` beside them; Go accepts the names, the package names stay
   plain, and the import paths carry the numbers, which is the one cost accepted for the
   neatness. Refined by D17: the areas are services, and the orchestration keeps only
-  workflows and queries.
+  workflows and queries. D18 removed the interfaces in front of the orchestration.
 - ✅ **D17 — Services hold the single operations; the orchestration holds workflows and
   queries only.** Decided 2026-10-17 on the user's review of D16: `Organizations` and
   `Machine` in the orchestration were services wearing the orchestration's name. Now
@@ -234,6 +239,43 @@ committed instead of gitignored (D4).
   no service package. The rules and where a new piece goes are written out in
   [docs/architecture.md](../architecture.md), with a local `architecture` skill pointing at
   it, so the document travels with the repository and the skill with rein.
+- ✅ **D18 — One concrete orchestrator, no interface in front of it.** Decided 2026-10-18 on
+  the user's question of 2026-10-17 why a `local` implementation exists when the orchestrator
+  will never run anywhere else. The interfaces of D16 bought one thing, fakes for the
+  gateway's tests, and nothing for a backend: if one ever exists the gateway calls it, and Go
+  lets an interface be drawn around the concrete type that day with no change to it. So
+  `Orchestrator` is a struct embedding `Services`, built by `orchestration.New`; the gateway
+  calls `orchestrator.ConnectOrganization` for a workflow and `orchestrator.Organizations.List()`
+  for a single operation. The identity gate moves to the gateway, `requireIdentity` in front
+  of every command that acts for a user, like authentication at a gateway, and the workflows
+  stop checking it themselves. The fakes for the ports become an adapter,
+  `internal/adapters/fake`, shared by the tests of the services, the orchestration and the
+  gateway, which now drive real code over a scratch home. Refusals become one library,
+  `2_services/refusal`, that every layer raises and the gateway maps to exit 1 in one place,
+  replacing the orchestration's `Refusal` and the gateway's own `commandRefusal`. The
+  one-workflow-per-file test reads the methods of `Orchestrator`: each lives in `queries.go`
+  or in `workflow_<name>.go`.
+- ✅ **D19 — The machine state stays a YAML file that rein owns.** Decided 2026-10-18 on the
+  user's question whether an easily editable file is common practice for state. It is, for
+  config and for small single-writer state; the tools that chose a database did it for
+  concurrent writers, size or integrity (the survey is [State storage](#state-storage)).
+  Rein's state is small, has one writer, and `status` is its human view, so it stays
+  `~/.rein/state.yaml`. With the ledger (D12) it stops being a rebuildable cache and becomes
+  the only record of what rein moved out and placed, so from P2.15 on it is treated as the
+  tool's file, not the user's: a header comment saying so, a `version` field for migrations,
+  validation on load that refuses with a reason instead of misbehaving, atomic writes through
+  a temporary file and a rename, a lock file against two rein processes, the previous copy
+  kept before each write, and snapshot contents as files on disk indexed from the state,
+  never inline. An embedded database is the fallback if concurrent writers appear, such as
+  sync hooks from several agent sessions, or the ledger outgrows one file; that is a
+  dependency decision against the cobra-and-yaml.v3 rule and gets its own ADR then.
+- ✅ **D20 — Every record rein writes carries the time it was written.** Decided 2026-10-19 by
+  the user: a clean record is kept whether or not anything reads it yet, because a timestamp
+  not stored when the work is done is history lost. First case: `connected_at` on the
+  organisation in the state, set by `Register` from the service's clock; the ledger's entries
+  (D12) follow. A time is stored as a time, never as a flag: `BecameActive` on the connect
+  result stays a bool, because it answers whether this connect made the organisation active,
+  which is what the gateway prints on.
 - ✅ **D15 — Hexagonal layout now.** Decided 2026-10-16: a pure core and replaceable adapters,
   with a port only where a second implementation is plausible: the host (GitHub, later
   GitLab), the agent (Claude Code, later the planned ones), the repository (git), state and
@@ -540,6 +582,29 @@ One file under `~/.rein/`, the folder overridable with `REIN_HOME` (D10):
   `reset` removes exactly those, and the imports. Never a secret: git's credential helper
   and `gh` hold the tokens. The proposal ledger is `gh pr list --author @me` on the org
   repository.
+
+### State storage
+
+Decided as D19. What comparable tools do with their config and state, read 2026-10-18:
+
+| Tool | File | Format | Hand-edited? | Source |
+|---|---|---|---|---|
+| gh | `~/.config/gh/config.yml`, `hosts.yml` | YAML | yes, and by `gh config` | [gh config](https://cli.github.com/manual/gh_config) |
+| kubectl | `~/.kube/config` | YAML | yes, and by `kubectl config` | [Organizing cluster access](https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/) |
+| Docker CLI | `~/.docker/config.json` | JSON | yes | [docker CLI reference](https://docs.docker.com/reference/cli/docker/) |
+| Claude Code | `~/.claude/settings.json`, `.claude/settings.json` | JSON | yes | [Claude Code settings](https://code.claude.com/docs/en/settings) |
+| cargo | `.crates.toml`, `.crates2.json` in the install root | TOML, JSON | managed by cargo | [cargo install](https://doc.rust-lang.org/cargo/commands/cargo-install.html) |
+| Terraform | `terraform.tfstate` | JSON | no: `serial` and `lineage` guard it, a lock, `terraform state` for surgery | [State](https://developer.hashicorp.com/terraform/language/state), [locking](https://developer.hashicorp.com/terraform/language/state/locking), [state push](https://developer.hashicorp.com/terraform/cli/commands/state/push) |
+| Nix | `/nix/var/nix/db/db.sqlite` | SQLite | no | [Nix glossary](https://nixos.org/manual/nix/stable/glossary) |
+| chezmoi | `~/.config/chezmoi/chezmoistate.boltdb` | BoltDB | no: `chezmoi state` inspects and resets it | [chezmoi state](https://www.chezmoi.io/reference/commands/state/) |
+| git | `.git/config`; `.git/index` | INI; binary | config yes; index no | [index format](https://git-scm.com/docs/index-format) |
+
+The pattern: config, the user's intent, is text and hand-edited; state, the tool's record of
+what it did, is text while it is small and has one writer, and becomes a database for
+concurrent writers, size or integrity. Rein's `state.yaml` is state, and once the ledger
+(D12) lives in it, the only record of what rein did to a machine. The consequences are D19
+and P2.23: it stays YAML, rein owns it, and it is guarded like Terraform's rather than
+edited like gh's.
 
 ### What the lint checks
 
@@ -861,13 +926,29 @@ from that project's snapshot.
   where a second connect of the same organisation now refuses before touching the existing
   clone, which the old code removed first; `DisconnectOrganization` as forget then remove,
   restored on failure; `ResetMachine` without compensation, deletions ordered files first;
-  the queries `Status` and `PlanReset`. Gateway and `main` rewired; output and exit codes
-  unchanged. Tests: the saga runner on scripted steps including a failing undo, the
+  the queries `Status` and `PlanReset`. By the user's rule of 2026-10-17, every workflow is
+  its own file, `workflow_<name>.go`, the queries share `queries.go`, and the architecture
+  test checks the naming. Gateway and `main` rewired; output and exit codes unchanged. Tests: the saga runner on scripted steps including a failing undo, the
   workflows on the real services over fake ports including one compensation, the
   organisations service, the gateway on fake workflows, queries and service, `cmd/rein` end
   to end, and the architecture rules tightened. Documented in
   [docs/architecture.md](../architecture.md). Gate: `task rein:check` green, `rein lint .`
   clean including the new skill.
+- ✅ **P2.22 — The concrete orchestrator, the identity gate at the gateway, the fake adapters
+  and the refusal library (D18).** [EXECUTED] 2026-10-18. `Orchestrator{Services}` with
+  `New`; `Workflows`, `Queries`, `OrganizationsService`, `local`, `guarded` and `NewLocal`
+  deleted; `requireIdentity` in the gateway in front of the `org` commands;
+  `internal/adapters/fake` with `Host`, `Repository`, `Agent` and `State`, which fails a load
+  or a save on demand; `2_services/refusal` with `ErrRefused`, `Refusal` and `New`, matched
+  by `organizations.ErrNotConnected` and `ErrAlreadyConnected` through `Is`;
+  `placements.InstalledAgents` so `Services` carries no raw port. The gateway tests rewritten
+  on the real orchestrator over the fakes and a scratch home, the orchestration and
+  organisations tests on the same fakes; the architecture test lets test files import the
+  fakes and checks the one-workflow-per-file rule on the methods of `Orchestrator`. Output
+  and exit codes unchanged. Gate: `task rein:check` green.
+- 🟢 **P2.23 — The state file hardened (D19).** [PENDING] With P2.15, where the ledger lands:
+  the header comment, `version`, validation on load, atomic write, lock file, previous copy,
+  snapshot contents as files indexed from the state.
 - 🟢 **P2.16 — `team create` and `project create`.** [PENDING] Records written by the owner to
   the org repository (D13): `team.yaml` with id, slug, name, description; `project.yaml` with
   the same plus teams, labels chosen from the seeded registry, and path; committed and pushed.
@@ -883,7 +964,14 @@ from that project's snapshot.
   prose into cleaner rules through the judge port, comes later. Runs from a project: `rein
   distill` in the clone, or `--project <slug>`.
 - 🟢 **P2.15 — The ledger, `restore`, and `reset` on it (D12).** [PENDING] Supersedes the
-  undo half of P2.9; `org destroy` and `uninstall` stay there.
+  undo half of P2.9; `org destroy` and `uninstall` stay there. Scope added 2026-10-19: the
+  placement record is generalised, since `sync` places into project clones as well as into
+  an agent's home and the ledger treats both the same. It gains the agent whose home or
+  clone it is, the scope (agent home or project clone) with the project and organisation it
+  belongs to, `placed_at` (D20), and a reference to the snapshot of what was there before,
+  so `restore` knows what to put back; its paths get names that say their role,
+  `PlacedPath`, `OriginPath` and `SourceLevel`, and `Owner` becomes `PlacedBy`. Today's
+  `Placement` in `machine` is the agent-home case only and says so.
 - 🔨 **P2.4 — The manifest, the label registry and the merge (B2) exist in code, with `init`,
   `label` and `propose`.** [IN PROGRESS] First half executed 2026-10-16: the records. In
   `2_services/declaration`: `Team`, `Project` (teams, labels, path, fingerprint), `User`
@@ -900,17 +988,37 @@ from that project's snapshot.
 - 🟢 **P2.5 — The compiler for Claude Code (B3) emits the plugin and marketplace repository, the
   managed-settings drop-in, `.mcp.json` and `CLAUDE.local.md`.** [PENDING] Blocked by P1.3.
 - 🟢 **P2.6 — The drift and inventory report (B5).** [PENDING]
-- 🟢 **P2.7 — `org create`, interactive (part of B2).** [PENDING] Approved 2026-10-12. Asks for
-  name, description, GitHub owner and visibility; creates the GitHub repository through the `gh`
-  CLI; scaffolds `declarations/` with the organisation record (UUID, slug), the seeded label
-  categories, CODEOWNERS and `.github/workflows/rein.yml`, which installs the pinned rein
-  release and runs `rein lint` and `rein review` on every pull request, posting findings as
-  review comments and a status; sets the judge's key as a repository secret with `gh secret
-  set`, read from the terminal and never stored by rein; writes the `providers` declaration
-  that names the judge's endpoint and model; protects `main` through the GitHub API with the
-  two checks required and a CODEOWNERS review required; commits, pushes, and registers the
-  organisation in local state. `org destroy` removes all of it with the repository (P2.9).
-  Amended 2026-10-15.
+- ✅ **P2.7 — `org create`, interactive (part of B2).** [EXECUTED] 2026-10-19, as planned
+  2026-10-19 with two parts moved out: the judge's secret and the `providers` declaration go
+  to P2.13, where `rein review` first needs them, and `.github/workflows/rein.yml` with the
+  required checks goes to P2.8, where a release exists to install; `minimum_rein_version`
+  stays empty until P2.8 too. The workflow `CreateOrganization`: create the repository
+  through `gh repo create` (undo: `gh repo delete`, which needs the `delete_repo` scope, so a
+  failed run may leave the repository and the printed command), scaffold the first content
+  in a temporary folder (the organisation record with a fresh UUID, the three seeded label
+  categories, CODEOWNERS with the creator, a README; undo: remove), publish it with git init,
+  one commit and a push to `main` over the protocol `gh` is set to, protect `main` with a
+  code-owner review required and administrators excepted (D13), reported as a warning when
+  GitHub refuses it for the plan, then run `ConnectOrganization`, which now also snapshots
+  every agent's home into `~/.rein/snapshots/<agent>-<time>.json` (D11): harness paths only,
+  text files only, readable by the user alone. The gateway asks name, repository name, owner,
+  visibility (default private) and description with defaults, confirms, and takes the same as
+  flags with `--yes`. New: the `hosting` and `snapshots` services, the `scaffold` library,
+  `Publish` on the repository port, `GitProtocol`, `CreateRepository`, `DeleteRepository` and
+  `ProtectMainBranch` on the host port, `Home` and `HarnessPaths` on the agent port. Tests on
+  the fakes for every path including the compensation after a failed push, and end to end
+  over a stub `gh` that creates bare repositories for real git to push into. Gate:
+  `task rein:check` green. Original scope, approved 2026-10-12 and amended 2026-10-15: asks for
+  name, description, GitHub owner and visibility; creates the GitHub repository through the
+  `gh` CLI; scaffolds `declarations/` with the organisation record (UUID, slug), the seeded
+  label categories, CODEOWNERS and `.github/workflows/rein.yml`, which installs the pinned
+  rein release and runs `rein lint` and `rein review` on every pull request, posting findings
+  as review comments and a status; sets the judge's key as a repository secret with `gh
+  secret set`, read from the terminal and never stored by rein; writes the `providers`
+  declaration that names the judge's endpoint and model; protects `main` through the GitHub
+  API with the two checks required and a CODEOWNERS review required; commits, pushes, and
+  registers the organisation in local state. `org destroy` removes all of it with the
+  repository (P2.9).
 - 🟢 **P2.8 — Release and install on macOS, Linux and Windows.** [PENDING] Approved 2026-10-12,
   made concrete 2026-10-15, placed right after P2.7 because the workflow `org create` deploys
   installs a release. One GoReleaser workflow on a version tag builds every platform and
@@ -1153,3 +1261,21 @@ writes is read from the next session on, not in the same one.
   `organizations`, `clones`, `placements`); the orchestration keeps workflows on a saga runner
   and queries; the gateway calls services directly or runs a workflow. `docs/architecture.md`
   written and a local `architecture` skill added; the architecture test keeps services apart.
+- (2026-10-17) The user's rule: one file per workflow, `workflow_<name>.go`; the architecture
+  test enforces it, the document and the skill state it.
+- (2026-10-18) D18 and P2.22: the orchestrator is one concrete struct, the identity gate at the
+  gateway, the fakes an adapter, refusals one library; `local`, `NewLocal` and the interfaces
+  gone. D19 and the state-storage survey: the state stays YAML that rein owns; its hardening
+  is P2.23, with the ledger.
+- (2026-10-19) D20: `connected_at` on the organisation record in the state, from a `Clock` on
+  the organisations service. The user's naming rule applied and written into the toolkit's
+  `go-style` skill: the clone names became the `OrgClonePath` family, `env` became
+  `environment` on a `commandEnvironment`, `run` became `runSteps`, `Forgotten.Active` and
+  `DisconnectResult.Active` became `ActiveAfter`, the fake state's field `Current`. The state
+  key `clones` became `org_clone_paths`; no machine had an organisation connected.
+- (2026-10-19) P2.15's scope grew by the generalised placement record: agent, scope with
+  project and organisation, `placed_at`, the snapshot reference, role-naming paths; the
+  `Placement` comment says it is the agent-home case until then.
+- (2026-10-19) D12 reworded (a clone is a project clone), D13 and D14 confirmed. P2.7 executed:
+  `org create` as a workflow with compensations over the new `hosting` and `snapshots`
+  services and the `scaffold` library; the secret and the CI workflow moved to P2.13 and P2.8.

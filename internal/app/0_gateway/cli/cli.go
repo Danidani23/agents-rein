@@ -1,8 +1,9 @@
 // Package cli is the gateway a person uses: cobra commands that read flags,
 // ask through the Prompter port, and print. A single operation goes straight
 // to a service; several in order go to a workflow of the orchestrator (D17).
-// It depends on interfaces only, never on an adapter other than the terminal,
-// which is its own device; main wires the rest. Every byte of output goes
+// It holds the one concrete Orchestrator (D18) and knows no adapter other than
+// the terminal, which is its own device; main wires the rest. A command that
+// acts for a user passes the identity gate first. Every byte of output goes
 // through the writers Run receives, and a test enforces it.
 package cli
 
@@ -16,6 +17,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/adapters/execute"
 	"github.com/Danidani23/agents-rein/internal/adapters/terminal"
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
@@ -32,9 +34,9 @@ const (
 // that help and version never touch the machine.
 type Orchestrate func() (orchestration.Orchestrator, error)
 
-// environment is what every command receives: the streams, whether a person
+// commandEnvironment is what every command receives: the streams, whether a person
 // is typing, and the orchestrator.
-type environment struct {
+type commandEnvironment struct {
 	in          io.Reader
 	out         io.Writer
 	errOut      io.Writer
@@ -42,52 +44,42 @@ type environment struct {
 	orchestrate Orchestrate
 }
 
-func (env *environment) prompter() ports.Prompter {
-	return terminal.New(env.in, env.out, env.terminal)
+func (environment *commandEnvironment) prompter() ports.Prompter {
+	return terminal.New(environment.in, environment.out, environment.terminal)
 }
 
 // Run executes rein with arguments and returns the exit code.
 func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer, orchestrate Orchestrate) int {
-	env := &environment{in: in, out: out, errOut: errOut, terminal: terminal.IsTerminal(in), orchestrate: orchestrate}
-	return runCommand(env, arguments)
+	environment := &commandEnvironment{in: in, out: out, errOut: errOut, terminal: terminal.IsTerminal(in), orchestrate: orchestrate}
+	return runCommand(environment, arguments)
 }
 
-func runCommand(env *environment, arguments []string) int {
-	root := newRootCommand(env)
+func runCommand(environment *commandEnvironment, arguments []string) int {
+	root := newRootCommand(environment)
 	root.SetArgs(arguments)
 	err := root.Execute()
 	if err == nil {
 		return ExitWorked
 	}
-	fmt.Fprintf(env.errOut, "rein: %v\n", err)
+	fmt.Fprintf(environment.errOut, "rein: %v\n", err)
 	var failure *execute.Failure
 	if errors.As(err, &failure) {
 		return ExitToolFailed
 	}
-	if errors.Is(err, orchestration.ErrRefused) || errors.Is(err, errRefusedByCommand) || isUsageError(err) {
+	if errors.Is(err, refusal.ErrRefused) || isUsageError(err) {
 		return ExitRefused
 	}
 	return ExitCrashed
 }
 
-// errRefusedByCommand marks a refusal decided in the gateway itself, such as
-// a missing terminal or a declined confirmation.
-var errRefusedByCommand = errors.New("refused by command")
-
-type commandRefusal struct {
-	reason string
-}
-
-func (refusal commandRefusal) Error() string {
-	return refusal.reason
-}
-
-func (commandRefusal) Is(target error) bool {
-	return target == errRefusedByCommand
-}
-
-func refuse(reason string) error {
-	return commandRefusal{reason: reason}
+// requireIdentity is the gate in front of every command that acts for a
+// user: without a logged-in host it refuses and names the way in (D8, D18).
+func requireIdentity(orchestrator orchestration.Orchestrator) error {
+	_, err := orchestrator.Identity.Who()
+	if err != nil {
+		return refusal.New(err.Error())
+	}
+	return nil
 }
 
 // isUsageError recognises cobra's own errors: an unknown command, a missing
@@ -102,7 +94,7 @@ func isUsageError(err error) bool {
 	return false
 }
 
-func newRootCommand(env *environment) *cobra.Command {
+func newRootCommand(environment *commandEnvironment) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "rein",
 		Short: "Keep your AI coding agents' settings in one place and bring them to every project",
@@ -117,9 +109,9 @@ func newRootCommand(env *environment) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.SetOut(env.out)
-	root.SetErr(env.errOut)
+	root.SetOut(environment.out)
+	root.SetErr(environment.errOut)
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newStatusCommand(env), newOrgCommand(env), newLintCommand(env), newResetCommand(env), newVersionCommand(env))
+	root.AddCommand(newStatusCommand(environment), newOrgCommand(environment), newLintCommand(environment), newResetCommand(environment), newVersionCommand(environment))
 	return root
 }

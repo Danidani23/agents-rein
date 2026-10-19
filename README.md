@@ -115,15 +115,17 @@ GitHub account, and the agents on your machine are detected.
 | Command | What it does |
 |---|---|
 | `rein status` | Shows who you are to rein, the active GitHub account of `gh`, the supported agents found on this machine, every placed file and whether its target still exists, organisations, projects and imports. |
-| `rein org connect <remote>`, `list`, `use <slug>`, `disconnect <slug>` | Clones an org repository and remembers it; lists the connected ones with the active one marked; switches; forgets one and removes its clone without touching the remote. |
+| `rein org create` | Creates an organisation: its GitHub repository, a first commit with the organisation record, the seeded label registry and CODEOWNERS, protection of `main` with a code-owner review, and the connection of this machine to it. Interactive, or `--name` with `--yes`. |
+| `rein org connect <remote>`, `list`, `use <slug>`, `disconnect <slug>` | Clones an org repository and remembers it, snapshotting your agents' homes into `~/.rein/snapshots/` as the record of what was there before rein; lists the connected ones with the active one marked; switches; forgets one and removes its clone without touching the remote. |
 | `rein lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, skills that share a name, and in an org repository every record: organisation, teams, projects, users and the label registry, with their references. Needs no identity, so CI runs it on an org repository. |
 | `rein reset` | Removes everything rein placed into an agent's home; `--all` forgets the organisations and projects too, leaving the machine as before rein. |
 | `rein version` | Prints the version. |
 
-Planned, in the board's order: `rein init` and `rein sync`, which bind a clone to its project
-and write its harness; `rein org create` and `destroy`, with a snapshot of what the agent had
-before rein; `rein import` and `rein export`, which move a level into and out of an org
-repository; `rein propose` and `rein review`; `rein label`; `rein migrate`; `rein update`.
+Planned, in the board's order: `rein team create` and `rein project create`; `rein init` and
+`rein sync`, which bind a clone to its project and write its harness; `rein distill`;
+`rein restore`; `rein org destroy`; `rein import` and `rein export`, which move a level into
+and out of an org repository; `rein propose` and `rein review`; `rein label`; `rein migrate`;
+`rein update`.
 
 The reasoning is the [ADR](docs/decisions/2026-10-11_harness-tool-compiler-and-linter.md); the
 design, the decisions and what is next are on the

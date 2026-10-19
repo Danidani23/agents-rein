@@ -7,107 +7,42 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Danidani23/agents-rein/internal/adapters/fake"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
-// The fakes: each port with the least behaviour a workflow needs. The
-// services are real; only the edges are faked.
-
-type fakeHost struct {
-	login string
-}
-
-func (host fakeHost) Identity() (ports.Identity, error) {
-	if host.login == "" {
-		return ports.Identity{}, errors.New("gh is not logged in to GitHub; run gh auth login, then try again")
-	}
-	return ports.Identity{Login: host.login, Slug: strings.ToLower(host.login)}, nil
-}
-
-// fakeRepository "clones" by writing the organisation record it was given.
-type fakeRepository struct {
-	record string
-	fail   bool
-}
-
-func (fakeRepository) Preflight() error { return nil }
-
-func (repository fakeRepository) Clone(remote string, directory string) error {
-	if repository.fail {
-		return errors.New("git clone failed: repository not found")
-	}
-	folder := filepath.Join(directory, "declarations", "organizations", "acme")
-	err := os.MkdirAll(folder, 0o755)
-	if err != nil {
-		return err
-	}
-	if repository.record == "" {
-		return nil
-	}
-	return os.WriteFile(filepath.Join(folder, "organization.yaml"), []byte(repository.record), 0o644)
-}
-
-type fakeAgent struct {
-	installed bool
-	unplaced  []string
-}
-
-func (agent *fakeAgent) Name() string    { return "fake-agent" }
-func (agent *fakeAgent) Installed() bool { return agent.installed }
-func (agent *fakeAgent) Unplace(placed machine.Placement) (bool, string, error) {
-	agent.unplaced = append(agent.unplaced, placed.Path)
-	if strings.Contains(placed.Path, "foreign") {
-		return false, "links elsewhere", nil
-	}
-	return true, "", nil
-}
-
-// memoryState keeps the state in memory and can fail on demand, which is how
-// a compensation gets exercised.
-type memoryState struct {
-	state     machine.State
-	failSaves int
-}
-
-func (memory *memoryState) Load() (machine.State, error) { return memory.state, nil }
-func (memory *memoryState) Save(state machine.State) error {
-	if memory.failSaves > 0 {
-		memory.failSaves--
-		return errors.New("state: disk full")
-	}
-	memory.state = state
-	return nil
-}
+// The services are real; only the ports are faked.
 
 const validRecord = "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\nhost: github\n"
 
-type fixture struct {
+type harness struct {
 	home       string
-	host       fakeHost
-	repository fakeRepository
-	state      *memoryState
-	agent      *fakeAgent
+	host       *fake.Host
+	repository *fake.Repository
+	state      *fake.State
+	agent      *fake.Agent
 }
 
-func newFixture(t *testing.T) *fixture {
+func newHarness(t *testing.T) *harness {
 	t.Helper()
-	return &fixture{
+	return &harness{
 		home:       t.TempDir(),
-		host:       fakeHost{login: "Danidani23"},
-		repository: fakeRepository{record: validRecord},
-		state:      &memoryState{state: machine.Empty()},
-		agent:      &fakeAgent{installed: true},
+		host:       &fake.Host{Login: "Danidani23"},
+		repository: &fake.Repository{Record: validRecord},
+		state:      fake.NewState(),
+		agent:      &fake.Agent{Present: true, HomePath: t.TempDir()},
 	}
 }
 
-func (f *fixture) orchestrator() Orchestrator {
-	return NewLocal(NewServices(f.home, f.host, f.repository, f.state, []ports.Agent{f.agent}))
+func (fixture *harness) orchestrator() Orchestrator {
+	return New(NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}))
 }
 
-func (f *fixture) clones(t *testing.T) []string {
+func (fixture *harness) orgCloneFolders(t *testing.T) []string {
 	t.Helper()
-	entries, _ := os.ReadDir(filepath.Join(f.home, "orgs"))
+	entries, _ := os.ReadDir(filepath.Join(fixture.home, "orgs"))
 	var names []string
 	for _, entry := range entries {
 		names = append(names, entry.Name())
@@ -117,108 +52,89 @@ func (f *fixture) clones(t *testing.T) []string {
 
 func TestConnectOrganization(t *testing.T) {
 	t.Run("a clone with one record is kept under orgs and becomes active", func(t *testing.T) {
-		f := newFixture(t)
-		result, err := f.orchestrator().Workflows.ConnectOrganization("git@example:acme.git")
+		fixture := newHarness(t)
+		result, err := fixture.orchestrator().ConnectOrganization("git@example:acme.git")
 		if err != nil || result.Slug != "acme" || result.Name != "Acme" || !result.BecameActive {
 			t.Fatalf("result %+v err %v", result, err)
 		}
-		if result.Clone != filepath.Join(f.home, "orgs", "0f8fad5b-d9cb-469f-a165-70867728950e") || f.state.state.Active != "acme" {
-			t.Fatalf("clone %q active %q", result.Clone, f.state.state.Active)
+		if result.OrgClonePath != filepath.Join(fixture.home, "orgs", "0f8fad5b-d9cb-469f-a165-70867728950e") || fixture.state.Current.Active != "acme" {
+			t.Fatalf("clone %q active %q", result.OrgClonePath, fixture.state.Current.Active)
 		}
-		if f.state.state.Clones["0f8fad5b-d9cb-469f-a165-70867728950e"] != result.Clone {
-			t.Fatalf("clones %v", f.state.state.Clones)
+		if fixture.state.Current.OrgClonePaths["0f8fad5b-d9cb-469f-a165-70867728950e"] != result.OrgClonePath {
+			t.Fatalf("clones %v", fixture.state.Current.OrgClonePaths)
+		}
+	})
+	t.Run("the agents' homes are snapshotted on the way", func(t *testing.T) {
+		fixture := newHarness(t)
+		_ = os.WriteFile(filepath.Join(fixture.agent.HomePath, "INSTRUCTIONS.md"), []byte("be brief"), 0o644)
+		result, err := fixture.orchestrator().ConnectOrganization("x")
+		if err != nil || len(result.SnapshotPaths) != 1 || !strings.HasPrefix(result.SnapshotPaths[0], filepath.Join(fixture.home, "snapshots")) {
+			t.Fatalf("result %+v err %v", result, err)
 		}
 	})
 	t.Run("a second connect of the same organisation is refused and leaves the first clone alone", func(t *testing.T) {
-		f := newFixture(t)
-		first, _ := f.orchestrator().Workflows.ConnectOrganization("x")
-		marker := filepath.Join(first.Clone, "marker")
+		fixture := newHarness(t)
+		first, err := fixture.orchestrator().ConnectOrganization("x")
+		if err != nil || first.OrgClonePath == "" {
+			t.Fatalf("first connect: %+v err %v", first, err)
+		}
+		marker := filepath.Join(first.OrgClonePath, "marker")
 		_ = os.WriteFile(marker, []byte("x"), 0o644)
-		_, err := f.orchestrator().Workflows.ConnectOrganization("x")
-		if !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "already connected") {
+		_, err = fixture.orchestrator().ConnectOrganization("x")
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "already connected") {
 			t.Fatalf("err %v", err)
 		}
 		_, err = os.Stat(marker)
-		if err != nil || len(f.clones(t)) != 1 || len(f.state.state.Organizations) != 1 {
-			t.Fatalf("marker %v clones %v organisations %v", err, f.clones(t), f.state.state.Organizations)
+		if err != nil || len(fixture.orgCloneFolders(t)) != 1 || len(fixture.state.Current.Organizations) != 1 {
+			t.Fatalf("marker %v clones %v organisations %v", err, fixture.orgCloneFolders(t), fixture.state.Current.Organizations)
 		}
 	})
 	t.Run("a clone without a record is refused and removed", func(t *testing.T) {
-		f := newFixture(t)
-		f.repository = fakeRepository{}
-		_, err := f.orchestrator().Workflows.ConnectOrganization("x")
-		if !errors.Is(err, ErrRefused) || len(f.clones(t)) != 0 {
-			t.Fatalf("err %v clones %v", err, f.clones(t))
+		fixture := newHarness(t)
+		fixture.repository = &fake.Repository{}
+		_, err := fixture.orchestrator().ConnectOrganization("x")
+		if !errors.Is(err, refusal.ErrRefused) || len(fixture.orgCloneFolders(t)) != 0 {
+			t.Fatalf("err %v clones %v", err, fixture.orgCloneFolders(t))
 		}
 	})
 	t.Run("a failed clone is not a refusal", func(t *testing.T) {
-		f := newFixture(t)
-		f.repository = fakeRepository{fail: true}
-		_, err := f.orchestrator().Workflows.ConnectOrganization("x")
-		if err == nil || errors.Is(err, ErrRefused) {
+		fixture := newHarness(t)
+		fixture.repository = &fake.Repository{Fail: true}
+		_, err := fixture.orchestrator().ConnectOrganization("x")
+		if err == nil || errors.Is(err, refusal.ErrRefused) {
 			t.Fatalf("err %v", err)
 		}
 	})
-	t.Run("a failure after registering compensates: the registration is forgotten and the clone removed", func(t *testing.T) {
-		f := newFixture(t)
-		// Register's save fails: the only completed step is the clone, which is undone.
-		f.state.failSaves = 1
-		_, err := f.orchestrator().Workflows.ConnectOrganization("x")
-		if err == nil || errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "disk full") {
+	t.Run("a failure after cloning compensates: the clone is removed and nothing is registered", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.state.FailSaves = 1
+		_, err := fixture.orchestrator().ConnectOrganization("x")
+		if err == nil || errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "disk full") {
 			t.Fatalf("err %v", err)
 		}
-		if len(f.clones(t)) != 0 || len(f.state.state.Organizations) != 0 {
-			t.Fatalf("clones %v organisations %v", f.clones(t), f.state.state.Organizations)
-		}
-	})
-	t.Run("without an identity every organisation operation refuses", func(t *testing.T) {
-		f := newFixture(t)
-		f.host = fakeHost{}
-		orchestrator := f.orchestrator()
-		_, err := orchestrator.Workflows.ConnectOrganization("x")
-		_, _, listErr := orchestrator.Organizations.List()
-		useErr := orchestrator.Organizations.Use("acme")
-		_, disconnectErr := orchestrator.Workflows.DisconnectOrganization("acme")
-		for _, candidate := range []error{err, listErr, useErr, disconnectErr} {
-			if !errors.Is(candidate, ErrRefused) || !strings.Contains(candidate.Error(), "gh auth login") {
-				t.Fatalf("err %v", candidate)
-			}
-		}
-	})
-}
-
-func TestOrganizationsDirect(t *testing.T) {
-	t.Run("use of an unknown slug is refused; list shows the active one", func(t *testing.T) {
-		f := newFixture(t)
-		_, _ = f.orchestrator().Workflows.ConnectOrganization("x")
-		err := f.orchestrator().Organizations.Use("other")
-		if !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "not connected") {
-			t.Fatalf("err %v", err)
-		}
-		connected, active, err := f.orchestrator().Organizations.List()
-		if err != nil || len(connected) != 1 || active != "acme" {
-			t.Fatalf("connected %v active %q err %v", connected, active, err)
+		if len(fixture.orgCloneFolders(t)) != 0 || len(fixture.state.Current.Organizations) != 0 {
+			t.Fatalf("clones %v organisations %v", fixture.orgCloneFolders(t), fixture.state.Current.Organizations)
 		}
 	})
 }
 
 func TestDisconnectOrganization(t *testing.T) {
 	t.Run("forgets the organisation and removes its clone", func(t *testing.T) {
-		f := newFixture(t)
-		_, _ = f.orchestrator().Workflows.ConnectOrganization("x")
-		result, err := f.orchestrator().Workflows.DisconnectOrganization("acme")
-		if err != nil || result.Active != "" || len(f.state.state.Organizations) != 0 {
-			t.Fatalf("result %+v err %v state %+v", result, err, f.state.state)
+		fixture := newHarness(t)
+		_, _ = fixture.orchestrator().ConnectOrganization("x")
+		result, err := fixture.orchestrator().DisconnectOrganization("acme")
+		if err != nil || result.ActiveAfter != "" || len(fixture.state.Current.Organizations) != 0 {
+			t.Fatalf("result %+v err %v state %+v", result, err, fixture.state.Current)
 		}
-		_, err = os.Stat(result.Clone)
+		_, err = os.Stat(result.OrgClonePath)
 		if err == nil {
 			t.Fatalf("clone still there")
 		}
 	})
 	t.Run("an unknown slug is refused", func(t *testing.T) {
-		f := newFixture(t)
-		_, err := f.orchestrator().Workflows.DisconnectOrganization("nobody")
-		if !errors.Is(err, ErrRefused) {
+		fixture := newHarness(t)
+		_, err := fixture.orchestrator().DisconnectOrganization("nobody")
+		if !errors.Is(err, refusal.ErrRefused) {
 			t.Fatalf("err %v", err)
 		}
 	})
@@ -226,28 +142,28 @@ func TestDisconnectOrganization(t *testing.T) {
 
 func TestStatus(t *testing.T) {
 	t.Run("a logged-out host is reported, not refused", func(t *testing.T) {
-		f := newFixture(t)
-		f.host = fakeHost{}
-		report, err := f.orchestrator().Queries.Status()
+		fixture := newHarness(t)
+		orchestrator := New(NewServices(fixture.home, &fake.Host{}, fixture.repository, fixture.state, []ports.Agent{fixture.agent}))
+		report, err := orchestrator.Status()
 		if err != nil || !strings.Contains(report.IdentityError, "gh auth login") || report.Identity.Login != "" {
 			t.Fatalf("report %+v err %v", report, err)
 		}
 	})
 	t.Run("placements are checked for their targets and agents are listed", func(t *testing.T) {
-		f := newFixture(t)
+		fixture := newHarness(t)
 		present := filepath.Join(t.TempDir(), "present")
 		_ = os.WriteFile(present, []byte("x"), 0o644)
-		f.state.state.Placements = []machine.Placement{{Path: "/a", Target: present}, {Path: "/b", Target: "/nowhere/gone"}}
-		f.state.state.Projects = []machine.Project{{Organization: "id-1"}}
-		report, err := f.orchestrator().Queries.Status()
+		fixture.state.Current.Placements = []machine.Placement{{Path: "/a", Target: present}, {Path: "/b", Target: "/nowhere/gone"}}
+		fixture.state.Current.Projects = []machine.Project{{Organization: "id-1"}}
+		report, err := fixture.orchestrator().Status()
 		if err != nil || report.Missing != 1 || len(report.Placements) != 2 || !report.Placements[0].TargetExists || report.Placements[1].TargetExists {
 			t.Fatalf("report %+v err %v", report, err)
 		}
 		if len(report.Agents) != 1 || report.Agents[0] != "fake-agent" || len(report.Projects) != 1 {
 			t.Fatalf("agents %v projects %v", report.Agents, report.Projects)
 		}
-		f.agent.installed = false
-		report, _ = f.orchestrator().Queries.Status()
+		fixture.agent.Present = false
+		report, _ = fixture.orchestrator().Status()
 		if len(report.Agents) != 0 {
 			t.Fatalf("agents %v", report.Agents)
 		}
@@ -256,38 +172,38 @@ func TestStatus(t *testing.T) {
 
 func TestReset(t *testing.T) {
 	t.Run("the plan lists what the state holds", func(t *testing.T) {
-		f := newFixture(t)
-		f.state.state.Placements = []machine.Placement{{Path: "/a"}}
-		f.state.state.Organizations = []machine.OrganizationRef{{Slug: "acme"}}
-		plan, err := f.orchestrator().Queries.PlanReset(true)
+		fixture := newHarness(t)
+		fixture.state.Current.Placements = []machine.Placement{{Path: "/a"}}
+		fixture.state.Current.Organizations = []machine.OrganizationRef{{Slug: "acme"}}
+		plan, err := fixture.orchestrator().PlanReset(true)
 		if err != nil || len(plan.Placements) != 1 || len(plan.Organizations) != 1 || !plan.All {
 			t.Fatalf("plan %+v err %v", plan, err)
 		}
-		if plan.OrgsFolder != filepath.Join(f.home, "orgs") || plan.ImportsFolder != filepath.Join(f.home, "imports") {
+		if plan.OrgClonesFolder != filepath.Join(fixture.home, "orgs") || plan.ImportsFolder != filepath.Join(fixture.home, "imports") {
 			t.Fatalf("plan %+v", plan)
 		}
 	})
 	t.Run("reset unplaces through the agent, keeps what was skipped, and with all forgets the machine", func(t *testing.T) {
-		f := newFixture(t)
-		clone := filepath.Join(f.home, "orgs", "id-1")
-		_ = os.MkdirAll(clone, 0o755)
-		_ = os.MkdirAll(filepath.Join(f.home, "imports"), 0o755)
-		f.state.state.Placements = []machine.Placement{{Path: "/a"}, {Path: "/foreign"}}
-		f.state.state.Organizations = []machine.OrganizationRef{{ID: "id-1", Slug: "acme"}}
-		f.state.state.Clones = map[string]string{"id-1": clone}
-		f.state.state.Active = "acme"
-		f.state.state.Projects = []machine.Project{{Organization: "id-1"}}
-		f.state.state.Imports = []machine.Import{{}}
-		plan, _ := f.orchestrator().Queries.PlanReset(true)
-		result, err := f.orchestrator().Workflows.ResetMachine(plan)
-		if err != nil || result.Kept != 1 || len(result.RemovedClones) != 1 || len(f.agent.unplaced) != 2 {
-			t.Fatalf("result %+v err %v unplaced %v", result, err, f.agent.unplaced)
+		fixture := newHarness(t)
+		orgClonePath := filepath.Join(fixture.home, "orgs", "id-1")
+		_ = os.MkdirAll(orgClonePath, 0o755)
+		_ = os.MkdirAll(filepath.Join(fixture.home, "imports"), 0o755)
+		fixture.state.Current.Placements = []machine.Placement{{Path: "/a"}, {Path: "/foreign"}}
+		fixture.state.Current.Organizations = []machine.OrganizationRef{{ID: "id-1", Slug: "acme"}}
+		fixture.state.Current.OrgClonePaths = map[string]string{"id-1": orgClonePath}
+		fixture.state.Current.Active = "acme"
+		fixture.state.Current.Projects = []machine.Project{{Organization: "id-1"}}
+		fixture.state.Current.Imports = []machine.Import{{}}
+		plan, _ := fixture.orchestrator().PlanReset(true)
+		result, err := fixture.orchestrator().ResetMachine(plan)
+		if err != nil || result.Kept != 1 || len(result.RemovedOrgClones) != 1 || len(fixture.agent.Unplaced) != 2 {
+			t.Fatalf("result %+v err %v unplaced %v", result, err, fixture.agent.Unplaced)
 		}
-		state := f.state.state
+		state := fixture.state.Current
 		if len(state.Placements) != 1 || state.Placements[0].Path != "/foreign" || state.Active != "" || len(state.Organizations) != 0 || len(state.Projects) != 0 || len(state.Imports) != 0 {
 			t.Fatalf("state %+v", state)
 		}
-		for _, gone := range []string{clone, filepath.Join(f.home, "imports")} {
+		for _, gone := range []string{orgClonePath, filepath.Join(fixture.home, "imports")} {
 			_, err = os.Stat(gone)
 			if err == nil {
 				t.Fatalf("%s still there", gone)
@@ -295,13 +211,79 @@ func TestReset(t *testing.T) {
 		}
 	})
 	t.Run("without all the organisations stay", func(t *testing.T) {
-		f := newFixture(t)
-		f.state.state.Organizations = []machine.OrganizationRef{{ID: "id-1", Slug: "acme"}}
-		f.state.state.Active = "acme"
-		plan, _ := f.orchestrator().Queries.PlanReset(false)
-		_, err := f.orchestrator().Workflows.ResetMachine(plan)
-		if err != nil || len(f.state.state.Organizations) != 1 || f.state.state.Active != "acme" {
-			t.Fatalf("err %v state %+v", err, f.state.state)
+		fixture := newHarness(t)
+		fixture.state.Current.Organizations = []machine.OrganizationRef{{ID: "id-1", Slug: "acme"}}
+		fixture.state.Current.Active = "acme"
+		plan, _ := fixture.orchestrator().PlanReset(false)
+		_, err := fixture.orchestrator().ResetMachine(plan)
+		if err != nil || len(fixture.state.Current.Organizations) != 1 || fixture.state.Current.Active != "acme" {
+			t.Fatalf("err %v state %+v", err, fixture.state.Current)
+		}
+	})
+}
+
+func TestCreateOrganization(t *testing.T) {
+	request := CreateOrganizationRequest{Name: "Acme", Description: "Agent settings of Acme", Owner: "Danidani23", RepositoryName: "acme-agent-settings", Private: true, Codeowner: "Danidani23"}
+	t.Run("creates, publishes, protects and connects; the scaffold folder is gone afterwards", func(t *testing.T) {
+		fixture := newHarness(t)
+		_ = os.WriteFile(filepath.Join(fixture.agent.HomePath, "INSTRUCTIONS.md"), []byte("be brief"), 0o644)
+		result, err := fixture.orchestrator().CreateOrganization(request)
+		if err != nil || result.Remote != "fake://Danidani23/acme-agent-settings" || result.ProtectionRefused != "" || result.Connected.Slug != "acme" || !result.Connected.BecameActive {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		if len(fixture.host.Created) != 1 || !fixture.host.Created[0].Private || fixture.host.Created[0].Description != "Agent settings of Acme" || len(fixture.host.ProtectedBranches) != 1 {
+			t.Fatalf("host %+v", fixture.host)
+		}
+		for _, relative := range []string{"CODEOWNERS", "README.md", filepath.Join("declarations", "organizations", "acme", "organization.yaml"), filepath.Join("declarations", "organizations", "acme", "labels", "language.yaml")} {
+			_, err = os.Stat(filepath.Join(result.Connected.OrgClonePath, relative))
+			if err != nil {
+				t.Fatalf("%s: %v", relative, err)
+			}
+		}
+		if folders := fixture.orgCloneFolders(t); len(folders) != 1 || len(result.Connected.SnapshotPaths) != 1 {
+			t.Fatalf("folders %v snapshots %v", folders, result.Connected.SnapshotPaths)
+		}
+		if len(fixture.state.Current.Organizations) != 1 || fixture.state.Current.Organizations[0].Remote != result.Remote || fixture.state.Current.Organizations[0].ConnectedAt.IsZero() {
+			t.Fatalf("state %+v", fixture.state.Current)
+		}
+	})
+	t.Run("a failed publish deletes the repository again and leaves nothing behind", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.repository.FailPublish = true
+		_, err := fixture.orchestrator().CreateOrganization(request)
+		if err == nil || errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "remote rejected") {
+			t.Fatalf("err %v", err)
+		}
+		if len(fixture.host.Deleted) != 1 || fixture.host.Deleted[0] != "Danidani23/acme-agent-settings" || len(fixture.orgCloneFolders(t)) != 0 || len(fixture.state.Current.Organizations) != 0 {
+			t.Fatalf("deleted %v folders %v state %+v", fixture.host.Deleted, fixture.orgCloneFolders(t), fixture.state.Current)
+		}
+	})
+	t.Run("a refused protection is reported, not fatal", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.host.ProtectionRefusal = "Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)"
+		result, err := fixture.orchestrator().CreateOrganization(request)
+		if err != nil || !strings.Contains(result.ProtectionRefused, "GitHub Pro") || result.Connected.Slug != "acme" {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+	})
+	t.Run("a name without a letter or digit and a failed create are refused or failed before anything exists", func(t *testing.T) {
+		fixture := newHarness(t)
+		_, err := fixture.orchestrator().CreateOrganization(CreateOrganizationRequest{Name: "!!!"})
+		if !errors.Is(err, refusal.ErrRefused) {
+			t.Fatalf("err %v", err)
+		}
+		fixture.host.FailCreate = true
+		_, err = fixture.orchestrator().CreateOrganization(request)
+		if err == nil || errors.Is(err, refusal.ErrRefused) || len(fixture.host.Deleted) != 0 || len(fixture.orgCloneFolders(t)) != 0 {
+			t.Fatalf("err %v deleted %v folders %v", err, fixture.host.Deleted, fixture.orgCloneFolders(t))
+		}
+	})
+	t.Run("creating an organisation that is already connected is refused and the new repository deleted", func(t *testing.T) {
+		fixture := newHarness(t)
+		_, _ = fixture.orchestrator().ConnectOrganization("x")
+		_, err := fixture.orchestrator().CreateOrganization(request)
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "already connected") || len(fixture.host.Deleted) != 1 || len(fixture.orgCloneFolders(t)) != 1 {
+			t.Fatalf("err %v deleted %v folders %v", err, fixture.host.Deleted, fixture.orgCloneFolders(t))
 		}
 	})
 }

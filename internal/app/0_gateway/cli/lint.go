@@ -5,10 +5,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
+
 	"github.com/Danidani23/agents-rein/internal/app/2_services/lint"
 )
 
-func newLintCommand(env *environment) *cobra.Command {
+func newLintCommand(environment *commandEnvironment) *cobra.Command {
 	return &cobra.Command{
 		Use:   "lint <path>",
 		Short: "Check the skills, rules and settings under a path",
@@ -29,11 +31,11 @@ func newLintCommand(env *environment) *cobra.Command {
 				if finding.Address != "" {
 					location += " (" + finding.Address + ")"
 				}
-				fmt.Fprintf(env.out, "%s: %s: %s\n", location, finding.Severity, finding.Message)
+				fmt.Fprintf(environment.out, "%s: %s: %s\n", location, finding.Severity, finding.Message)
 			}
-			fmt.Fprintf(env.out, "%d errors, %d warnings\n", report.Errors(), report.Warnings())
+			fmt.Fprintf(environment.out, "%d errors, %d warnings\n", report.Errors(), report.Warnings())
 			if report.Errors() > 0 {
-				return refuse(fmt.Sprintf("lint found %d errors", report.Errors()))
+				return refusal.New(fmt.Sprintf("lint found %d errors", report.Errors()))
 			}
 			return nil
 		},
