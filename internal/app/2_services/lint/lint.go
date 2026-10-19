@@ -62,11 +62,15 @@ const (
 	kindProject
 	kindUser
 	kindLabels
+	kindToolServer
+	kindPermissionSet
+	kindHook
 )
 
 // classify says what a file is by its name and its folder: a SKILL.md is a
-// skill, a Markdown file in a "rules" folder is a rule, and settings.json or
-// settings.local.json holds permissions.
+// skill, a Markdown file in a "rules" folder is a rule, settings.json or
+// settings.local.json holds permissions, a YAML file under mcpservers or
+// permissions is that declaration, and hooks/<id>/hook.yaml is a hook.
 func classify(filePath string) fileKind {
 	base := filepath.Base(filePath)
 	parent := filepath.Base(filepath.Dir(filePath))
@@ -87,6 +91,12 @@ func classify(filePath string) fileKind {
 		return kindUser
 	case strings.HasSuffix(base, ".yaml") && parent == "labels":
 		return kindLabels
+	case strings.HasSuffix(base, ".yaml") && parent == "mcpservers":
+		return kindToolServer
+	case strings.HasSuffix(base, ".yaml") && parent == "permissions":
+		return kindPermissionSet
+	case base == "hook.yaml" && filepath.Base(filepath.Dir(filepath.Dir(filePath))) == "hooks":
+		return kindHook
 	}
 	return kindOther
 }
@@ -132,6 +142,8 @@ func Run(root string) (Report, error) {
 			state.lintSettings(filePath)
 		case kindOrganization, kindTeam, kindProject, kindUser, kindLabels:
 			state.lintRecord(filePath, kind)
+		case kindToolServer, kindPermissionSet, kindHook:
+			state.lintDeclaration(filePath, kind)
 		}
 		return nil
 	})
@@ -225,6 +237,46 @@ func (state *run) lintSettings(filePath string) {
 				})
 			}
 		}
+	}
+}
+
+// lintDeclaration parses a tool server, a permission set or a hook; a
+// permission set also gets the dead-allow check a settings file gets.
+func (state *run) lintDeclaration(filePath string, kind fileKind) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		state.add(filePath, "", declaration.Problem{Severity: declaration.SeverityError, Message: "cannot read: " + err.Error()})
+		return
+	}
+	addressText, addressProblem := addressOf(filePath, kind)
+	if addressProblem != nil {
+		state.add(filePath, "", *addressProblem)
+	}
+	stem := strings.TrimSuffix(filepath.Base(filePath), ".yaml")
+	var problems []declaration.Problem
+	switch kind {
+	case kindToolServer:
+		_, problems = declaration.ParseToolServer(stem, content)
+	case kindPermissionSet:
+		var set declaration.PermissionSet
+		set, problems = declaration.ParsePermissionSet(stem, content)
+		for _, allow := range set.Allow {
+			for _, deny := range set.Deny {
+				if covers(deny, allow) {
+					problems = append(problems, declaration.Problem{Severity: declaration.SeverityError, Message: fmt.Sprintf("allow rule %q is covered by deny rule %q; deny wins at runtime, so the allow is dead", allow, deny)})
+				}
+			}
+		}
+	case kindHook:
+		entries, _ := os.ReadDir(filepath.Dir(filePath))
+		var files []string
+		for _, entry := range entries {
+			files = append(files, entry.Name())
+		}
+		_, problems = declaration.ParseHook(content, files)
+	}
+	for _, problem := range problems {
+		state.add(filePath, addressText, problem)
 	}
 }
 
@@ -352,10 +404,10 @@ func addressOf(absolutePath string, kind fileKind) (text string, problem *declar
 	}
 	var relative string
 	switch kind {
-	case kindSkill:
+	case kindSkill, kindHook:
 		relative = path.Join(inside[:len(inside)-1]...)
-	case kindRule:
-		stem := strings.TrimSuffix(inside[len(inside)-1], ".md")
+	case kindRule, kindToolServer, kindPermissionSet:
+		stem := strings.TrimSuffix(strings.TrimSuffix(inside[len(inside)-1], ".md"), ".yaml")
 		relative = path.Join(append(inside[:len(inside)-1], stem)...)
 	default:
 		return "", nil

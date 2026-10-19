@@ -225,3 +225,65 @@ func TestRecords(t *testing.T) {
 		}
 	})
 }
+
+func TestDeclarationFormats(t *testing.T) {
+	organization := "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\nhost: github\n"
+	server := "description: GitHub through the official server\napplyIf: [language:go]\nenforcement: default\ntransport: stdio\ncommand: npx\nargs: [\"-y\", \"@modelcontextprotocol/server-github\"]\nenv:\n  GITHUB_PERSONAL_ACCESS_TOKEN: ${REIN_GITHUB_TOKEN}\nvariables:\n  REIN_GITHUB_TOKEN: a fine-grained token with contents:read\n"
+	permissions := "description: Never rewrite history\nenforcement: required\nformat: claude-code\ndeny:\n  - \"Bash(git push --force*)\"\nallow:\n  - \"Bash(go test*)\"\n"
+	hook := "description: Format Go before a commit\napplyIf: [language:go]\nformat: claude-code\nevent: PreToolUse\nmatcher: \"Bash(git commit*)\"\nrun: run.sh\ntimeout_seconds: 30\n"
+	t.Run("well-formed declarations lint clean, each with its address", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "declarations/organizations/acme/organization.yaml", organization)
+		writeFile(t, root, "declarations/organizations/acme/mcpservers/github.yaml", server)
+		writeFile(t, root, "declarations/organizations/acme/permissions/no-history-rewrites.yaml", permissions)
+		writeFile(t, root, "declarations/organizations/acme/teams/web/hooks/gofmt/hook.yaml", hook)
+		writeFile(t, root, "declarations/organizations/acme/teams/web/hooks/gofmt/run.sh", "#!/bin/sh\ngofmt -l .\n")
+		report := mustRun(t, root)
+		if len(report.Findings) != 0 {
+			t.Fatalf("findings: %v", messages(report))
+		}
+		writeFile(t, root, "declarations/organizations/acme/mcpservers/github.yaml", server+"url: http://x\n")
+		report = mustRun(t, root)
+		if report.Errors() != 1 || report.Findings[0].Address != "organizations.acme.mcpservers.github" {
+			t.Fatalf("findings: %+v", report.Findings)
+		}
+	})
+	t.Run("a literal secret, an unprefixed or undescribed variable, and an unused description", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "mcpservers/github.yaml", "transport: stdio\ncommand: npx\nenv:\n  GITHUB_TOKEN: ghp_abcdefghijklmnopqrstuvwxyz0123456789\n  OTHER: ${GITHUB_TOKEN}\n  HOME_TOKEN: ${REIN_HOME_TOKEN}\nvariables:\n  REIN_UNUSED: described but unused\n")
+		report := mustRun(t, root)
+		expected := []string{"looks like a secret", "start with REIN_", "which variables does not describe", "nothing references it"}
+		if report.Errors() != 4 || report.Warnings() != 1 {
+			t.Fatalf("findings: %v", messages(report))
+		}
+		for _, fragment := range expected {
+			if !strings.Contains(strings.Join(messages(report), "\n"), fragment) {
+				t.Fatalf("missing %q in %v", fragment, messages(report))
+			}
+		}
+	})
+	t.Run("a permission set with an unknown format, no rules, a bad rule or a dead allow", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "permissions/a.yaml", "format: cursor\n")
+		writeFile(t, root, "permissions/b.yaml", "format: claude-code\ndeny: [\"Bash(git push*)\"]\nallow: [\"Bash(git push --tags)\", \"not a rule!\"]\n")
+		report := mustRun(t, root)
+		joined := strings.Join(messages(report), "\n")
+		for _, fragment := range []string{"format \"cursor\" is unknown", "at least one rule", "is not Tool or Tool(specifier)", "is dead"} {
+			if !strings.Contains(joined, fragment) {
+				t.Fatalf("missing %q in %v", fragment, messages(report))
+			}
+		}
+	})
+	t.Run("a hook with an unknown event, a missing script or a path as run", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "hooks/one/hook.yaml", "format: claude-code\nevent: OnSave\nrun: missing.sh\n")
+		writeFile(t, root, "hooks/two/hook.yaml", "format: claude-code\nevent: Stop\nrun: ../elsewhere.sh\n")
+		report := mustRun(t, root)
+		joined := strings.Join(messages(report), "\n")
+		for _, fragment := range []string{"event \"OnSave\" is not one Claude Code fires", "not in the hook's folder", "not a path"} {
+			if !strings.Contains(joined, fragment) {
+				t.Fatalf("missing %q in %v", fragment, messages(report))
+			}
+		}
+	})
+}

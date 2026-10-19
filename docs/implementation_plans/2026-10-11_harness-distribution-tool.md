@@ -279,6 +279,40 @@ committed instead of gitignored (D4).
   (D12) follow. A time is stored as a time, never as a flag: `BecameActive` on the connect
   result stays a bool, because it answers whether this connect made the organisation active,
   which is what the gateway prints on.
+- ✅ **D21 — Every generated file lives in the project clone; the agent's home holds nothing
+  of rein's.** Confirmed 2026-10-19 when the hooks format seemed to put scripts into the
+  home. `sync` writes `CLAUDE.md`, `.claude/rules/`, `.claude/skills/`, `.claude/hooks/<id>/`,
+  `.claude/settings.local.json` and `.mcp.json` into the clone, gitignored and rewritten, the
+  user level delivered the same way per project; the settings reference a hook script
+  through the clone's own path, which Claude Code hands to hook commands as
+  `CLAUDE_PROJECT_DIR`. Two organisations therefore never meet on a machine: each clone
+  belongs to one project and each project to one organisation. The eleven links still in the
+  user's `~/.claude/` are the removed `config`'s, which `reset` takes away.
+- ✅ **D22 — Secrets by reference, told and checked, never asked or stored.** Decided
+  2026-10-19. A declaration never holds a secret: a tool server's `env` and `headers` carry
+  `${REIN_...}` references to variables of the developer's shell, every referenced variable
+  starts with `REIN_` so a profile shows what rein's declarations need and nothing collides,
+  and each is described under `variables` so the lint can demand it. The need is known per
+  project, so `sync` ends by naming the variables that are not set and `rein status` repeats
+  it per project as the health check. Rein never asks for a value: asking means storing or
+  writing a shell profile. Rein itself holds no token either: it acts as the user through the
+  `gh` login and the git credentials the user has, with exactly the user's access, so there
+  is nothing per organisation to issue or revoke; a second account is `gh auth switch`, an
+  enterprise host `gh auth login --hostname`. Consent is rein's own confirmations and the pull
+  request review, not an SSH passphrase prompt. The judge's key follows the rule,
+  `REIN_JUDGE_API_KEY` from the shell locally and from a repository secret in CI.
+- ✅ **D23 — The judge's backends, and the organisation's provider wins.** Decided 2026-10-19.
+  One judge port with two backends: `api`, an endpoint speaking Anthropic Messages or OpenAI
+  Chat Completions, which covers vendors, gateways and private inference, with the model and
+  the key's variable name in the `providers` declaration, and the only backend CI can use;
+  `agent-cli`, the agent a developer already has run headless, `claude -p` today, other
+  agents' CLIs later as adapters of the same port, on the developer's subscription. An IDE
+  without a headless command is not a backend; such an organisation declares an API. An
+  organisation that declares a provider gets it used everywhere, locally and in CI, so
+  verdicts are comparable and the data goes where it decided; one without gets the
+  developer's `agent-cli` locally and a refusal in CI that names what to declare. Distill
+  follows the same rule, with `--judge agent-cli` as the local override. Two wire formats are
+  enough for now.
 - ✅ **D15 — Hexagonal layout now.** Decided 2026-10-16: a pure core and replaceable adapters,
   with a port only where a second implementation is plausible: the host (GitHub, later
   GitLab), the agent (Claude Code, later the planned ones), the repository (git), state and
@@ -397,6 +431,66 @@ Contradictions between levels, and what guarantees what (2026-10-15):
   agent the precedence: a higher level's `required` rule wins over anything below it. Claude
   Code's `/doctor prompt-audit`, which looks for contradictory instruction files, is the review
   tool for the rest, and a model-judged consistency check in CI is a later option (Q6, evals).
+
+### Declaration formats: tool servers, permissions, hooks
+
+Decided 2026-10-19 with P2.18. Every declaration carries the selector fields above,
+`description`, `applyIf`, `doNotApplyIf` and `enforcement`; these three kinds add their own.
+Built in `declaration` (`ParseToolServer`, `ParsePermissionSet`, `ParseHook`) and checked by
+the lint with their addresses.
+
+A tool server, `mcpservers/<id>.yaml`, mirrors the `.mcp.json` entry Claude Code, Cursor and
+VS Code share, so the compiler copies it. `transport` is `stdio` with a `command` and `args`,
+or `http` or `sse` with a `url`. Secrets never appear: `env` and `headers` values reference
+variables of the developer's shell as `${REIN_...}`, each described under `variables` (D22);
+a literal that looks like a token, an unprefixed reference or an undescribed one is an error.
+
+```yaml
+description: GitHub through the official MCP server
+applyIf: []
+enforcement: default
+transport: stdio
+command: npx
+args: ["-y", "@modelcontextprotocol/server-github"]
+env:
+  GITHUB_PERSONAL_ACCESS_TOKEN: ${REIN_GITHUB_TOKEN}
+variables:
+  REIN_GITHUB_TOKEN: a fine-grained token with contents:read, made at github.com/settings/tokens
+```
+
+A permission set, `permissions/<id>.yaml`, names the agent whose rule syntax it uses, since
+permission strings are an agent's own and no translation exists; the compiler emits it for
+that agent alone. `format: claude-code` is the one this build knows; its rules are `Tool` or
+`Tool(specifier)`, and an allow a deny in the same set covers is dead and an error, as in a
+settings file.
+
+```yaml
+description: Never rewrite history or force-push
+enforcement: required
+format: claude-code
+deny:
+  - "Bash(git push --force*)"
+  - "Bash(git reset --hard*)"
+allow:
+  - "Bash(go test*)"
+```
+
+A hook runs code on every developer's machine, so it is a folder like a skill,
+`hooks/<id>/hook.yaml` with its script beside it, and `run` names a file in that folder,
+never a path. `sync` places the folder into the project clone under `.claude/hooks/<id>/`
+and the settings it writes point at the placed script (D21); the review flags hooks first.
+`event` is one Claude Code fires; `matcher` and `timeout_seconds` are optional.
+
+```yaml
+description: Format Go files before each commit
+applyIf: [language:go]
+enforcement: default
+format: claude-code
+event: PreToolUse
+matcher: "Bash(git commit*)"
+run: run.sh
+timeout_seconds: 30
+```
 
 ### Review of prose policies
 
@@ -993,12 +1087,34 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
-- 🟢 **P2.18 — `distill`.** [PENDING] Pure and mechanical first: `CLAUDE.md` and each rule file
-  become rules, skills stay skills, `settings.json` permissions and hooks become permissions
-  and hooks declarations, `.mcp.json` servers become server declarations, each at the
-  project's level in the org repository clone, handed to `propose`. `--assist`, which rewrites
-  prose into cleaner rules through the judge port, comes later. Runs from a project: `rein
-  distill` in the clone, or `--project <slug>`.
+- 🔨 **P2.18 — `distill`, the minimal `propose`, and the judge.** [IN PROGRESS] Planned
+  2026-10-19 from the user's model, in four steps that each leave a working tool. (a) The
+  declaration formats for tool servers, permissions and hooks with their lint, executed
+  2026-10-19 (the [formats](#declaration-formats-tool-servers-permissions-hooks)). (b) The
+  mechanical distill: the project's snapshot, the harness it held, becomes candidate
+  declarations at the project's level, `CLAUDE.md` and `.claude/rules/*.md` rules,
+  `.claude/skills/` skills, `settings.json` permissions and hooks, `.mcp.json` tool servers,
+  written to `~/.rein/distill/<project>-<time>/` with a report that compares each candidate
+  with the organisation's existing declarations structurally: same command and arguments or
+  URL is the same server, same permission string the same rule, same event, matcher and
+  command the same hook, same skill name compared by content hash, same rule content a
+  duplicate. (c) The minimal `propose`: a folder of candidates, or a user's folder or zip, is
+  linted, checked for duplicates against the organisation, refused when an exact duplicate,
+  written on a branch `rein/<kind>-<slug>-<time>` of the org clone, committed, pushed, and
+  opened as a pull request through `gh pr create` with the report as its body; `propose` is
+  the only writer of declarations, and `rein review` in CI judges the pull request. (d) The
+  judge port with the `agent-cli` backend through `claude -p`, the distill brief and the
+  answer schema: the model gets the candidates and the resolved set in full, the
+  organisation level, the project's teams, the project and the user, each with address,
+  selector and text, and the other teams' rules through a prefilter on shared labels and
+  words under a prompt budget; it answers one JSON entry per candidate, `new`,
+  `duplicate`, `overlaps` or `contradicts`, with related addresses, verbatim quotes, a
+  suggestion to keep, drop, merge or lift with a level and a selector, a rewrite and a
+  reason; rein validates addresses and quotes before believing it, sends a malformed answer
+  back once with the errors, then finishes with the mechanical report alone and says so;
+  temperature zero where the backend allows; `--dry-run` prints exactly what would be sent.
+  The original scope, approved 2026-10-12, had distill mechanical first and `--assist` later;
+  the user's model of 2026-10-19 brought the model pass in.
 - 🟢 **P2.15 — The ledger, `restore`, and `reset` on it (D12).** [PENDING] Supersedes the
   undo half of P2.9; `org destroy` and `uninstall` stay there. Storage as D12 says: removals in
   one file with a section per agent, inserts in one file per organisation, both under
@@ -1323,3 +1439,7 @@ writes is read from the next session on, not in the same one.
 - (2026-10-19) P2.17 executed: `rein init` binds by fingerprint, by a named record or by
   creating the project, moves the agent files out into a snapshot, starts the ledger's
   removals file, adds the `.gitignore` block, registers the clone and commits the move-out.
+- (2026-10-19) D21, D22 and D23 recorded from the discussion of distill: generated files in
+  the clone only, secrets by `REIN_` reference told and checked, the judge's backends with the
+  organisation's provider winning. P2.18 replanned in four steps; step (a) executed: the
+  tool server, permission set and hook formats with their lint.
