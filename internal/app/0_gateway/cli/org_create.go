@@ -61,10 +61,11 @@ const orgCreateConfirmExplanation = "The repository is created on GitHub under t
 	"If a step fails, the repository is deleted again and nothing is left behind."
 
 func runOrgCreate(environment *commandEnvironment, answers orgCreateAnswers) error {
-	orchestrator, err := environment.orchestrate()
+	orchestrator, release, err := environment.orchestrateLocked()
 	if err != nil {
 		return err
 	}
+	defer release()
 	identity, err := orchestrator.Identity.Who()
 	if err != nil {
 		return refusal.New(err.Error())

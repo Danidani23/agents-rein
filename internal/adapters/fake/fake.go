@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/ports"
@@ -511,4 +512,21 @@ func (judge *Judge) Ask(brief string) (string, error) {
 	answer := judge.Answers[0]
 	judge.Answers = judge.Answers[1:]
 	return answer, nil
+}
+
+// Lock is a machine lock that is free, or held by someone else when Holder
+// is set. It counts how often it was taken.
+type Lock struct {
+	Holder   string
+	Acquired int
+	Released int
+}
+
+// Acquire fails while Holder is set, else counts and returns a release.
+func (lock *Lock) Acquire(wait time.Duration) (func(), error) {
+	if lock.Holder != "" {
+		return nil, errors.New("another rein is running (pid " + lock.Holder + " holds the lock); wait for it")
+	}
+	lock.Acquired++
+	return func() { lock.Released++ }, nil
 }

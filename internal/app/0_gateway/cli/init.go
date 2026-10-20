@@ -55,10 +55,11 @@ const initIntro = "init binds this clone to its project record in the org reposi
 	"is committed."
 
 func runInit(environment *commandEnvironment, answers initAnswers) error {
-	orchestrator, err := environment.orchestrate()
+	orchestrator, release, err := environment.orchestrateLocked()
 	if err != nil {
 		return err
 	}
+	defer release()
 	err = requireIdentity(orchestrator)
 	if err != nil {
 		return err

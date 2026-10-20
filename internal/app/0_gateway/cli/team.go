@@ -59,10 +59,11 @@ const teamCreateIntro = "team create adds a team to an organisation: a record in
 	"owner may do."
 
 func runTeamCreate(environment *commandEnvironment, answers teamCreateAnswers) error {
-	orchestrator, err := environment.orchestrate()
+	orchestrator, release, err := environment.orchestrateLocked()
 	if err != nil {
 		return err
 	}
+	defer release()
 	err = requireIdentity(orchestrator)
 	if err != nil {
 		return err

@@ -1063,15 +1063,26 @@ from that project's snapshot.
   organisations tests on the same fakes; the architecture test lets test files import the
   fakes and checks the one-workflow-per-file rule on the methods of `Orchestrator`. Output
   and exit codes unchanged. Gate: `task rein:check` green.
+- ✅ **P2.24 — The machine lock spans a command.** [EXECUTED] 2026-10-20, on the user's
+  decision, before the pilot run. A `MachineLock` port, the state store behind it: every
+  command that changes the machine, `org create`, `connect`, `use`, `disconnect`, `team` and
+  `project create`, `init`, `sync`, `distill`, `propose`, `restore` and `reset`, takes
+  `~/.rein/state.lock` with its pid when it starts and releases it when it ends, waiting up
+  to five seconds for another rein, so two sessions whose start hooks fire together queue
+  instead of failing; a lock older than ten minutes counts as left behind. `status`,
+  `resolve`, `lint` and `version` read without it. A held lock is a refusal naming the pid.
+  No resident process: a lock file gives the guarantee, and rein stays a compiler and a
+  linter (ADR, N1). The save-time lock of P2.23 is gone, the command lock covers it.
 - ✅ **P2.23 — The state file hardened (D19).** [EXECUTED] 2026-10-19 with P2.15: `state.yaml`
   opens with a header saying it is rein's, carries `version: 1`, is decoded with unknown
   fields refused and a newer version refused by name, a file from before the field counting
   as version 1; every save keeps the previous copy as `state.yaml.previous`, writes through a
   temporary file and a rename, and holds `state.lock` with the writer's pid, a lock older
-  than ten minutes counting as left behind. The lock spans a save, not a command: two reins
-  can still interleave a load and a save, which the ledger's append-only files tolerate and
-  the state's sections mostly do; a command-wide lock is a later step if it ever bites.
-  Snapshot contents were files already.
+  than ten minutes counting as left behind. Amended 2026-10-20 after the user's `reset`
+  refused their own file: the keys of earlier builds, `clones` and `projects`, are read as
+  `org_clone_paths` and `project_clones` and rewritten at the next save, since a stricter
+  reader must still read what its predecessors wrote. The lock spanned a save at first; P2.24
+  made it span the command. Snapshot contents were files already.
 - ✅ **P2.16 — `team create` and `project create`.** [EXECUTED] 2026-10-19. Records written by
   the owner to the org repository (D13): `team.yaml` with id, slug, name, description;
   `project.yaml` with the same plus teams, labels chosen from the seeded registry, and path;
@@ -1565,3 +1576,7 @@ writes is read from the next session on, not in the same one.
   the inserts ledger, verifies before every action, merges the developer's allow list and
   leaves `CLAUDE.local.md` alone; `restore` and `reset` remove the inserts; `status` shows
   the drift. Project registrations are project clones. The pilot path is complete in code.
+- (2026-10-20) The state reader migrates the keys of earlier builds instead of refusing them;
+  found by the first real `rein reset`.
+- (2026-10-20) P2.24 executed: the machine lock spans every writing command; readers run
+  without it.

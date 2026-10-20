@@ -26,6 +26,7 @@ type harness struct {
 	state      *fake.State
 	agent      *fake.Agent
 	judge      *fake.Judge
+	lock       *fake.Lock
 }
 
 func newHarness(t *testing.T) *harness {
@@ -37,11 +38,12 @@ func newHarness(t *testing.T) *harness {
 		state:      fake.NewState(),
 		agent:      &fake.Agent{Present: true, HomePath: t.TempDir()},
 		judge:      &fake.Judge{Unavailable: "no judge in this test"},
+		lock:       &fake.Lock{},
 	}
 }
 
 func (fixture *harness) orchestrator() Orchestrator {
-	return New(NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge))
+	return New(NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock))
 }
 
 func (fixture *harness) orgCloneFolders(t *testing.T) []string {
@@ -147,7 +149,7 @@ func TestDisconnectOrganization(t *testing.T) {
 func TestStatus(t *testing.T) {
 	t.Run("a logged-out host is reported, not refused", func(t *testing.T) {
 		fixture := newHarness(t)
-		orchestrator := New(NewServices(fixture.home, &fake.Host{}, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge))
+		orchestrator := New(NewServices(fixture.home, &fake.Host{}, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock))
 		report, err := orchestrator.Status()
 		if err != nil || !strings.Contains(report.IdentityError, "gh auth login") || report.Identity.Login != "" {
 			t.Fatalf("report %+v err %v", report, err)

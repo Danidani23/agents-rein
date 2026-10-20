@@ -36,10 +36,11 @@ func newRestoreCommand(environment *commandEnvironment) *cobra.Command {
 }
 
 func runRestore(environment *commandEnvironment, request orchestration.RestoreRequest, yes bool) error {
-	orchestrator, err := environment.orchestrate()
+	orchestrator, release, err := environment.orchestrateLocked()
 	if err != nil {
 		return err
 	}
+	defer release()
 	request.Directory, err = filepath.Abs(request.Directory)
 	if err != nil {
 		return err

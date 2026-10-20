@@ -39,10 +39,11 @@ func newResetCommand(environment *commandEnvironment) *cobra.Command {
 }
 
 func runReset(environment *commandEnvironment, yes bool) error {
-	orchestrator, err := environment.orchestrate()
+	orchestrator, release, err := environment.orchestrateLocked()
 	if err != nil {
 		return err
 	}
+	defer release()
 	plan, err := orchestrator.PlanReset()
 	if err != nil {
 		return err

@@ -150,3 +150,8 @@ the project-specific lines kept in its own instructions, its `CLAUDE.md` index u
   rein work: names are descriptive everywhere, subject, kind and role, no abbreviations, no
   single letters beyond `err`, `ok`, `ctx`, `t` and positions; receivers are nouns. Reaches
   every repository's next session.
+- (2026-10-20) Communication rule 8 added on the user's instruction: one command per fenced
+  block with nothing but the command in it, the explanation above the block, never a comment
+  inside. Reaches every repository's next session.
+- (2026-10-20) Communication rule 9 added on the user's instruction: a reference key, such as
+  a question number, is used once per conversation, so an answer by key is never ambiguous.

@@ -41,10 +41,11 @@ func newDistillCommand(environment *commandEnvironment) *cobra.Command {
 }
 
 func runDistill(environment *commandEnvironment, request orchestration.DistillRequest) error {
-	orchestrator, err := environment.orchestrate()
+	orchestrator, release, err := environment.orchestrateLocked()
 	if err != nil {
 		return err
 	}
+	defer release()
 	err = requireIdentity(orchestrator)
 	if err != nil {
 		return err

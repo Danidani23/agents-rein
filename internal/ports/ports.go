@@ -4,7 +4,11 @@
 // later the planned ones), the state store, and the prompter.
 package ports
 
-import "github.com/Danidani23/agents-rein/internal/app/2_services/machine"
+import (
+	"time"
+
+	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
+)
 
 // Identity is who rein acts for: the host account, read every time and never
 // stored (D8, D9). Slug is the address segment derived from the login.
@@ -129,6 +133,14 @@ type Judge interface {
 	Available() (reason string, ok bool)
 	// Ask sends the brief and returns the answer's text.
 	Ask(brief string) (answer string, err error)
+}
+
+// MachineLock keeps two rein processes from changing this machine at once:
+// a command that writes holds it from its start to its end (P2.24).
+type MachineLock interface {
+	// Acquire takes the lock, waiting up to wait for another rein to finish,
+	// and returns what releases it; a lock that cannot be had names its holder.
+	Acquire(wait time.Duration) (release func(), err error)
 }
 
 // State persists the machine model.

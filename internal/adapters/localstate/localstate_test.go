@@ -55,33 +55,67 @@ func TestStore(t *testing.T) {
 		if err != nil || state.Version != 1 || state.Active != "x" {
 			t.Fatalf("state %+v err %v", state, err)
 		}
+		// the keys of the builds before 2026-10-19 are read and rewritten
+		_ = os.WriteFile(filepath.Join(store.Home, stateFile), []byte("clones:\n  id-1: /clones/1\nprojects:\n  - organization: id-1\n    address: organizations.acme.projects.shop\n    clone_path: /p\nplacements:\n  - path: /a\n    target: /t\n    mode: link\n"), 0o644)
+		state, err = store.Load()
+		if err != nil || state.OrgClonePaths["id-1"] != "/clones/1" || len(state.ProjectClones) != 1 || len(state.Placements) != 1 {
+			t.Fatalf("migrated state %+v err %v", state, err)
+		}
+		err = store.Save(state)
+		content, _ := os.ReadFile(filepath.Join(store.Home, stateFile))
+		if err != nil || strings.Contains(string(content), "\nclones:") || !strings.Contains(string(content), "org_clone_paths:") || !strings.Contains(string(content), "project_clones:") {
+			t.Fatalf("rewritten %q err %v", content, err)
+		}
 		_ = os.WriteFile(filepath.Join(store.Home, stateFile), []byte("version: 9\n"), 0o644)
 		_, err = store.Load()
 		if err == nil || !strings.Contains(err.Error(), "newer rein") {
 			t.Fatalf("err %v", err)
 		}
-		_ = os.WriteFile(filepath.Join(store.Home, stateFile), []byte("version: 1\nclones: {}\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(store.Home, stateFile), []byte("version: 1\nmystery: {}\n"), 0o644)
 		_, err = store.Load()
-		if err == nil || !strings.Contains(err.Error(), "clones") || !strings.Contains(err.Error(), previousFile) {
+		if err == nil || !strings.Contains(err.Error(), "mystery") || !strings.Contains(err.Error(), previousFile) {
 			t.Fatalf("err %v", err)
 		}
 	})
-	t.Run("a live lock refuses the write, a stale one is taken over", func(t *testing.T) {
+	t.Run("the machine lock is held until released, refuses a live holder and takes over a stale one", func(t *testing.T) {
 		store := Store{Home: t.TempDir()}
-		_ = os.MkdirAll(store.Home, 0o755)
+		release, err := store.Acquire(0)
+		if err != nil {
+			t.Fatalf("acquire: %v", err)
+		}
 		lock := filepath.Join(store.Home, lockFile)
-		_ = os.WriteFile(lock, []byte("4242"), 0o644)
-		err := store.Save(machine.Empty())
-		if err == nil || !strings.Contains(err.Error(), "pid 4242") {
+		holder, _ := os.ReadFile(lock)
+		if string(holder) == "" {
+			t.Fatalf("the lock does not name its holder")
+		}
+		_, err = store.Acquire(0)
+		if err == nil || !strings.Contains(err.Error(), "another rein is running (pid "+string(holder)) {
 			t.Fatalf("err %v", err)
 		}
+		release()
+		_, lockErr := os.Stat(lock)
+		if lockErr == nil {
+			t.Fatalf("the lock stayed after release")
+		}
+		_ = os.WriteFile(lock, []byte("4242"), 0o644)
 		stale := time.Now().Add(-lockStale - time.Minute)
 		_ = os.Chtimes(lock, stale, stale)
-		err = store.Save(machine.Empty())
-		_, lockErr := os.Stat(lock)
-		if err != nil || lockErr == nil {
-			t.Fatalf("err %v lock still there %v", err, lockErr == nil)
+		release, err = store.Acquire(0)
+		if err != nil {
+			t.Fatalf("a stale lock was not taken over: %v", err)
 		}
+		release()
+		// a holder that releases within the wait is waited for
+		_ = os.WriteFile(lock, []byte("4243"), 0o644)
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			os.Remove(lock)
+		}()
+		release, err = store.Acquire(2 * time.Second)
+		if err != nil {
+			t.Fatalf("waiting for a holder: %v", err)
+		}
+		release()
 	})
 }
 

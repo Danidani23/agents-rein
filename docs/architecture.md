@@ -30,7 +30,7 @@ flowchart TB
             libs["libraries<br/>address, declaration, lint, exchange, machine, refusal, scaffold, distill, resolve, compile"]
         end
     end
-    ports["internal/ports<br/>Host, Repository, Agent, State, Prompter, Judge"]
+    ports["internal/ports<br/>Host, Repository, Agent, State, Prompter, Judge, MachineLock"]
     adapters["internal/adapters<br/>github, git, claudecode, localstate, terminal, execute<br/>fake, for the tests"]
 
     main --> gateway
@@ -99,7 +99,8 @@ holds this table as its `allowed` map and fails on any import outside it.
    `queries.go` and the runner is `saga.go`. Enforced by the test.
 6. **A query changes nothing.** `Status` and `PlanReset` read across services and return a
    report; the gateway shows it and, for a reset, asks before calling the workflow with the
-   plan the person confirmed.
+   plan the person confirmed. A command that changes the machine holds the machine lock from
+   its start to its end, through `orchestrateLocked` in the gateway; a query runs without it.
 7. **A refusal is not a crash.** A precondition that failed, nothing changed, is a refusal
    from the `refusal` library, `refusal.New(reason)`, and exits 1; any other error exits 2; a
    program rein ran that failed exits 3. Every layer raises refusals the same way: a service

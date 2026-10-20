@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -46,6 +47,28 @@ type commandEnvironment struct {
 
 func (environment *commandEnvironment) prompter() ports.Prompter {
 	return terminal.New(environment.in, environment.out, environment.terminal)
+}
+
+// lockWait is how long a writing command waits for another rein to finish.
+const lockWait = 5 * time.Second
+
+// orchestrateLocked is orchestrate for a command that changes the machine:
+// it holds the machine lock until release is called, so two reins never
+// interleave a read and a write of the state (P2.24). A refused lock is a
+// refusal, nothing changed.
+func (environment *commandEnvironment) orchestrateLocked() (orchestrator orchestration.Orchestrator, release func(), err error) {
+	orchestrator, err = environment.orchestrate()
+	if err != nil {
+		return orchestration.Orchestrator{}, nil, err
+	}
+	if orchestrator.Lock == nil {
+		return orchestrator, func() {}, nil
+	}
+	release, err = orchestrator.Lock.Acquire(lockWait)
+	if err != nil {
+		return orchestration.Orchestrator{}, nil, refusal.New(err.Error())
+	}
+	return orchestrator, release, nil
 }
 
 // Run executes rein with arguments and returns the exit code.

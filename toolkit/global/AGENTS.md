@@ -37,6 +37,16 @@ How the agent writes to the user. Commit messages follow the `commit` skill inst
    a reading of it. When a decision is the user's, ask and rank the options.
 7. **Correct wrong terms.** When the user uses a term wrongly, say so, explain the right term and
    why, then carry on with the corrected meaning.
+8. **One command per block, nothing else in it.** When the user is to run commands, each
+   command gets its own fenced block holding only what is pasted. What the command does, and
+   any caution, is a sentence above the block, never a comment inside it. Commands that form
+   one step and must run together, such as a `cd` with the commit that follows it, may share a
+   block, still without comments.
+9. **A reference key is used once per conversation.** Numbered questions, options and points
+   the user may answer by their key get keys that no earlier message in the conversation used:
+   numbering continues across messages (Q1 to Q4 in one message, Q5 onwards in the next), or a
+   fresh prefix marks a new list (A1, B1). The user answers "1 ok" and it must be unambiguous
+   which 1 that is.
 8. **Number everything the user may answer.** Topics carry their board ID where one exists
    (D5, P1.2) or a short label; every question, option or open point under a topic carries a
    letter or number (a, b, c / O1, O2) so the user can answer by reference ("D5 a: yes").

@@ -40,10 +40,11 @@ func newSyncCommand(environment *commandEnvironment) *cobra.Command {
 }
 
 func runSync(environment *commandEnvironment, request orchestration.SyncRequest, hook bool) error {
-	orchestrator, err := environment.orchestrate()
+	orchestrator, release, err := environment.orchestrateLocked()
 	if err != nil {
 		return hookOrError(environment, hook, err)
 	}
+	defer release()
 	err = requireIdentity(orchestrator)
 	if err != nil {
 		return hookOrError(environment, hook, err)

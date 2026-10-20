@@ -42,6 +42,8 @@ type Services struct {
 	Distillations distillations.Service
 	Proposals     proposals.Service
 	Judge         judge.Service
+	// Lock is the machine lock a writing command holds from start to end.
+	Lock ports.MachineLock
 	// Clock stamps every record a workflow writes (D20).
 	Clock func() time.Time
 }
@@ -52,7 +54,7 @@ type Services struct {
 // snapshots over the agents, the judge over its backend, which may be nil.
 // Nothing runs here; main calls it once with the real adapters and the
 // tests with the fakes.
-func NewServices(home string, host ports.Host, repository ports.Repository, state ports.State, agents []ports.Agent, judgeBackend ports.Judge) Services {
+func NewServices(home string, host ports.Host, repository ports.Repository, state ports.State, agents []ports.Agent, judgeBackend ports.Judge, lock ports.MachineLock) Services {
 	return Services{
 		Home:          home,
 		Identity:      identity.Service{Host: host},
@@ -67,6 +69,7 @@ func NewServices(home string, host ports.Host, repository ports.Repository, stat
 		Distillations: distillations.Service{Home: home, Clock: time.Now},
 		Proposals:     proposals.Service{Repository: repository, Host: host},
 		Judge:         judge.Service{Judge: judgeBackend},
+		Lock:          lock,
 		Clock:         time.Now,
 	}
 }

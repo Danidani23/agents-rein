@@ -31,10 +31,11 @@ func newOrgConnectCommand(environment *commandEnvironment) *cobra.Command {
 		Example: "  rein org connect git@github.com:acme/agent-settings.git",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
-			orchestrator, err := environment.orchestrate()
+			orchestrator, release, err := environment.orchestrateLocked()
 			if err != nil {
 				return err
 			}
+			defer release()
 			err = requireIdentity(orchestrator)
 			if err != nil {
 				return err
@@ -55,10 +56,11 @@ func newOrgListCommand(environment *commandEnvironment) *cobra.Command {
 		Short: "List the connected organisations; the active one is marked",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			orchestrator, err := environment.orchestrate()
+			orchestrator, release, err := environment.orchestrateLocked()
 			if err != nil {
 				return err
 			}
+			defer release()
 			err = requireIdentity(orchestrator)
 			if err != nil {
 				return err
@@ -89,10 +91,11 @@ func newOrgUseCommand(environment *commandEnvironment) *cobra.Command {
 		Short: "Make an organisation the active one",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
-			orchestrator, err := environment.orchestrate()
+			orchestrator, release, err := environment.orchestrateLocked()
 			if err != nil {
 				return err
 			}
+			defer release()
 			err = requireIdentity(orchestrator)
 			if err != nil {
 				return err
@@ -116,10 +119,11 @@ func newOrgDisconnectCommand(environment *commandEnvironment) *cobra.Command {
 			"touched; org destroy, once it exists, is the command that deletes one.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
-			orchestrator, err := environment.orchestrate()
+			orchestrator, release, err := environment.orchestrateLocked()
 			if err != nil {
 				return err
 			}
+			defer release()
 			err = requireIdentity(orchestrator)
 			if err != nil {
 				return err

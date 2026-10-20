@@ -58,6 +58,7 @@ type harness struct {
 	state      *fake.State
 	agent      *fake.Agent
 	judge      *fake.Judge
+	lock       *fake.Lock
 }
 
 func newHarness(t *testing.T) *harness {
@@ -69,11 +70,12 @@ func newHarness(t *testing.T) *harness {
 		state:      fake.NewState(),
 		agent:      &fake.Agent{Present: true, HomePath: t.TempDir()},
 		judge:      &fake.Judge{Unavailable: "no judge in this test"},
+		lock:       &fake.Lock{},
 	}
 }
 
 func (fixture *harness) orchestrate() (orchestration.Orchestrator, error) {
-	return orchestration.New(orchestration.NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge)), nil
+	return orchestration.New(orchestration.NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock)), nil
 }
 
 // seedConnectedOrganization leaves the state as a connect of acme would, with a clone folder
@@ -667,5 +669,26 @@ func TestSync(t *testing.T) {
 	code, out, _ = fixture.run("sync", "--path", folder, "--force")
 	if code != ExitWorked || !strings.Contains(out, "your edits to CLAUDE.md were snapshotted to") {
 		t.Fatalf("force: code %d out %q", code, out)
+	}
+}
+
+func TestMachineLock(t *testing.T) {
+	fixture := newHarness(t)
+	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+	if fixture.lock.Acquired != 1 || fixture.lock.Released != 1 {
+		t.Fatalf("org create took the lock %d times and released it %d times", fixture.lock.Acquired, fixture.lock.Released)
+	}
+	fixture.lock.Holder = "4242"
+	code, _, errOut := fixture.run("org", "use", "acme")
+	if code != ExitRefused || !strings.Contains(errOut, "another rein is running (pid 4242") {
+		t.Fatalf("code %d err %q", code, errOut)
+	}
+	code, out, _ := fixture.run("status")
+	if code != ExitWorked || !strings.Contains(out, "* acme") {
+		t.Fatalf("status under a held lock: code %d out %q", code, out)
+	}
+	code, out, _ = fixture.run("resolve", "--project", "nope")
+	if code != ExitRefused || strings.Contains(out, "another rein") {
+		t.Fatalf("resolve under a held lock: code %d out %q", code, out)
 	}
 }

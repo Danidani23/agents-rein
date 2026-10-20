@@ -39,10 +39,11 @@ func newProposeCommand(environment *commandEnvironment) *cobra.Command {
 }
 
 func runPropose(environment *commandEnvironment, request orchestration.ProposeRequest, yes bool) error {
-	orchestrator, err := environment.orchestrate()
+	orchestrator, release, err := environment.orchestrateLocked()
 	if err != nil {
 		return err
 	}
+	defer release()
 	err = requireIdentity(orchestrator)
 	if err != nil {
 		return err

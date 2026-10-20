@@ -14,11 +14,13 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 // HomeVariable overrides the folder.
@@ -65,6 +67,10 @@ func (store Store) Load() (machine.State, error) {
 	if err != nil {
 		return machine.State{}, err
 	}
+	content, err = migrate(content)
+	if err != nil {
+		return machine.State{}, fmt.Errorf("%s: %w; the previous copy is %s", path, err, previousFile)
+	}
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	decoder.KnownFields(true)
 	err = decoder.Decode(&state)
@@ -84,6 +90,36 @@ func (store Store) Load() (machine.State, error) {
 	return state, nil
 }
 
+// legacyKeys are the keys earlier builds wrote, by their names today; a
+// file holding them is read as if it used the new names and is written with
+// the new names at the next save.
+var legacyKeys = map[string]string{"clones": "org_clone_paths", "projects": "project_clones"}
+
+// migrate renames the legacy keys of an old state file.
+func migrate(content []byte) ([]byte, error) {
+	var generic map[string]any
+	err := yaml.Unmarshal(content, &generic)
+	if err != nil || generic == nil {
+		return content, nil
+	}
+	changed := false
+	for old, current := range legacyKeys {
+		value, present := generic[old]
+		if !present {
+			continue
+		}
+		if _, taken := generic[current]; !taken {
+			generic[current] = value
+		}
+		delete(generic, old)
+		changed = true
+	}
+	if !changed {
+		return content, nil
+	}
+	return yaml.Marshal(generic)
+}
+
 // errEmptyDocument lets an empty file count as an empty state.
 func errEmptyDocument(err error) error {
 	if err.Error() == "EOF" {
@@ -92,19 +128,14 @@ func errEmptyDocument(err error) error {
 	return errors.New("not empty")
 }
 
-// Save writes state.yaml whole: the previous copy is kept, the new content
-// goes to a temporary file first and is renamed into place, and a lock
-// keeps two rein processes from writing at once.
+// Save writes state.yaml whole: the previous copy is kept and the new
+// content goes to a temporary file first and is renamed into place. The
+// lock against another rein is the command's, taken through Acquire.
 func (store Store) Save(state machine.State) error {
 	err := os.MkdirAll(store.Home, 0o755)
 	if err != nil {
 		return err
 	}
-	unlock, err := store.lock()
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	state.Version = machine.StateVersion
 	content, err := yaml.Marshal(state)
 	if err != nil {
@@ -136,11 +167,22 @@ func (store Store) Save(state machine.State) error {
 	return os.Rename(temporary.Name(), path)
 }
 
-// lock takes the lock file, or says which rein holds it; a lock older than
-// lockStale is taken over.
-func (store Store) lock() (unlock func(), err error) {
+// lockRetry is how often Acquire tries again while it waits.
+const lockRetry = 200 * time.Millisecond
+
+var _ ports.MachineLock = Store{}
+
+// Acquire takes the lock file for the rest of the command, waiting up to
+// wait for another rein to release it; a lock older than lockStale is taken
+// over as left behind by a rein that died.
+func (store Store) Acquire(wait time.Duration) (release func(), err error) {
+	err = os.MkdirAll(store.Home, 0o755)
+	if err != nil {
+		return nil, err
+	}
 	path := filepath.Join(store.Home, lockFile)
-	for attempt := 0; attempt < 2; attempt++ {
+	deadline := time.Now().Add(wait)
+	for {
 		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err == nil {
 			_, _ = file.WriteString(strconv.Itoa(os.Getpid()))
@@ -155,8 +197,10 @@ func (store Store) lock() (unlock func(), err error) {
 			os.Remove(path)
 			continue
 		}
-		holder, _ := os.ReadFile(path)
-		return nil, fmt.Errorf("another rein is writing the state (pid %s holds %s); try again, or remove the lock if that rein is gone", string(holder), path)
+		if time.Now().After(deadline) {
+			holder, _ := os.ReadFile(path)
+			return nil, fmt.Errorf("another rein is running (pid %s holds %s); wait for it, or remove the lock if that rein is gone", strings.TrimSpace(string(holder)), path)
+		}
+		time.Sleep(lockRetry)
 	}
-	return nil, fmt.Errorf("could not take %s", path)
 }

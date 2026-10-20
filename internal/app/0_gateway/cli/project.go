@@ -69,10 +69,11 @@ const projectCreateIntro = "project create adds a project to an organisation: a 
 	"to the project is rein init, later."
 
 func runProjectCreate(environment *commandEnvironment, answers projectCreateAnswers) error {
-	orchestrator, err := environment.orchestrate()
+	orchestrator, release, err := environment.orchestrateLocked()
 	if err != nil {
 		return err
 	}
+	defer release()
 	err = requireIdentity(orchestrator)
 	if err != nil {
 		return err
