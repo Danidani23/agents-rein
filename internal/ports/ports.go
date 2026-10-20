@@ -108,6 +108,12 @@ type Agent interface {
 	// ProjectHarnessPaths are the files and folders of a project clone the
 	// agent reads its settings from, which init moves out and sync writes.
 	ProjectHarnessPaths() []string
+	// Format names the harness format the agent reads, which picks the
+	// compiler; empty means rein has no compiler for it yet.
+	Format() string
+	// PersonalPaths are the files the agent writes for the developer in a
+	// project clone, which rein never touches but keeps out of git.
+	PersonalPaths() []string
 	// Unplace removes one placement rein made, when it is still what rein
 	// made; removed is false with an empty reason when nothing is there.
 	Unplace(placed machine.Placement) (removed bool, reason string, err error)

@@ -88,3 +88,40 @@ func TestCommit(t *testing.T) {
 		t.Fatalf("an untracked removal committed: %v %v", committed, err)
 	}
 }
+
+func TestVerifyAndWriteFiles(t *testing.T) {
+	folder := t.TempDir()
+	service := Service{}
+	previous, err := service.WriteFiles(folder, map[string]string{"CLAUDE.md": "one", ".claude/hooks/x/run.sh": "#!/bin/sh\n"})
+	if err != nil || len(previous) != 0 {
+		t.Fatalf("write: %v %v", err, previous)
+	}
+	info, _ := os.Stat(filepath.Join(folder, ".claude", "hooks", "x", "run.sh"))
+	if info.Mode().Perm()&0o100 == 0 {
+		t.Fatalf("the script is not executable: %v", info.Mode())
+	}
+	recorded := map[string]string{"CLAUDE.md": hashOf([]byte("one")), ".claude/hooks/x/run.sh": hashOf([]byte("#!/bin/sh\n")), "gone.md": hashOf([]byte("z"))}
+	verification := service.Verify(folder, recorded)
+	if strings.Join(verification.Unchanged, ",") != ".claude/hooks/x/run.sh,CLAUDE.md" || strings.Join(verification.Missing, ",") != "gone.md" || len(verification.Modified) != 0 {
+		t.Fatalf("verification %+v", verification)
+	}
+	previous, err = service.WriteFiles(folder, map[string]string{"CLAUDE.md": "two"})
+	if err != nil || previous["CLAUDE.md"] != "one" {
+		t.Fatalf("previous %v err %v", previous, err)
+	}
+	verification = service.Verify(folder, recorded)
+	if strings.Join(verification.Modified, ",") != "CLAUDE.md" {
+		t.Fatalf("verification %+v", verification)
+	}
+	_ = service.Remove(folder, []string{".claude/hooks/x/run.sh"})
+	service.RemoveEmptyFolders(folder, []string{".claude/hooks/x/run.sh"})
+	_, err = os.Stat(filepath.Join(folder, ".claude"))
+	if err == nil {
+		t.Fatalf("empty folders left behind")
+	}
+	t.Setenv("REIN_SET_FOR_TEST", "1")
+	unset := service.UnsetVariables([]string{"REIN_SET_FOR_TEST", "REIN_SURELY_UNSET_FOR_TEST"})
+	if strings.Join(unset, ",") != "REIN_SURELY_UNSET_FOR_TEST" {
+		t.Fatalf("unset %v", unset)
+	}
+}

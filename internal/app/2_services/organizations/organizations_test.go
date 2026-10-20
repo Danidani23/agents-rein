@@ -51,16 +51,16 @@ func TestService(t *testing.T) {
 		service := Service{State: state}
 		_, _ = service.Register(acme, "/clones/1")
 		_, _ = service.Register(other, "/clones/2")
-		state.Current.Projects = []machine.Project{{Organization: "id-1", ClonePath: "/p1"}, {Organization: "id-2", ClonePath: "/p2"}}
+		state.Current.ProjectClones = []machine.ProjectClone{{Organization: "id-1", ClonePath: "/p1"}, {Organization: "id-2", ClonePath: "/p2"}}
 		forgotten, err := service.Forget("acme")
-		if err != nil || forgotten.Organization.ID != acme.ID || forgotten.OrgClonePath != "/clones/1" || len(forgotten.RemovedProjects) != 1 || forgotten.ActiveAfter != "other" {
+		if err != nil || forgotten.Organization.ID != acme.ID || forgotten.OrgClonePath != "/clones/1" || len(forgotten.RemovedProjectClones) != 1 || forgotten.ActiveAfter != "other" {
 			t.Fatalf("forgotten %+v err %v", forgotten, err)
 		}
-		if len(state.Current.Organizations) != 1 || len(state.Current.Projects) != 1 || state.Current.OrgClonePaths["id-1"] != "" {
+		if len(state.Current.Organizations) != 1 || len(state.Current.ProjectClones) != 1 || state.Current.OrgClonePaths["id-1"] != "" {
 			t.Fatalf("state %+v", state.Current)
 		}
 		err = service.Restore(forgotten)
-		projects, _ := service.Projects()
+		projects, _ := service.ProjectClones()
 		if err != nil || len(state.Current.Organizations) != 2 || len(projects) != 2 || state.Current.OrgClonePaths["id-1"] != "/clones/1" || state.Current.Active != "other" {
 			t.Fatalf("err %v state %+v", err, state.Current)
 		}

@@ -17,6 +17,15 @@ type PlacementStatus struct {
 	TargetExists bool
 }
 
+// CloneStatus is one initialised project clone with the drift of what sync
+// wrote: how many files are as written, edited by hand, or gone.
+type CloneStatus struct {
+	machine.ProjectClone
+	Inserts  int
+	Modified int
+	Missing  int
+}
+
 // StatusReport is everything status shows.
 type StatusReport struct {
 	Identity      ports.Identity
@@ -27,7 +36,8 @@ type StatusReport struct {
 	Missing       int
 	Organizations []machine.OrganizationRef
 	Active        string
-	Projects      []machine.Project
+	ProjectClones []machine.ProjectClone
+	Clones        []CloneStatus
 	Imports       []machine.Import
 }
 
@@ -58,9 +68,25 @@ func (orchestrator Orchestrator) Status() (StatusReport, error) {
 	if err != nil {
 		return StatusReport{}, err
 	}
-	report.Projects, err = services.Organizations.Projects()
+	report.ProjectClones, err = services.Organizations.ProjectClones()
 	if err != nil {
 		return StatusReport{}, err
+	}
+	for _, clone := range report.ProjectClones {
+		status := CloneStatus{ProjectClone: clone}
+		inserts, err := services.Ledger.InsertsOf(clone.Organization, clone.ClonePath)
+		if err != nil {
+			return StatusReport{}, err
+		}
+		recorded := map[string]string{}
+		for _, insert := range inserts {
+			recorded[insert.Path] = insert.SHA256
+		}
+		verification := services.WorkingCopy.Verify(clone.ClonePath, recorded)
+		status.Inserts = len(inserts)
+		status.Modified = len(verification.Modified)
+		status.Missing = len(verification.Missing)
+		report.Clones = append(report.Clones, status)
 	}
 	return report, nil
 }
@@ -71,12 +97,13 @@ type ResetPlan struct {
 	Placements      []machine.Placement
 	Imports         []machine.Import
 	Organizations   []machine.OrganizationRef
-	Projects        []machine.Project
+	ProjectClones   []machine.ProjectClone
 	ImportsFolder   string
 	OrgClonesFolder string
 	RemovalsFile    string
 	SnapshotsFolder string
 	DistillFolder   string
+	InsertsFolder   string
 }
 
 // PlanReset reads the state and says what a reset would do.
@@ -90,7 +117,7 @@ func (orchestrator Orchestrator) PlanReset() (ResetPlan, error) {
 	if err != nil {
 		return ResetPlan{}, err
 	}
-	projects, err := services.Organizations.Projects()
+	projects, err := services.Organizations.ProjectClones()
 	if err != nil {
 		return ResetPlan{}, err
 	}
@@ -98,12 +125,13 @@ func (orchestrator Orchestrator) PlanReset() (ResetPlan, error) {
 		Placements:      placed,
 		Imports:         imports,
 		Organizations:   connected,
-		Projects:        projects,
+		ProjectClones:   projects,
 		ImportsFolder:   services.Placements.ImportsFolder(),
 		OrgClonesFolder: services.Clones.OrgClonesFolder(),
 		RemovalsFile:    services.Ledger.Path(),
 		SnapshotsFolder: services.Snapshots.Folder(),
 		DistillFolder:   services.Distillations.Folder(),
+		InsertsFolder:   services.Ledger.InsertsFolder(),
 	}, nil
 }
 
@@ -199,7 +227,7 @@ func (orchestrator Orchestrator) LocateProject(directory string) (ProjectLocatio
 		return ProjectLocation{}, err
 	}
 	result := ProjectLocation{Root: location.Root, Path: location.Path, Folder: location.Folder, Fingerprint: location.Fingerprint}
-	registered, err := services.Organizations.Projects()
+	registered, err := services.Organizations.ProjectClones()
 	if err != nil {
 		return ProjectLocation{}, err
 	}

@@ -16,7 +16,8 @@ func newStatusCommand(environment *commandEnvironment) *cobra.Command {
 		Long: "status shows the GitHub account gh is logged in as, which is your identity (gh can hold\n" +
 			"several accounts; the active one counts), the supported agents found on this machine,\n" +
 			"every file rein placed into the agent's home and whether its target still exists, the\n" +
-			"connected organisations with the active one marked, the registered projects and the\n" +
+			"connected organisations with the active one marked, the initialised project clones with\n" +
+			"the drift of what sync wrote, and the\n" +
 			"imports. It changes nothing and runs without an identity: when gh is not logged in it\n" +
 			"says so and still shows the rest.",
 		Args: cobra.NoArgs,
@@ -66,9 +67,19 @@ func printStatus(environment *commandEnvironment, report orchestration.StatusRep
 		}
 		fmt.Fprintf(environment.out, "  %s %s  %s\n", marker, ref.Slug, ref.Remote)
 	}
-	fmt.Fprintf(environment.out, "\nprojects  %d\n", len(report.Projects))
-	for _, project := range report.Projects {
-		fmt.Fprintf(environment.out, "  %s  %s\n", project.Address, project.ClonePath)
+	fmt.Fprintf(environment.out, "\nproject clones  %d\n", len(report.Clones))
+	for _, clone := range report.Clones {
+		drift := "never synced"
+		if clone.Inserts > 0 {
+			drift = fmt.Sprintf("%d files from sync", clone.Inserts)
+			if clone.Modified > 0 {
+				drift += fmt.Sprintf(", %d edited by hand", clone.Modified)
+			}
+			if clone.Missing > 0 {
+				drift += fmt.Sprintf(", %d missing", clone.Missing)
+			}
+		}
+		fmt.Fprintf(environment.out, "  %s  %s  %s\n", clone.Address, clone.ClonePath, drift)
 	}
 	if len(report.Imports) > 0 {
 		fmt.Fprintf(environment.out, "\nimports  %d\n", len(report.Imports))

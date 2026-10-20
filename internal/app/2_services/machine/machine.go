@@ -32,10 +32,10 @@ type Placement struct {
 	Source string `yaml:"source,omitempty"`
 }
 
-// Project is a project clone initialised on this machine: ClonePath is the
-// project's folder, the repository's root or, in a monorepo, the project's
-// path under it; Fingerprint the root commits joined with commas.
-type Project struct {
+// ProjectClone is a project clone initialised on this machine: ClonePath is
+// the project's folder, the repository's root or, in a monorepo, the
+// project's path under it; Fingerprint the root commits joined with commas.
+type ProjectClone struct {
 	Organization  string    `yaml:"organization"`
 	Address       string    `yaml:"address"`
 	ClonePath     string    `yaml:"clone_path"`
@@ -64,7 +64,7 @@ type State struct {
 	Organizations []OrganizationRef `yaml:"organizations"`
 	Active        string            `yaml:"active,omitempty"`
 	OrgClonePaths map[string]string `yaml:"org_clone_paths"`
-	Projects      []Project         `yaml:"projects"`
+	ProjectClones []ProjectClone    `yaml:"project_clones"`
 	Placements    []Placement       `yaml:"placements"`
 	Imports       []Import          `yaml:"imports,omitempty"`
 }

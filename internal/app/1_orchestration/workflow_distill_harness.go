@@ -157,7 +157,7 @@ func distillSources(orchestrator Orchestrator, request DistillRequest) (level st
 		if err != nil {
 			return "", machine.OrganizationRef{}, nil, refusal.New(fmt.Sprintf("%s is not inside a git repository with a commit: %v; name the project with --project", request.Directory, err))
 		}
-		registered, err := services.Organizations.Projects()
+		registered, err := services.Organizations.ProjectClones()
 		if err != nil {
 			return "", machine.OrganizationRef{}, nil, err
 		}

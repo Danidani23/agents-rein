@@ -387,6 +387,9 @@ type Agent struct {
 	HomePath     string
 	HarnessFiles []string
 	Unplaced     []string
+	// HarnessFormat is what Format returns; "claude-code" makes sync compile
+	// for the fake as for Claude Code.
+	HarnessFormat string
 }
 
 // Name is the agent's name.
@@ -415,9 +418,26 @@ func (agent *Agent) HarnessPaths() []string {
 	return agent.HarnessFiles
 }
 
-// ProjectHarnessPaths are what the fake agent reads in a project.
-func (*Agent) ProjectHarnessPaths() []string {
+// ProjectHarnessPaths are what the fake agent reads in a project; with the
+// Claude Code format they are Claude Code's.
+func (agent *Agent) ProjectHarnessPaths() []string {
+	if agent.HarnessFormat == "claude-code" {
+		return []string{"CLAUDE.md", ".claude", ".mcp.json"}
+	}
 	return []string{"INSTRUCTIONS.md", ".fake-agent"}
+}
+
+// Format is the fake's harness format.
+func (agent *Agent) Format() string {
+	return agent.HarnessFormat
+}
+
+// PersonalPaths is CLAUDE.local.md for the Claude Code format, else none.
+func (agent *Agent) PersonalPaths() []string {
+	if agent.HarnessFormat == "claude-code" {
+		return []string{"CLAUDE.local.md"}
+	}
+	return nil
 }
 
 // Unplace records the request and removes everything but a foreign path.

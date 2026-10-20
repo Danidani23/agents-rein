@@ -88,35 +88,49 @@ func (ErrProjectInitialized) Is(target error) bool {
 	return target == refusal.ErrRefused
 }
 
-// RegisterProject remembers an initialised clone, stamped with the time.
-func (service Service) RegisterProject(project machine.Project) error {
+// RegisterProjectClone remembers an initialised clone, stamped with the time.
+func (service Service) RegisterProjectClone(project machine.ProjectClone) error {
 	state, err := service.State.Load()
 	if err != nil {
 		return err
 	}
-	for _, registered := range state.Projects {
+	for _, registered := range state.ProjectClones {
 		if registered.ClonePath == project.ClonePath {
 			return ErrProjectInitialized{ClonePath: project.ClonePath, Address: registered.Address}
 		}
 	}
 	project.InitializedAt = service.now()
-	state.Projects = append(state.Projects, project)
+	state.ProjectClones = append(state.ProjectClones, project)
 	return service.State.Save(state)
 }
 
-// UnregisterProject forgets a clone: the compensation of a failed init.
-func (service Service) UnregisterProject(clonePath string) error {
+// MarkSynced records when a clone was last synced.
+func (service Service) MarkSynced(clonePath string) error {
 	state, err := service.State.Load()
 	if err != nil {
 		return err
 	}
-	var kept []machine.Project
-	for _, registered := range state.Projects {
+	for index := range state.ProjectClones {
+		if state.ProjectClones[index].ClonePath == clonePath {
+			state.ProjectClones[index].LastSync = service.now().Format(time.RFC3339)
+		}
+	}
+	return service.State.Save(state)
+}
+
+// UnregisterProjectClone forgets a clone: the compensation of a failed init.
+func (service Service) UnregisterProjectClone(clonePath string) error {
+	state, err := service.State.Load()
+	if err != nil {
+		return err
+	}
+	var kept []machine.ProjectClone
+	for _, registered := range state.ProjectClones {
 		if registered.ClonePath != clonePath {
 			kept = append(kept, registered)
 		}
 	}
-	state.Projects = kept
+	state.ProjectClones = kept
 	return service.State.Save(state)
 }
 
@@ -137,12 +151,12 @@ func (service Service) List() (organizations []machine.OrganizationRef, active s
 }
 
 // Projects returns the registered projects of every connected organisation.
-func (service Service) Projects() ([]machine.Project, error) {
+func (service Service) ProjectClones() ([]machine.ProjectClone, error) {
 	state, err := service.State.Load()
 	if err != nil {
 		return nil, err
 	}
-	return state.Projects, nil
+	return state.ProjectClones, nil
 }
 
 // Lookup finds one connected organisation and its clone.
@@ -196,10 +210,10 @@ func (service Service) Use(slug string) error {
 // Forgotten is what Forget removed from the state, and which organisation
 // is active afterwards.
 type Forgotten struct {
-	Organization    machine.OrganizationRef
-	OrgClonePath    string
-	RemovedProjects []machine.Project
-	ActiveAfter     string
+	Organization         machine.OrganizationRef
+	OrgClonePath         string
+	RemovedProjectClones []machine.ProjectClone
+	ActiveAfter          string
 }
 
 // Forget removes an organisation, its clone path and its projects from the
@@ -216,15 +230,15 @@ func (service Service) Forget(slug string) (Forgotten, error) {
 	}
 	forgotten := Forgotten{Organization: organization, OrgClonePath: state.OrgClonePaths[organization.ID]}
 	delete(state.OrgClonePaths, organization.ID)
-	var keptProjects []machine.Project
-	for _, project := range state.Projects {
+	var keptProjects []machine.ProjectClone
+	for _, project := range state.ProjectClones {
 		if project.Organization == organization.ID {
-			forgotten.RemovedProjects = append(forgotten.RemovedProjects, project)
+			forgotten.RemovedProjectClones = append(forgotten.RemovedProjectClones, project)
 			continue
 		}
 		keptProjects = append(keptProjects, project)
 	}
-	state.Projects = keptProjects
+	state.ProjectClones = keptProjects
 	var remaining []machine.OrganizationRef
 	for _, candidate := range state.Organizations {
 		if candidate.Slug != slug {
@@ -251,7 +265,7 @@ func (service Service) Restore(forgotten Forgotten) error {
 	}
 	state.Organizations = append(state.Organizations, forgotten.Organization)
 	state.OrgClonePaths[forgotten.Organization.ID] = forgotten.OrgClonePath
-	state.Projects = append(state.Projects, forgotten.RemovedProjects...)
+	state.ProjectClones = append(state.ProjectClones, forgotten.RemovedProjectClones...)
 	if state.Active == "" {
 		state.Active = forgotten.Organization.Slug
 	}
@@ -269,6 +283,6 @@ func (service Service) ForgetAll() (forgotten []machine.OrganizationRef, orgClon
 	state.Organizations = nil
 	state.OrgClonePaths = map[string]string{}
 	state.Active = ""
-	state.Projects = nil
+	state.ProjectClones = nil
 	return forgotten, orgClonePaths, service.State.Save(state)
 }

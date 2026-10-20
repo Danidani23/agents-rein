@@ -30,8 +30,8 @@ type ProjectReset struct {
 
 // ResetResult is what a reset did.
 type ResetResult struct {
-	Projects   []ProjectReset
-	Placements []Unplaced
+	ProjectClones []ProjectReset
+	Placements    []Unplaced
 	// RemovedOrgClones holds the ids of the organisations whose clones went.
 	RemovedOrgClones []string
 	Kept             int
@@ -53,7 +53,7 @@ type ResetResult struct {
 func (orchestrator Orchestrator) ResetMachine(plan ResetPlan) (ResetResult, error) {
 	services := orchestrator.Services
 	var result ResetResult
-	registered, err := services.Organizations.Projects()
+	registered, err := services.Organizations.ProjectClones()
 	if err != nil {
 		return ResetResult{}, err
 	}
@@ -62,20 +62,20 @@ func (orchestrator Orchestrator) ResetMachine(plan ResetPlan) (ResetResult, erro
 		_, statErr := os.Stat(project.ClonePath)
 		if statErr != nil {
 			reset.Skipped = "the folder is gone; its registration is dropped and its snapshots stay in the ledger"
-			result.Projects = append(result.Projects, reset)
+			result.ProjectClones = append(result.ProjectClones, reset)
 			continue
 		}
 		restored, err := orchestrator.RestoreProject(RestoreRequest{Directory: project.ClonePath})
 		if err != nil {
 			reset.Failed = true
 			reset.Skipped = err.Error()
-			result.Projects = append(result.Projects, reset)
+			result.ProjectClones = append(result.ProjectClones, reset)
 			continue
 		}
 		reset.Restore = restored
-		result.Projects = append(result.Projects, reset)
+		result.ProjectClones = append(result.ProjectClones, reset)
 	}
-	for _, reset := range result.Projects {
+	for _, reset := range result.ProjectClones {
 		if reset.Failed {
 			result.Stopped = true
 			return result, refusal.New(fmt.Sprintf("the reset stopped before wiping anything: %s could not be put back (%s); fix that and run reset again", reset.Folder, reset.Skipped))
@@ -120,6 +120,7 @@ func (orchestrator Orchestrator) ResetMachine(plan ResetPlan) (ResetResult, erro
 		{plan.RemovalsFile, services.Ledger.Delete},
 		{plan.SnapshotsFolder, services.Snapshots.RemoveAll},
 		{plan.DistillFolder, services.Distillations.RemoveAll},
+		{plan.InsertsFolder, services.Ledger.DeleteInserts},
 	}
 	for _, wipe := range wipes {
 		err = wipe.wipe()

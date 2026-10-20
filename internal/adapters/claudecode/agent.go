@@ -43,11 +43,22 @@ func (Agent) HarnessPaths() []string {
 	return []string{"CLAUDE.md", "settings.json", "rules", "skills", "agents", "commands"}
 }
 
-// ProjectHarnessPaths are the settings Claude Code reads in a project: the
-// instructions, the personal instructions, the .claude folder with rules,
-// skills, agents and settings, and the tool servers.
+// ProjectHarnessPaths are the settings Claude Code reads in a project that
+// rein owns: the instructions, the .claude folder with rules, skills, agents
+// and settings, and the tool servers. CLAUDE.local.md stays the developer's,
+// where the memory shortcut writes, and is neither moved out nor generated.
 func (Agent) ProjectHarnessPaths() []string {
-	return []string{"CLAUDE.md", "CLAUDE.local.md", ".claude", ".mcp.json"}
+	return []string{"CLAUDE.md", ".claude", ".mcp.json"}
+}
+
+// PersonalPaths is CLAUDE.local.md, where the memory shortcut writes.
+func (Agent) PersonalPaths() []string {
+	return []string{"CLAUDE.local.md"}
+}
+
+// Format is the harness format the compiler emits for Claude Code.
+func (Agent) Format() string {
+	return Name
 }
 
 // Unplace removes one placement when it is still what rein made: a link

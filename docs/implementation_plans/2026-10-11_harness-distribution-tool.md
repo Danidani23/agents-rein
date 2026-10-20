@@ -301,6 +301,18 @@ committed instead of gitignored (D4).
   enterprise host `gh auth login --hostname`. Consent is rein's own confirmations and the pull
   request review, not an SSH passphrase prompt. The judge's key follows the rule,
   `REIN_JUDGE_API_KEY` from the shell locally and from a repository secret in CI.
+- ✅ **D24 — What sync owns, what it merges, what it leaves; imports per level.** Decided
+  2026-10-20 from the user's two questions. Imports are a Claude Code and Gemini CLI thing,
+  not a standard, so they are the Claude Code emitter's choice and an agent without them
+  gets the same levels concatenated. Sync owns `CLAUDE.md`, `.claude/rein/`, `.claude/rules/`,
+  `.claude/skills/`, `.claude/hooks/`, `.mcp.json` and the `hooks`, `permissions.deny` and
+  `permissions.ask` keys of `.claude/settings.local.json`; every owned file is recorded with
+  its hash and verified before `sync`, `restore` and `reset` and in `status`, a hand edit
+  stops `sync` unless `--force` after a snapshot, and is kept by `restore`. Sync merges
+  `permissions.allow`, keeping the developer's own entries unless a `deny` covers them, since
+  Claude Code appends there on "always allow". Sync leaves `CLAUDE.local.md` alone, neither
+  moved out by `init` nor generated, since it is the personal, uncommitted file the memory
+  shortcut writes to. An initialised clone is a project clone, in code and in prose.
 - ✅ **D23 — The judge's backends, and the organisation's provider wins.** Decided 2026-10-19.
   One judge port with two backends: `api`, an endpoint speaking Anthropic Messages or OpenAI
   Chat Completions, which covers vendors, gateways and private inference, with the model and
@@ -1210,8 +1222,30 @@ from that project's snapshot.
   clean, then reporting a planned host, a missing team and an unregistered label. The
   manifest in the title is gone since D4; `init`, `label` and `propose` are P2.17, P2.16 and
   P2.18.
-- 🟢 **P2.5 — The compiler for Claude Code (B3) emits the plugin and marketplace repository, the
-  managed-settings drop-in, `.mcp.json` and `CLAUDE.local.md`.** [PENDING] Blocked by P1.3.
+- ✅ **P2.5 — `rein sync`: the compiler for Claude Code (B3) and the delivery into the clone.**
+  [EXECUTED] 2026-10-20, as the user decided the same day: imports, the ownership split and
+  the rename. The `compile` library's Claude Code emitter writes `CLAUDE.md` as a generated
+  preamble stating the precedence plus one `@` import per level, each level's always-on rules
+  in its own file under `.claude/rein/`, rules with `paths` under `.claude/rules/` with
+  rein's selectors stripped, skills and hook scripts under `.claude/`, the hooks and the
+  permissions into `.claude/settings.local.json` merged with what is there, your own
+  `allow` entries kept unless an organisation `deny` covers them and a note when one is
+  dropped, plus the session-start hook that reruns `rein sync --hook` by the binary's
+  absolute path, and the tool servers into `.mcp.json` with their `${REIN_...}` references
+  kept for Claude Code to expand. The workflow `SyncClone`: pull the org clone, resolve,
+  refuse on any problem before writing, compile, verify the previous inserts by hash, refuse
+  a hand-edited file unless `--force`, which snapshots it first, remove the stale files,
+  write, record every file with its SHA-256 in `~/.rein/inserts/<org id>.yaml` (D12's
+  second file), stamp `last_sync`, and name the `REIN_` variables the shell lacks (D22).
+  `--all` syncs every initialised clone, a clone that cannot be is reported; `--hook` never
+  fails a session and prints the always-on text into a session that started before the files
+  existed (O1). `status` shows the drift per clone; `restore` removes the inserts that are
+  still as written, keeps and names the edited ones, then puts the originals back; `reset`
+  wipes the inserts folder. `CLAUDE.local.md` is the developer's from now on, neither moved
+  out nor generated. What is left of the original scope: the plugin and marketplace
+  repository and the managed-settings drop-in, which are the organisation's locked column
+  (D5) and come with P2.8's release, since both are installed, not written into a clone. The
+  state calls an initialised clone a project clone now, `project_clones` in `state.yaml`.
 - 🟢 **P2.6 — The drift and inventory report (B5).** [PENDING]
 - ✅ **P2.7 — `org create`, interactive (part of B2).** [EXECUTED] 2026-10-19, as planned
   2026-10-19 with two parts moved out: the judge's secret and the `providers` declaration go
@@ -1526,3 +1560,8 @@ writes is read from the next session on, not in the same one.
   a version, a header, a previous copy, an atomic write and a lock.
 - (2026-10-20) P2.4 second half executed: selectors on every kind, skip lists, exceptions,
   the resolver and its problems in the lint, `rein resolve` as its window.
+- (2026-10-20) D24 and P2.5 executed: `rein sync` compiles the resolution for Claude Code with
+  one imported file per level, writes it into the clone, records every file with its hash in
+  the inserts ledger, verifies before every action, merges the developer's allow list and
+  leaves `CLAUDE.local.md` alone; `restore` and `reset` remove the inserts; `status` shows
+  the drift. Project registrations are project clones. The pilot path is complete in code.

@@ -158,13 +158,13 @@ func TestStatus(t *testing.T) {
 		present := filepath.Join(t.TempDir(), "present")
 		_ = os.WriteFile(present, []byte("x"), 0o644)
 		fixture.state.Current.Placements = []machine.Placement{{Path: "/a", Target: present}, {Path: "/b", Target: "/nowhere/gone"}}
-		fixture.state.Current.Projects = []machine.Project{{Organization: "id-1"}}
+		fixture.state.Current.ProjectClones = []machine.ProjectClone{{Organization: "id-1"}}
 		report, err := fixture.orchestrator().Status()
 		if err != nil || report.Missing != 1 || len(report.Placements) != 2 || !report.Placements[0].TargetExists || report.Placements[1].TargetExists {
 			t.Fatalf("report %+v err %v", report, err)
 		}
-		if len(report.Agents) != 1 || report.Agents[0] != "fake-agent" || len(report.Projects) != 1 {
-			t.Fatalf("agents %v projects %v", report.Agents, report.Projects)
+		if len(report.Agents) != 1 || report.Agents[0] != "fake-agent" || len(report.ProjectClones) != 1 {
+			t.Fatalf("agents %v projects %v", report.Agents, report.ProjectClones)
 		}
 		fixture.agent.Present = false
 		report, _ = fixture.orchestrator().Status()
@@ -202,11 +202,11 @@ func TestReset(t *testing.T) {
 		fixture.state.Current.Imports = []machine.Import{{}}
 		plan, _ := fixture.orchestrator().PlanReset()
 		result, err := fixture.orchestrator().ResetMachine(plan)
-		if err != nil || result.Kept != 1 || len(result.RemovedOrgClones) != 1 || len(fixture.agent.Unplaced) != 2 || len(result.Wiped) != 4 {
+		if err != nil || result.Kept != 1 || len(result.RemovedOrgClones) != 1 || len(fixture.agent.Unplaced) != 2 || len(result.Wiped) != 5 {
 			t.Fatalf("result %+v err %v unplaced %v", result, err, fixture.agent.Unplaced)
 		}
 		state := fixture.state.Current
-		if len(state.Placements) != 1 || state.Placements[0].Path != "/foreign" || state.Active != "" || len(state.Organizations) != 0 || len(state.Projects) != 0 || len(state.Imports) != 0 {
+		if len(state.Placements) != 1 || state.Placements[0].Path != "/foreign" || state.Active != "" || len(state.Organizations) != 0 || len(state.ProjectClones) != 0 || len(state.Imports) != 0 {
 			t.Fatalf("state %+v", state)
 		}
 		for _, gone := range []string{orgClonePath, filepath.Join(fixture.home, "imports"), filepath.Join(fixture.home, "snapshots"), filepath.Join(fixture.home, "distill"), filepath.Join(fixture.home, "removals.yaml")} {
@@ -224,10 +224,10 @@ func TestReset(t *testing.T) {
 		if err != nil {
 			t.Fatalf("init: %v", err)
 		}
-		fixture.state.Current.Projects = append(fixture.state.Current.Projects, machine.Project{Organization: "x", Address: "organizations.acme.projects.gone", ClonePath: filepath.Join(t.TempDir(), "gone")})
+		fixture.state.Current.ProjectClones = append(fixture.state.Current.ProjectClones, machine.ProjectClone{Organization: "x", Address: "organizations.acme.projects.gone", ClonePath: filepath.Join(t.TempDir(), "gone")})
 		plan, _ := fixture.orchestrator().PlanReset()
 		result, err := fixture.orchestrator().ResetMachine(plan)
-		if err != nil || len(result.Projects) != 2 || result.Projects[0].Restore.Commit == "" || result.Projects[1].Skipped == "" || result.Stopped {
+		if err != nil || len(result.ProjectClones) != 2 || result.ProjectClones[0].Restore.Commit == "" || result.ProjectClones[1].Skipped == "" || result.Stopped {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		content, err := os.ReadFile(filepath.Join(folder, "INSTRUCTIONS.md"))
@@ -235,7 +235,7 @@ func TestReset(t *testing.T) {
 			t.Fatalf("instructions %q err %v", content, err)
 		}
 		_, err = os.Stat(filepath.Join(fixture.home, "removals.yaml"))
-		if err == nil || len(fixture.state.Current.Projects) != 0 || len(fixture.state.Current.Organizations) != 0 {
+		if err == nil || len(fixture.state.Current.ProjectClones) != 0 || len(fixture.state.Current.Organizations) != 0 {
 			t.Fatalf("ledger err %v state %+v", err, fixture.state.Current)
 		}
 		// a restore that fails stops the reset before the wipe
@@ -246,7 +246,7 @@ func TestReset(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(folder, "INSTRUCTIONS.md"), []byte("new work"), 0o644)
 		plan, _ = fixture.orchestrator().PlanReset()
 		result, err = fixture.orchestrator().ResetMachine(plan)
-		if !errors.Is(err, refusal.ErrRefused) || !result.Stopped || !result.Projects[0].Failed || len(fixture.state.Current.Organizations) != 1 {
+		if !errors.Is(err, refusal.ErrRefused) || !result.Stopped || !result.ProjectClones[0].Failed || len(fixture.state.Current.Organizations) != 1 {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		_, err = os.Stat(filepath.Join(fixture.home, "removals.yaml"))
@@ -291,8 +291,8 @@ func TestRestoreProject(t *testing.T) {
 			}
 		}
 		pending, _ := fixture.orchestrator().Ledger.Pending("organizations.acme.projects.shop")
-		if len(pending) != 0 || len(fixture.state.Current.Projects) != 0 {
-			t.Fatalf("pending %v projects %v", pending, fixture.state.Current.Projects)
+		if len(pending) != 0 || len(fixture.state.Current.ProjectClones) != 0 {
+			t.Fatalf("pending %v projects %v", pending, fixture.state.Current.ProjectClones)
 		}
 		_, err = fixture.orchestrator().RestoreProject(RestoreRequest{Directory: folder})
 		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "not initialised") {
@@ -316,8 +316,8 @@ func TestRestoreProject(t *testing.T) {
 		}
 		content, _ := os.ReadFile(filepath.Join(folder, "INSTRUCTIONS.md"))
 		pending, _ := fixture.orchestrator().Ledger.Pending("organizations.acme.projects.shop")
-		if string(content) != "" || len(pending) != 2 || !fixture.orchestrator().WorkingCopy.HasIgnoreBlock(folder) || len(fixture.state.Current.Projects) != 1 {
-			t.Fatalf("content %q pending %d projects %d", content, len(pending), len(fixture.state.Current.Projects))
+		if string(content) != "" || len(pending) != 2 || !fixture.orchestrator().WorkingCopy.HasIgnoreBlock(folder) || len(fixture.state.Current.ProjectClones) != 1 {
+			t.Fatalf("content %q pending %d projects %d", content, len(pending), len(fixture.state.Current.ProjectClones))
 		}
 		result, err := fixture.orchestrator().RestoreProject(RestoreRequest{Directory: folder, Force: true, NoCommit: true})
 		if err != nil || result.Commit != "" || len(result.Restored) != 3 {
@@ -563,7 +563,7 @@ func TestInitializeProject(t *testing.T) {
 		if len(removals.Agents["fake-agent"]) != 2 || removals.Agents["fake-agent"][0].Project != result.Address || removals.Agents["fake-agent"][0].Snapshot != result.MovedOut[0].SnapshotPath {
 			t.Fatalf("removals %+v", removals)
 		}
-		projects, _ := fixture.orchestrator().Organizations.Projects()
+		projects, _ := fixture.orchestrator().Organizations.ProjectClones()
 		if len(projects) != 1 || projects[0].ClonePath != folder || projects[0].Fingerprint != rootCommit || projects[0].InitializedAt.IsZero() || projects[0].Organization != fixture.state.Current.Organizations[0].ID {
 			t.Fatalf("projects %+v", projects)
 		}
@@ -636,8 +636,8 @@ func TestInitializeProject(t *testing.T) {
 		_, err = os.Stat(filepath.Join(folder, ".gitignore"))
 		snapshots, _ := os.ReadDir(filepath.Join(fixture.home, "snapshots"))
 		removals, _ := fixture.orchestrator().Ledger.Load()
-		if err == nil || len(snapshots) != 0 || len(removals.Agents) != 0 || len(fixture.state.Current.Projects) != 0 {
-			t.Fatalf("ignore err %v snapshots %v removals %+v projects %v", err, snapshots, removals, fixture.state.Current.Projects)
+		if err == nil || len(snapshots) != 0 || len(removals.Agents) != 0 || len(fixture.state.Current.ProjectClones) != 0 {
+			t.Fatalf("ignore err %v snapshots %v removals %+v projects %v", err, snapshots, removals, fixture.state.Current.ProjectClones)
 		}
 	})
 	t.Run("a failed commit is reported, the rest stands", func(t *testing.T) {
@@ -646,7 +646,7 @@ func TestInitializeProject(t *testing.T) {
 		folder := projectClone(t)
 		fixture.repository.FailCommit = true
 		result, err := fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
-		if err != nil || result.Commit != "" || !strings.Contains(result.CommitError, "gpg") || len(fixture.state.Current.Projects) != 1 {
+		if err != nil || result.Commit != "" || !strings.Contains(result.CommitError, "gpg") || len(fixture.state.Current.ProjectClones) != 1 {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 	})
@@ -929,4 +929,159 @@ func addressesOf(chosen []resolve.Chosen) string {
 		list = append(list, item.Address)
 	}
 	return strings.Join(list, ",")
+}
+
+// claudeProjectClone is a fake repository with Claude Code's files, for a
+// fake agent that reads the Claude Code format.
+func claudeProjectClone(t *testing.T) string {
+	t.Helper()
+	folder, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("temp dir: %v", err)
+	}
+	err = fake.NewProjectClone(folder, []string{rootCommit}, []string{"CLAUDE.md", "main.go"})
+	if err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	_ = os.WriteFile(filepath.Join(folder, "CLAUDE.md"), []byte("old instructions"), 0o644)
+	_ = os.WriteFile(filepath.Join(folder, "main.go"), []byte("package main"), 0o644)
+	return folder
+}
+
+// withSyncableProject is an organisation with declarations, a project and
+// an initialised clone of it, the agent reading the Claude Code format.
+func withSyncableProject(t *testing.T) (*harness, CreateResult, string) {
+	t.Helper()
+	fixture, created := withTeam(t)
+	fixture.agent.HarnessFormat = "claude-code"
+	_, err := fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}, Labels: []string{"language:go"}})
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	write := func(relative string, content string) {
+		target := filepath.Join(created.Connected.OrgClonePath, "declarations", filepath.FromSlash(relative))
+		_ = os.MkdirAll(filepath.Dir(target), 0o755)
+		_ = os.WriteFile(target, []byte(content), 0o644)
+	}
+	write("organizations/acme/rules/style.md", "---\nenforcement: required\n---\nHouse style.\n")
+	write("organizations/acme/rules/go.md", "---\npaths: [\"**/*.go\"]\napplyIf: [language:go]\n---\nTwo-line errors.\n")
+	write("organizations/acme/teams/web/skills/commit/SKILL.md", "---\nname: commit\ndescription: Draft commits.\n---\n")
+	write("organizations/acme/mcpservers/github.yaml", "transport: stdio\ncommand: npx\nenv:\n  GITHUB_PERSONAL_ACCESS_TOKEN: ${REIN_TEST_GITHUB_TOKEN}\nvariables:\n  REIN_TEST_GITHUB_TOKEN: a token\n")
+	folder := claudeProjectClone(t)
+	_, err = fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	return fixture, created, folder
+}
+
+func TestSyncClone(t *testing.T) {
+	t.Run("writes the harness, records the inserts with hashes, and a second sync changes nothing", func(t *testing.T) {
+		fixture, created, folder := withSyncableProject(t)
+		result, err := fixture.orchestrator().SyncClone(SyncRequest{Directory: folder, ReinExecutable: "/bin/rein"})
+		if err != nil || len(result.Clones) != 1 {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		synced := result.Clones[0]
+		if !synced.Created || synced.Agent != "fake-agent" || len(synced.Written) != 6 || len(synced.Unchanged) != 0 || strings.Join(synced.UnsetVariables, ",") != "REIN_TEST_GITHUB_TOKEN" || !strings.Contains(synced.AlwaysOn, "House style.") {
+			t.Fatalf("synced %+v", synced)
+		}
+		for _, relative := range []string{"CLAUDE.md", ".claude/rein/organization.md", ".claude/rules/go.md", ".claude/skills/commit/SKILL.md", ".claude/settings.local.json", ".mcp.json"} {
+			_, err = os.Stat(filepath.Join(folder, filepath.FromSlash(relative)))
+			if err != nil {
+				t.Fatalf("%s: %v", relative, err)
+			}
+		}
+		claude, _ := os.ReadFile(filepath.Join(folder, "CLAUDE.md"))
+		if !strings.Contains(string(claude), "@.claude/rein/organization.md") || strings.Contains(string(claude), "old instructions") {
+			t.Fatalf("CLAUDE.md %q", claude)
+		}
+		inserts, _ := fixture.orchestrator().Ledger.InsertsOf(created.Connected.OrgClonePath[:0]+fixture.state.Current.Organizations[0].ID, folder)
+		if len(inserts) != 6 || inserts[0].SHA256 == "" {
+			t.Fatalf("inserts %+v", inserts)
+		}
+		clones, _ := fixture.orchestrator().Organizations.ProjectClones()
+		if clones[0].LastSync == "" {
+			t.Fatalf("last sync not stamped: %+v", clones[0])
+		}
+		result, err = fixture.orchestrator().SyncClone(SyncRequest{Directory: folder, ReinExecutable: "/bin/rein"})
+		if err != nil || result.Clones[0].Created || len(result.Clones[0].Written) != 0 || len(result.Clones[0].Unchanged) != 6 {
+			t.Fatalf("second sync %+v err %v", result.Clones[0], err)
+		}
+		report, _ := fixture.orchestrator().Status()
+		if len(report.Clones) != 1 || report.Clones[0].Inserts != 6 || report.Clones[0].Modified != 0 {
+			t.Fatalf("status %+v", report.Clones)
+		}
+	})
+	t.Run("a hand edit stops the sync, --force snapshots it, and a stale file goes", func(t *testing.T) {
+		fixture, created, folder := withSyncableProject(t)
+		_, _ = fixture.orchestrator().SyncClone(SyncRequest{Directory: folder})
+		_ = os.WriteFile(filepath.Join(folder, "CLAUDE.md"), []byte("my own words"), 0o644)
+		_, err := fixture.orchestrator().SyncClone(SyncRequest{Directory: folder})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "edited by hand since the last sync: CLAUDE.md") {
+			t.Fatalf("err %v", err)
+		}
+		report, _ := fixture.orchestrator().Status()
+		if report.Clones[0].Modified != 1 {
+			t.Fatalf("status %+v", report.Clones)
+		}
+		_ = os.Remove(filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "rules", "go.md"))
+		result, err := fixture.orchestrator().SyncClone(SyncRequest{Directory: folder, Force: true})
+		if err != nil || result.Clones[0].SnapshotPath == "" || strings.Join(result.Clones[0].Modified, ",") != "CLAUDE.md" || strings.Join(result.Clones[0].Removed, ",") != ".claude/rules/go.md" {
+			t.Fatalf("forced %+v err %v", result.Clones[0], err)
+		}
+		snapshot, _ := fixture.orchestrator().Snapshots.Read(result.Clones[0].SnapshotPath)
+		if snapshot.Files["CLAUDE.md"] != "my own words" {
+			t.Fatalf("snapshot %+v", snapshot.Files)
+		}
+		_, err = os.Stat(filepath.Join(folder, ".claude", "rules"))
+		if err == nil {
+			t.Fatalf("the stale rules folder stayed")
+		}
+	})
+	t.Run("a resolution problem refuses before writing; --all reports a gone folder and goes on", func(t *testing.T) {
+		fixture, created, folder := withSyncableProject(t)
+		bad := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "teams", "web", "rules", "style.md")
+		_ = os.MkdirAll(filepath.Dir(bad), 0o755)
+		_ = os.WriteFile(bad, []byte("Ours.\n"), 0o644)
+		_, err := fixture.orchestrator().SyncClone(SyncRequest{Directory: folder})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "does not resolve") || !strings.Contains(err.Error(), "redeclares") {
+			t.Fatalf("err %v", err)
+		}
+		_, err = os.Stat(filepath.Join(folder, ".claude", "settings.local.json"))
+		if err == nil {
+			t.Fatalf("files were written despite the problem")
+		}
+		_ = os.Remove(bad)
+		fixture.state.Current.ProjectClones = append(fixture.state.Current.ProjectClones, machine.ProjectClone{Organization: fixture.state.Current.Organizations[0].ID, Address: "organizations.acme.projects.gone", ClonePath: filepath.Join(t.TempDir(), "gone")})
+		result, err := fixture.orchestrator().SyncClone(SyncRequest{All: true})
+		if !errors.Is(err, refusal.ErrRefused) || len(result.Clones) != 2 || result.Clones[0].Skipped != "" || !strings.Contains(result.Clones[1].Skipped, "is gone") {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		_, err = fixture.orchestrator().SyncClone(SyncRequest{Directory: claudeProjectClone(t)})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "not initialised") {
+			t.Fatalf("err %v", err)
+		}
+	})
+	t.Run("restore removes what sync wrote, keeps a hand-edited file, and puts the original back", func(t *testing.T) {
+		fixture, _, folder := withSyncableProject(t)
+		_, _ = fixture.orchestrator().SyncClone(SyncRequest{Directory: folder})
+		_ = os.WriteFile(filepath.Join(folder, ".mcp.json"), []byte("{}"), 0o644)
+		result, err := fixture.orchestrator().RestoreProject(RestoreRequest{Directory: folder})
+		if err != nil || len(result.InsertsRemoved) != 5 || strings.Join(result.InsertsKept, ",") != ".mcp.json" || strings.Join(result.Restored, ",") != "CLAUDE.md" {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		claude, _ := os.ReadFile(filepath.Join(folder, "CLAUDE.md"))
+		_, reinErr := os.Stat(filepath.Join(folder, ".claude", "rein"))
+		_, mcpErr := os.Stat(filepath.Join(folder, ".mcp.json"))
+		if string(claude) != "old instructions" || reinErr == nil || mcpErr != nil {
+			t.Fatalf("CLAUDE.md %q rein %v mcp %v", claude, reinErr, mcpErr)
+		}
+		plan, _ := fixture.orchestrator().PlanReset()
+		_, err = fixture.orchestrator().ResetMachine(plan)
+		_, insertsErr := os.Stat(filepath.Join(fixture.home, "inserts"))
+		if err != nil || insertsErr == nil {
+			t.Fatalf("reset err %v inserts %v", err, insertsErr)
+		}
+	})
 }

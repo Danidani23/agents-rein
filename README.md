@@ -122,14 +122,15 @@ GitHub account, and the agents on your machine are detected.
 | `rein distill` | Turns the snapshot of an initialised project's harness, or of your agent's home with `--home`, into candidate declarations at that level, compares each with what the organisation already declares by content and id, asks the judge, your agent's CLI until the organisation declares a provider, to compare the prose and suggest keep, drop, merge or lift, and writes it all with a report under `~/.rein/distill/` for `rein propose`. `--dry-run` shows the brief, `--judge none` skips the model. |
 | `rein propose <folder or zip>` | The one way declarations enter an org repository: lints the candidates, leaves out what the organisation already has, writes the rest on a branch of its clone, pushes it and opens the pull request with the comparison as its body. A distillation knows its level; anything else goes to your user level unless `--level` says otherwise. |
 | `rein resolve --project <slug>` | Shows which declarations apply to a project, in level order with what each replaced, what the skip lists took out and through which exception, and the problems that would make `sync` refuse. |
+| `rein sync` | Writes the harness this clone's project resolves: `CLAUDE.md` with one imported file per level, rules, skills, hook scripts, permissions and hooks in `.claude/settings.local.json` merged with your own allow list, and `.mcp.json`; every file recorded with its hash, a hand edit stopping the next sync unless `--force`. `--all` for every clone; `--hook` is what the session-start hook runs. |
 | `rein lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, skills that share a name, and in an org repository every record: organisation, teams, projects, users and the label registry, with their references. Needs no identity, so CI runs it on an org repository. |
 | `rein restore` | Reverses `init` for one clone: the files it moved out come back from their snapshots, the rein block leaves `.gitignore`, the clone is forgotten on this machine, and the put-back is committed as the move-out was. |
 | `rein reset` | Restores every initialised project first, then removes everything rein placed into an agent's home, forgets the organisations and deletes their clones, and removes the ledger, the snapshots and the distillations: the machine as before rein. A restore that fails stops it before anything is wiped. |
 | `rein version` | Prints the version. |
 
-Planned, in the board's order: `rein sync`, which writes a clone's harness; `rein org
-destroy`; `rein import` and `rein export`, which move a level into and out of an org
-repository; `rein review`; `rein label`; `rein migrate`; `rein update`.
+Planned, in the board's order: `rein org destroy`; `rein import` and `rein export`, which move a
+level into and out of an org repository; `rein review`; `rein label`; `rein migrate`;
+`rein update`.
 
 The reasoning is the [ADR](docs/decisions/2026-10-11_harness-tool-compiler-and-linter.md); the
 design, the decisions and what is next are on the

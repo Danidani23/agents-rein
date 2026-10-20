@@ -75,3 +75,30 @@ func TestPendingAndRestored(t *testing.T) {
 		t.Fatalf("delete err %v stat %v", err, statErr)
 	}
 }
+
+func TestInserts(t *testing.T) {
+	service := Service{Home: t.TempDir(), Clock: func() time.Time { return time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC) }}
+	err := service.RecordInserts("id-1", "/clones/shop", []Insert{{Path: "CLAUDE.md", Address: "generated", SHA256: Hash([]byte("x"))}, {Path: ".claude/rules/go.md", Address: "organizations.acme.rules.go", SHA256: Hash([]byte("y"))}})
+	if err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	inserts, err := service.InsertsOf("id-1", "/clones/shop")
+	if err != nil || len(inserts) != 2 || inserts[0].Path != ".claude/rules/go.md" || inserts[0].WrittenAt.IsZero() {
+		t.Fatalf("inserts %+v err %v", inserts, err)
+	}
+	content, _ := os.ReadFile(service.InsertsPath("id-1"))
+	if !strings.HasPrefix(string(content), "# Written by rein") || !strings.Contains(string(content), "/clones/shop:") {
+		t.Fatalf("content %q", content)
+	}
+	none, _ := service.InsertsOf("id-1", "/clones/other")
+	err = service.ForgetInserts("id-1", "/clones/shop")
+	inserts, _ = service.InsertsOf("id-1", "/clones/shop")
+	if len(none) != 0 || err != nil || len(inserts) != 0 {
+		t.Fatalf("after forget: %v %v", inserts, err)
+	}
+	err = service.DeleteInserts()
+	_, statErr := os.Stat(service.InsertsFolder())
+	if err != nil || statErr == nil {
+		t.Fatalf("delete: %v %v", err, statErr)
+	}
+}

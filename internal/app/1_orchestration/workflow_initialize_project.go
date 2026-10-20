@@ -63,7 +63,7 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 		return InitializeResult{}, refusal.New(fmt.Sprintf("%s is not inside a git repository with a commit: %v", request.Directory, err))
 	}
 	result := InitializeResult{Root: location.Root, Path: location.Path, Folder: location.Folder, Fingerprint: location.Fingerprint}
-	registered, err := services.Organizations.Projects()
+	registered, err := services.Organizations.ProjectClones()
 	if err != nil {
 		return InitializeResult{}, err
 	}
@@ -76,7 +76,7 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 	if err != nil {
 		return InitializeResult{}, err
 	}
-	var registration machine.Project
+	var registration machine.ProjectClone
 	steps := []Step{
 		{
 			Name: "bind",
@@ -164,10 +164,10 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 		Step{
 			Name: "register",
 			Do: func() error {
-				registration = machine.Project{Organization: organization.ID, Address: result.Address, ClonePath: location.Folder, Fingerprint: strings.Join(location.Fingerprint, ",")}
-				return services.Organizations.RegisterProject(registration)
+				registration = machine.ProjectClone{Organization: organization.ID, Address: result.Address, ClonePath: location.Folder, Fingerprint: strings.Join(location.Fingerprint, ",")}
+				return services.Organizations.RegisterProjectClone(registration)
 			},
-			Undo: func() error { return services.Organizations.UnregisterProject(location.Folder) },
+			Undo: func() error { return services.Organizations.UnregisterProjectClone(location.Folder) },
 		},
 	)
 	err = runSteps(steps)
@@ -261,12 +261,13 @@ func bindProject(orchestrator Orchestrator, request InitializeProjectRequest, or
 	return projectAddress(organizationSlug, project.Slug), false, true, nil
 }
 
-// ignoreEntries are the project harness paths of every agent, once each.
+// ignoreEntries are the project harness paths and the personal paths of
+// every agent, once each.
 func ignoreEntries(services Services) []string {
 	var entries []string
 	seen := map[string]bool{}
 	for _, agent := range services.Snapshots.Agents {
-		for _, harnessPath := range agent.ProjectHarnessPaths() {
+		for _, harnessPath := range append(append([]string{}, agent.ProjectHarnessPaths()...), agent.PersonalPaths()...) {
 			if !seen[harnessPath] {
 				seen[harnessPath] = true
 				entries = append(entries, harnessPath)

@@ -5,6 +5,8 @@
 package workingcopy
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io/fs"
 	"os"
@@ -103,6 +105,110 @@ func (service Service) TrackedAmong(root string, relativePaths []string) (map[st
 func (Service) HasIgnoreBlock(folder string) bool {
 	content, err := os.ReadFile(filepath.Join(folder, ".gitignore"))
 	return err == nil && strings.Contains(string(content), ignoreBlockStart)
+}
+
+// Verification is the state of the files sync placed into a folder.
+type Verification struct {
+	Unchanged []string
+	Modified  []string
+	Missing   []string
+}
+
+// Verify hashes the inserted files under folder against the hashes
+// recorded for them; a path is a relative path with forward slashes.
+func (Service) Verify(folder string, recorded map[string]string) Verification {
+	var verification Verification
+	var paths []string
+	for relative := range recorded {
+		paths = append(paths, relative)
+	}
+	sort.Strings(paths)
+	for _, relative := range paths {
+		content, err := os.ReadFile(filepath.Join(folder, filepath.FromSlash(relative)))
+		switch {
+		case err != nil:
+			verification.Missing = append(verification.Missing, relative)
+		case hashOf(content) != recorded[relative]:
+			verification.Modified = append(verification.Modified, relative)
+		default:
+			verification.Unchanged = append(verification.Unchanged, relative)
+		}
+	}
+	return verification
+}
+
+// WriteFiles writes files, path to content, under folder, and returns the
+// previous content of every path that existed, so a failure can put it back.
+func (Service) WriteFiles(folder string, files map[string]string) (previous map[string]string, err error) {
+	previous = map[string]string{}
+	for relative, content := range files {
+		target := filepath.Join(folder, filepath.FromSlash(relative))
+		existing, readErr := os.ReadFile(target)
+		if readErr == nil {
+			previous[relative] = string(existing)
+		}
+		err = os.MkdirAll(filepath.Dir(target), 0o755)
+		if err != nil {
+			return previous, err
+		}
+		mode := os.FileMode(0o644)
+		if strings.HasSuffix(relative, ".sh") {
+			mode = 0o755
+		}
+		err = os.WriteFile(target, []byte(content), mode)
+		if err != nil {
+			return previous, err
+		}
+	}
+	return previous, nil
+}
+
+// ReadFile reads one file under folder, empty when it does not exist.
+func (Service) ReadFile(folder string, relative string) string {
+	content, err := os.ReadFile(filepath.Join(folder, filepath.FromSlash(relative)))
+	if err != nil {
+		return ""
+	}
+	return string(content)
+}
+
+// RemoveEmptyFolders deletes the folders under folder that the removed paths
+// left empty, deepest first, never folder itself.
+func (Service) RemoveEmptyFolders(folder string, relativePaths []string) {
+	var parents []string
+	seen := map[string]bool{}
+	for _, relative := range relativePaths {
+		for parent := filepath.Dir(filepath.FromSlash(relative)); parent != "." && parent != string(filepath.Separator); parent = filepath.Dir(parent) {
+			if !seen[parent] {
+				seen[parent] = true
+				parents = append(parents, parent)
+			}
+		}
+	}
+	sort.Slice(parents, func(left, right int) bool { return len(parents[left]) > len(parents[right]) })
+	for _, parent := range parents {
+		entries, err := os.ReadDir(filepath.Join(folder, parent))
+		if err == nil && len(entries) == 0 {
+			_ = os.Remove(filepath.Join(folder, parent))
+		}
+	}
+}
+
+// UnsetVariables names the environment variables among names that are not set.
+func (Service) UnsetVariables(names []string) []string {
+	var unset []string
+	for _, name := range names {
+		_, found := os.LookupEnv(name)
+		if !found {
+			unset = append(unset, name)
+		}
+	}
+	return unset
+}
+
+func hashOf(content []byte) string {
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:])
 }
 
 // Remove deletes the paths under folder, folders with their content.

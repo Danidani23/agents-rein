@@ -28,6 +28,10 @@ type RestoreResult struct {
 	Unregistered  bool
 	Commit        string
 	CommitError   string
+	// InsertsRemoved are the files sync wrote that went; InsertsKept the
+	// ones a hand edit changed, which stay and are reported.
+	InsertsRemoved []string
+	InsertsKept    []string
 }
 
 const restoreCommitMessage = "restore agent settings from rein (rein restore)"
@@ -43,11 +47,11 @@ func (orchestrator Orchestrator) RestoreProject(request RestoreRequest) (Restore
 	if err != nil {
 		return RestoreResult{}, refusal.New(fmt.Sprintf("%s is not inside a git repository with a commit: %v", request.Directory, err))
 	}
-	registered, err := services.Organizations.Projects()
+	registered, err := services.Organizations.ProjectClones()
 	if err != nil {
 		return RestoreResult{}, err
 	}
-	var registration machine.Project
+	var registration machine.ProjectClone
 	found := false
 	for _, project := range registered {
 		if project.ClonePath == location.Folder {
@@ -84,8 +88,22 @@ func (orchestrator Orchestrator) RestoreProject(request RestoreRequest) (Restore
 			}
 		}
 	}
+	inserts, err := services.Ledger.InsertsOf(registration.Organization, location.Folder)
+	if err != nil {
+		return RestoreResult{}, err
+	}
+	recorded := map[string]string{}
+	for _, insert := range inserts {
+		recorded[insert.Path] = insert.SHA256
+	}
+	verification := services.WorkingCopy.Verify(location.Folder, recorded)
+	result.InsertsKept = verification.Modified
 	var inTheWay []string
 	for relative := range files {
+		if _, managed := recorded[relative]; managed {
+			// sync's own file at that path goes before the put-back
+			continue
+		}
 		if len(services.WorkingCopy.Present(location.Folder, []string{relative})) > 0 {
 			inTheWay = append(inTheWay, relative)
 		}
@@ -105,6 +123,24 @@ func (orchestrator Orchestrator) RestoreProject(request RestoreRequest) (Restore
 	}
 	sort.Strings(snapshots)
 	err = runSteps([]Step{
+		{
+			Name: "remove inserts",
+			Do: func() error {
+				if len(verification.Unchanged) == 0 {
+					return nil
+				}
+				err := services.WorkingCopy.Remove(location.Folder, verification.Unchanged)
+				if err != nil {
+					return err
+				}
+				services.WorkingCopy.RemoveEmptyFolders(location.Folder, verification.Unchanged)
+				result.InsertsRemoved = verification.Unchanged
+				return services.Ledger.ForgetInserts(registration.Organization, location.Folder)
+			},
+			Undo: func() error {
+				return services.Ledger.RecordInserts(registration.Organization, location.Folder, inserts)
+			},
+		},
 		{
 			Name: "put back",
 			Do:   func() error { return services.WorkingCopy.Restore(location.Folder, files) },
@@ -136,9 +172,9 @@ func (orchestrator Orchestrator) RestoreProject(request RestoreRequest) (Restore
 			Name: "unregister",
 			Do: func() error {
 				result.Unregistered = true
-				return services.Organizations.UnregisterProject(location.Folder)
+				return services.Organizations.UnregisterProjectClone(location.Folder)
 			},
-			Undo: func() error { return services.Organizations.RegisterProject(registration) },
+			Undo: func() error { return services.Organizations.RegisterProjectClone(registration) },
 		},
 	})
 	if err != nil {

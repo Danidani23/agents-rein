@@ -128,7 +128,7 @@ func newOrgDisconnectCommand(environment *commandEnvironment) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(environment.out, "disconnected %s: removed the clone at %s and %d project registrations\n", arguments[0], result.OrgClonePath, result.RemovedProjects)
+			fmt.Fprintf(environment.out, "disconnected %s: removed the clone at %s and %d project registrations\n", arguments[0], result.OrgClonePath, result.RemovedProjectClones)
 			if result.ActiveAfter == "" {
 				fmt.Fprintf(environment.out, "no active organisation\n")
 			} else {

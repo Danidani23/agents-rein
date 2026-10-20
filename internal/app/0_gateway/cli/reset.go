@@ -48,8 +48,8 @@ func runReset(environment *commandEnvironment, yes bool) error {
 		return err
 	}
 	fmt.Fprintf(environment.out, "This will:\n")
-	fmt.Fprintf(environment.out, "- put back %d initialised projects and commit the put-back in each:\n", len(plan.Projects))
-	for _, project := range plan.Projects {
+	fmt.Fprintf(environment.out, "- put back %d initialised projects and commit the put-back in each:\n", len(plan.ProjectClones))
+	for _, project := range plan.ProjectClones {
 		fmt.Fprintf(environment.out, "    %s  (%s)\n", project.ClonePath, project.Address)
 	}
 	fmt.Fprintf(environment.out, "- remove %d placements rein made in your agent's home; your own files are untouched\n", len(plan.Placements))
@@ -75,7 +75,7 @@ func runReset(environment *commandEnvironment, yes bool) error {
 		}
 	}
 	result, err := orchestrator.ResetMachine(plan)
-	for _, project := range result.Projects {
+	for _, project := range result.ProjectClones {
 		switch {
 		case project.Failed:
 			fmt.Fprintf(environment.errOut, "failed   %s: %s\n", project.Folder, project.Skipped)

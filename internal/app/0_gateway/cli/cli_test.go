@@ -89,7 +89,7 @@ func (fixture *harness) seedConnectedOrganization(t *testing.T, projects int) st
 	fixture.state.Current.OrgClonePaths["id-1"] = clone
 	fixture.state.Current.Active = "acme"
 	for index := 0; index < projects; index++ {
-		fixture.state.Current.Projects = append(fixture.state.Current.Projects, machine.Project{Organization: "id-1", ClonePath: fmt.Sprintf("/projects/%d", index)})
+		fixture.state.Current.ProjectClones = append(fixture.state.Current.ProjectClones, machine.ProjectClone{Organization: "id-1", ClonePath: fmt.Sprintf("/projects/%d", index)})
 	}
 	return clone
 }
@@ -623,5 +623,49 @@ func TestResolve(t *testing.T) {
 	code, _, errOut = fixture.run("resolve")
 	if code != ExitRefused || !strings.Contains(errOut, "--project") {
 		t.Fatalf("code %d err %q", code, errOut)
+	}
+}
+
+func TestSync(t *testing.T) {
+	fixture := newHarness(t)
+	fixture.agent.HarnessFormat = "claude-code"
+	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+	orchestrator, _ := fixture.orchestrate()
+	_, orgClonePath, _ := orchestrator.Organizations.Lookup("acme")
+	rule := filepath.Join(orgClonePath, "declarations", "organizations", "acme", "rules", "style.md")
+	_ = os.MkdirAll(filepath.Dir(rule), 0o755)
+	_ = os.WriteFile(rule, []byte("House style.\n"), 0o644)
+	folder, _ := filepath.EvalSymlinks(t.TempDir())
+	_ = fake.NewProjectClone(folder, []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, []string{"CLAUDE.md"})
+	_ = os.WriteFile(filepath.Join(folder, "CLAUDE.md"), []byte("old"), 0o644)
+	_, _, _ = fixture.run("init", "--path", folder, "--project", "shop", "--yes")
+	code, out, errOut := fixture.run("sync", "--path", folder)
+	for _, expected := range []string{"synced organizations.acme.projects.shop for fake-agent", "written    CLAUDE.md", "written    .claude/rein/organization.md", "written    .claude/settings.local.json"} {
+		if code != ExitWorked || !strings.Contains(out, expected) {
+			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
+		}
+	}
+	code, out, _ = fixture.run("sync", "--path", folder, "--hook")
+	if code != ExitWorked || !strings.Contains(out, "rein: organizations.acme.projects.shop synced for fake-agent, 0 files written, 3 unchanged") || strings.Contains(out, "just written") {
+		t.Fatalf("hook: code %d out %q", code, out)
+	}
+	code, out, _ = fixture.run("status")
+	if code != ExitWorked || !strings.Contains(out, "project clones  1") || !strings.Contains(out, "3 files from sync") {
+		t.Fatalf("status: code %d out %q", code, out)
+	}
+	_ = os.WriteFile(filepath.Join(folder, "CLAUDE.md"), []byte("mine"), 0o644)
+	code, _, errOut = fixture.run("sync", "--path", folder)
+	if code != ExitRefused || !strings.Contains(errOut, "edited by hand") {
+		t.Fatalf("code %d err %q", code, errOut)
+	}
+	code, out, _ = fixture.run("sync", "--path", folder, "--hook")
+	if code != ExitWorked || !strings.Contains(out, "rein: ") || !strings.Contains(out, "edited by hand") {
+		t.Fatalf("hook refusal: code %d out %q", code, out)
+	}
+	code, out, _ = fixture.run("sync", "--path", folder, "--force")
+	if code != ExitWorked || !strings.Contains(out, "your edits to CLAUDE.md were snapshotted to") {
+		t.Fatalf("force: code %d out %q", code, out)
 	}
 }

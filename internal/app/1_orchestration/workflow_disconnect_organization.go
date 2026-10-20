@@ -5,9 +5,9 @@ import "github.com/Danidani23/agents-rein/internal/app/2_services/organizations"
 // DisconnectResult is what DisconnectOrganization did, and which
 // organisation is active afterwards.
 type DisconnectResult struct {
-	OrgClonePath    string
-	RemovedProjects int
-	ActiveAfter     string
+	OrgClonePath         string
+	RemovedProjectClones int
+	ActiveAfter          string
 }
 
 // DisconnectOrganization forgets an organisation and removes its clone; the
@@ -34,5 +34,5 @@ func (orchestrator Orchestrator) DisconnectOrganization(slug string) (Disconnect
 	if err != nil {
 		return DisconnectResult{}, err
 	}
-	return DisconnectResult{OrgClonePath: forgotten.OrgClonePath, RemovedProjects: len(forgotten.RemovedProjects), ActiveAfter: forgotten.ActiveAfter}, nil
+	return DisconnectResult{OrgClonePath: forgotten.OrgClonePath, RemovedProjectClones: len(forgotten.RemovedProjectClones), ActiveAfter: forgotten.ActiveAfter}, nil
 }

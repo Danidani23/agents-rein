@@ -73,6 +73,12 @@ func printRestored(environment *commandEnvironment, result orchestration.Restore
 	} else {
 		fmt.Fprintf(environment.out, "nothing to put back: init had moved nothing out\n")
 	}
+	if len(result.InsertsRemoved) > 0 {
+		fmt.Fprintf(environment.out, "removed sync's files: %s\n", strings.Join(result.InsertsRemoved, ", "))
+	}
+	if len(result.InsertsKept) > 0 {
+		fmt.Fprintf(environment.errOut, "kept, edited by hand since sync wrote them: %s\n", strings.Join(result.InsertsKept, ", "))
+	}
 	if result.IgnoreRemoved {
 		fmt.Fprintf(environment.out, ".gitignore: rein block removed\n")
 	}
