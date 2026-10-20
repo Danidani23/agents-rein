@@ -590,3 +590,38 @@ func TestDistillJudgeFlags(t *testing.T) {
 		t.Fatalf("code %d err %q", code, errOut)
 	}
 }
+
+func TestResolve(t *testing.T) {
+	fixture := newHarness(t)
+	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+	code, out, _ := fixture.run("resolve", "--project", "shop")
+	if code != ExitWorked || !strings.Contains(out, "organizations.acme.projects.shop: teams web, labels none, user danidani23") || !strings.Contains(out, "no declarations apply yet") {
+		t.Fatalf("code %d out %q", code, out)
+	}
+	orchestrator, _ := fixture.orchestrate()
+	_, orgClonePath, _ := orchestrator.Organizations.Lookup("acme")
+	write := func(relative string, content string) {
+		target := filepath.Join(orgClonePath, "declarations", filepath.FromSlash(relative))
+		_ = os.MkdirAll(filepath.Dir(target), 0o755)
+		_ = os.WriteFile(target, []byte(content), 0o644)
+	}
+	write("organizations/acme/rules/style.md", "---\nenforcement: required\n---\nStyle.\n")
+	write("organizations/acme/teams/web/rules/testing.md", "Web tests.\n")
+	code, out, _ = fixture.run("resolve", "--project", "shop")
+	for _, expected := range []string{"organizations.acme\n  rules        required  style", "organizations.acme.teams.web\n  rules        default   testing"} {
+		if code != ExitWorked || !strings.Contains(out, expected) {
+			t.Fatalf("missing %q: code %d out %q", expected, code, out)
+		}
+	}
+	write("organizations/acme/teams/web/rules/style.md", "Ours.\n")
+	code, _, errOut := fixture.run("resolve", "--project", "shop")
+	if code != ExitRefused || !strings.Contains(errOut, "problem  organizations.acme.teams.web.rules.style: redeclares") || !strings.Contains(errOut, "sync would refuse") {
+		t.Fatalf("code %d err %q", code, errOut)
+	}
+	code, _, errOut = fixture.run("resolve")
+	if code != ExitRefused || !strings.Contains(errOut, "--project") {
+		t.Fatalf("code %d err %q", code, errOut)
+	}
+}

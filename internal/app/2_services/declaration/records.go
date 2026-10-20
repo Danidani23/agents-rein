@@ -20,6 +20,9 @@ type Team struct {
 	Name        string    `yaml:"name"`
 	Description string    `yaml:"description,omitempty"`
 	CreatedAt   time.Time `yaml:"created_at,omitempty"`
+	// Skip lists the addresses of default declarations above this level
+	// that do not apply to it; a required one needs an exception.
+	Skip []string `yaml:"skip,omitempty"`
 }
 
 // Project is the record of a project, project.yaml under projects/<slug>/.
@@ -38,6 +41,9 @@ type Project struct {
 	Path        string    `yaml:"path,omitempty"`
 	Fingerprint []string  `yaml:"fingerprint,omitempty"`
 	CreatedAt   time.Time `yaml:"created_at,omitempty"`
+	// Skip lists the addresses of default declarations above this level
+	// that do not apply to it; a required one needs an exception.
+	Skip []string `yaml:"skip,omitempty"`
 }
 
 // User is the record of a person, user.yaml under users/<slug>/. GitHub is
@@ -98,6 +104,7 @@ func ParseTeam(folder string, content []byte) (team Team, problems []Problem) {
 	if team.Name == "" {
 		problems = append(problems, Problem{Severity: SeverityError, Message: "name is required"})
 	}
+	problems = append(problems, checkSkip(team.Skip)...)
 	return team, problems
 }
 
@@ -140,7 +147,19 @@ func ParseProject(folder string, content []byte) (project Project, problems []Pr
 			problems = append(problems, Problem{Severity: SeverityError, Message: fmt.Sprintf("fingerprint %q is not a commit hash", hash)})
 		}
 	}
+	problems = append(problems, checkSkip(project.Skip)...)
 	return project, problems
+}
+
+// checkSkip reports skip entries that are not declaration addresses.
+func checkSkip(skip []string) (problems []Problem) {
+	for _, entry := range skip {
+		parsed, err := address.Parse(entry)
+		if err != nil || !parsed.IsDeclaration() {
+			problems = append(problems, Problem{Severity: SeverityError, Message: fmt.Sprintf("skip entry %q is not the address of a declaration", entry)})
+		}
+	}
+	return problems
 }
 
 // ParseUser reads a user record; folder is the slug folder holding it.

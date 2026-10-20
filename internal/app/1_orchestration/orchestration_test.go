@@ -11,6 +11,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/resolve"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
@@ -890,4 +891,42 @@ func TestDistillWithTheJudge(t *testing.T) {
 			t.Fatalf("result folder %q brief %d err %v", result.Folder, len(result.Brief), err)
 		}
 	})
+}
+
+func TestResolveProject(t *testing.T) {
+	fixture, created := withTeam(t)
+	_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}, Labels: []string{"language:go"}})
+	write := func(relative string, content string) {
+		target := filepath.Join(created.Connected.OrgClonePath, "declarations", filepath.FromSlash(relative))
+		_ = os.MkdirAll(filepath.Dir(target), 0o755)
+		_ = os.WriteFile(target, []byte(content), 0o644)
+	}
+	write("organizations/acme/rules/style.md", "---\nenforcement: required\n---\nStyle.\n")
+	write("organizations/acme/rules/testing.md", "Org tests.\n")
+	write("organizations/acme/rules/py.md", "---\napplyIf: [language:python]\n---\nPython.\n")
+	write("organizations/acme/teams/web/rules/testing.md", "Web tests.\n")
+	write("organizations/acme/projects/shop/rules/testing.md", "Shop tests.\n")
+	write("users/danidani23/rules/mine.md", "Mine.\n")
+	resolution, err := fixture.orchestrator().ResolveProject("", "shop")
+	if err != nil || resolution.Address != "organizations.acme.projects.shop" || resolution.User != "danidani23" || len(resolution.Result.Problems) != 0 {
+		t.Fatalf("resolution %+v err %v", resolution, err)
+	}
+	if addresses := addressesOf(resolution.Result.Chosen); addresses != "organizations.acme.rules.style,organizations.acme.projects.shop.rules.testing,users.danidani23.rules.mine" {
+		t.Fatalf("chosen %s", addresses)
+	}
+	if strings.Join(resolution.Result.Chosen[1].Replaced, ",") != "organizations.acme.rules.testing,organizations.acme.teams.web.rules.testing" {
+		t.Fatalf("replaced %v", resolution.Result.Chosen[1].Replaced)
+	}
+	_, err = fixture.orchestrator().ResolveProject("", "nope")
+	if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("err %v", err)
+	}
+}
+
+func addressesOf(chosen []resolve.Chosen) string {
+	var list []string
+	for _, item := range chosen {
+		list = append(list, item.Address)
+	}
+	return strings.Join(list, ",")
 }

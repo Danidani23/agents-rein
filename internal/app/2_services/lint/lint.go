@@ -12,9 +12,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/resolve"
 )
 
 // Finding is one problem the lint found.
@@ -65,6 +67,7 @@ const (
 	kindToolServer
 	kindPermissionSet
 	kindHook
+	kindException
 )
 
 // classify says what a file is by its name and its folder: a SKILL.md is a
@@ -97,6 +100,8 @@ func classify(filePath string) fileKind {
 		return kindPermissionSet
 	case base == "hook.yaml" && filepath.Base(filepath.Dir(filepath.Dir(filePath))) == "hooks":
 		return kindHook
+	case strings.HasSuffix(base, ".yaml") && parent == "exceptions":
+		return kindException
 	}
 	return kindOther
 }
@@ -142,7 +147,7 @@ func Run(root string) (Report, error) {
 			state.lintSettings(filePath)
 		case kindOrganization, kindTeam, kindProject, kindUser, kindLabels:
 			state.lintRecord(filePath, kind)
-		case kindToolServer, kindPermissionSet, kindHook:
+		case kindToolServer, kindPermissionSet, kindHook, kindException:
 			state.lintDeclaration(filePath, kind)
 		}
 		return nil
@@ -193,6 +198,10 @@ func (state *run) lintSkill(filePath string) {
 	skill, problems, parsed := declaration.ParseSkill(state.displayPath(filePath), directory, content)
 	if parsed {
 		problems = append(problems, skill.Validate()...)
+		if addressText != "" {
+			_, selectorProblems := declaration.SkillSelectors(skill)
+			problems = append(problems, selectorProblems...)
+		}
 	}
 	for _, problem := range problems {
 		state.add(filePath, addressText, problem)
@@ -212,7 +221,12 @@ func (state *run) lintRule(filePath string) {
 	if addressProblem != nil {
 		state.add(filePath, "", *addressProblem)
 	}
-	_, problems := declaration.ParseRule(state.displayPath(filePath), content)
+	var problems []declaration.Problem
+	if addressText != "" {
+		_, _, problems = declaration.ParseRuleDeclaration(state.displayPath(filePath), content)
+	} else {
+		_, problems = declaration.ParseRule(state.displayPath(filePath), content)
+	}
 	for _, problem := range problems {
 		state.add(filePath, addressText, problem)
 	}
@@ -274,6 +288,8 @@ func (state *run) lintDeclaration(filePath string, kind fileKind) {
 			files = append(files, entry.Name())
 		}
 		_, problems = declaration.ParseHook(content, files)
+	case kindException:
+		_, problems = declaration.ParseException(stem, content, time.Now())
 	}
 	for _, problem := range problems {
 		state.add(filePath, addressText, problem)
@@ -316,7 +332,7 @@ func (state *run) lintRecord(filePath string, kind fileKind) {
 // record by record.
 func (state *run) crossCheckTrees() {
 	for _, clone := range state.trees {
-		_, problems, err := declaration.LoadTree(clone)
+		tree, problems, err := declaration.LoadTree(clone)
 		if err != nil {
 			continue
 		}
@@ -329,7 +345,27 @@ func (state *run) crossCheckTrees() {
 			}
 			state.add(problem.Path, problem.Address, problem.Problem)
 		}
+		declarations, err := resolve.LoadDeclarations(clone)
+		if err != nil {
+			state.add(clone, "", declaration.Problem{Severity: declaration.SeverityError, Message: "cannot read the declarations: " + err.Error()})
+			continue
+		}
+		for _, slug := range sortedProjectSlugs(tree) {
+			context, _ := resolve.ContextOf(tree, slug, "", time.Now())
+			for _, problem := range resolve.Resolve(declarations, context).Problems {
+				state.add(clone, problem.Address, declaration.Problem{Severity: declaration.SeverityError, Message: fmt.Sprintf("for project %s: %s", slug, problem.Message)})
+			}
+		}
 	}
+}
+
+func sortedProjectSlugs(tree declaration.Tree) []string {
+	var slugs []string
+	for slug := range tree.Projects {
+		slugs = append(slugs, slug)
+	}
+	sort.Strings(slugs)
+	return slugs
 }
 
 // recordAddress is the level a record describes: its folder.
@@ -406,7 +442,7 @@ func addressOf(absolutePath string, kind fileKind) (text string, problem *declar
 	switch kind {
 	case kindSkill, kindHook:
 		relative = path.Join(inside[:len(inside)-1]...)
-	case kindRule, kindToolServer, kindPermissionSet:
+	case kindRule, kindToolServer, kindPermissionSet, kindException:
 		stem := strings.TrimSuffix(strings.TrimSuffix(inside[len(inside)-1], ".md"), ".yaml")
 		relative = path.Join(append(inside[:len(inside)-1], stem)...)
 	default:

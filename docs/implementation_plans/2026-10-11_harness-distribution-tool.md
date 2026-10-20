@@ -407,15 +407,23 @@ project folder; the tool can emit that file from the records.
 
 ### Selectors, enforcement, skip lists and exceptions
 
-- A declaration carries `applyIf` and `doNotApplyIf`, lists of labels. `doNotApplyIf` wins.
+- A declaration carries `applyIf` and `doNotApplyIf`, lists of labels. `doNotApplyIf` wins;
+  `applyIf` means any of the listed labels; no `applyIf` means everywhere (P2.4, 2026-10-20).
+  The fields live in a rule's frontmatter, in the YAML of a tool server, a permission set and
+  a hook, and in a skill's `metadata` as `rein-apply-if`, `rein-do-not-apply-if` and
+  `rein-enforcement`, string-valued as the Agent Skills specification demands.
 - Every declaration has an enforcement, `required` or `default`; unmarked means `default`. A
   lower level may skip a `default` declaration or replace it with one of the same id. It cannot
   skip or redeclare a `required` one.
-- A team or project may keep a skip list. It is honoured for `default` declarations. For a
-  `required` declaration it is honoured only through an exception.
-- An exception is a declaration at the owner's level, `organizations.{org}.exceptions.{id}`,
-  naming the declaration, the grantee, a reason and an optional end date. An expired exception
-  is a lint error and the declaration applies again.
+- A team or project may keep a skip list, `skip` on its record, the addresses of declarations
+  above its level. It is honoured for `default` declarations. For a `required` declaration it
+  is honoured only through an exception.
+- An exception is a declaration at the owner's level, `organizations.{org}.exceptions.{id}`
+  or a team's, `exceptions/<id>.yaml` with `declaration`, `grantee` (a team or a project),
+  `reason`, `until` and `created_at`. An expired exception is a lint error and the
+  declaration applies again. `rein resolve --project <slug>` shows what a project resolves,
+  what was skipped and through which exception, and the problems that would make `sync`
+  refuse.
 
 Contradictions between levels, and what guarantees what (2026-10-15):
 
@@ -1169,8 +1177,28 @@ from that project's snapshot.
   so `restore` knows what to put back; its paths get names that say their role,
   `PlacedPath`, `OriginPath` and `SourceLevel`, and `Owner` becomes `PlacedBy`. Today's
   `Placement` in `machine` is the agent-home case only and says so.
-- 🔨 **P2.4 — The manifest, the label registry and the merge (B2) exist in code, with `init`,
-  `label` and `propose`.** [IN PROGRESS] First half executed 2026-10-16: the records. In
+- ✅ **P2.4 — The manifest, the label registry and the merge (B2) exist in code, with `init`,
+  `label` and `propose`.** [EXECUTED] Second half 2026-10-20: the resolver, the `resolve`
+  library with `LoadDeclarations`, `ContextOf` and `Resolve`, and `rein resolve --project`
+  as its window. Selectors on every kind: `applyIf`, `doNotApplyIf` and `enforcement` in a
+  rule's frontmatter and in a tool server's, a permission set's and a hook's YAML, and for a
+  skill under `metadata` as `rein-apply-if`, `rein-do-not-apply-if` and `rein-enforcement`,
+  since the Agent Skills specification allows only strings there; `applyIf` means any of the
+  labels, `doNotApplyIf` wins. Skip lists as `skip` on team and project records, addresses of
+  declarations above that level. Exceptions as `exceptions/<id>.yaml` at the level that owns
+  the declaration: `declaration`, `grantee` (a team or a project), `reason`, `until`,
+  `created_at`. The resolution order as designed: collect the organisation, the project's
+  teams, the project and the user; drop by selectors; apply the skips, a default skipped
+  outright, a required one only through an unexpired exception granted to the skipper, else a
+  problem; settle each kind and id across levels, a lower default replacing, a lower
+  redeclaration of a required one a problem, the same id from two teams a problem on both and
+  applying to neither unless the project declares it. Three consequences the tests fixed:
+  a team's skip applies to every project of that team; a required declaration skipped through
+  an exception leaves the id free for a lower level; the user's level sits below the project
+  and replaces defaults like any level. The lint checks the selectors, the skip entries and the exceptions,
+  expiry included, and runs the resolution for every project of a tree, reporting each problem
+  at the declaration's address; `sync` refuses while one exists. First half executed
+  2026-10-16: the records. In
   `2_services/declaration`: `Team`, `Project` (teams, labels, path, fingerprint), `User`
   (github exactly, slug its lowercase form), `LabelCategory` with the seeded registry
   `language`, `kind`, `data`; the organisation record gained `host`, `github` the only value
@@ -1179,9 +1207,9 @@ from that project's snapshot.
   are registered, no two records share a UUID, no two projects share a repository and a path;
   the lint classifies the record files and runs the cross-checks once per tree, every finding
   with its address. Gate: `task rein:check` green; `rein lint` over a scratch org repository
-  clean, then reporting a planned host, a missing team and an unregistered label. Second half,
-  with `sync`: selectors, enforcement, skip lists, exceptions and the resolution order. The
-  manifest in the title is gone since D4; `init`, `label` and `propose` are P2.17 and P2.16.
+  clean, then reporting a planned host, a missing team and an unregistered label. The
+  manifest in the title is gone since D4; `init`, `label` and `propose` are P2.17, P2.16 and
+  P2.18.
 - 🟢 **P2.5 — The compiler for Claude Code (B3) emits the plugin and marketplace repository, the
   managed-settings drop-in, `.mcp.json` and `CLAUDE.local.md`.** [PENDING] Blocked by P1.3.
 - 🟢 **P2.6 — The drift and inventory report (B5).** [PENDING]
@@ -1496,3 +1524,5 @@ writes is read from the next session on, not in the same one.
 - (2026-10-19) P2.15 and P2.23 executed: `rein restore` puts a clone back and commits it,
   `rein reset` restores everything first and then forgets the machine; the state file carries
   a version, a header, a previous copy, an atomic write and a lock.
+- (2026-10-20) P2.4 second half executed: selectors on every kind, skip lists, exceptions,
+  the resolver and its problems in the lint, `rein resolve` as its window.

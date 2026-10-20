@@ -21,7 +21,7 @@ const module = "github.com/Danidani23/agents-rein/internal/"
 // allowed says which internal layers each layer may import.
 // libraries are the pure packages of 2_services that anything may import; a
 // service proper may import them and the ports, never another service.
-var libraries = []string{"2_services/address", "2_services/declaration", "2_services/lint", "2_services/exchange", "2_services/machine", "2_services/refusal", "2_services/scaffold", "2_services/distill"}
+var libraries = []string{"2_services/address", "2_services/declaration", "2_services/lint", "2_services/exchange", "2_services/machine", "2_services/refusal", "2_services/scaffold", "2_services/distill", "2_services/resolve"}
 
 // fakes is the one adapter a test file of any layer may import: the
 // in-memory implementations of the ports.

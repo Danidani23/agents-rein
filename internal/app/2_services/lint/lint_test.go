@@ -287,3 +287,28 @@ func TestDeclarationFormats(t *testing.T) {
 		}
 	})
 }
+
+func TestResolutionChecks(t *testing.T) {
+	organization := "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\nhost: github\n"
+	root := t.TempDir()
+	writeFile(t, root, "declarations/organizations/acme/organization.yaml", organization)
+	writeFile(t, root, "declarations/organizations/acme/teams/web/team.yaml", "id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427\nslug: web\nname: Web\nskip: [organizations.acme.rules.missing]\n")
+	writeFile(t, root, "declarations/organizations/acme/projects/shop/project.yaml", "id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: shop\nname: Shop\nteams: [web]\n")
+	writeFile(t, root, "declarations/organizations/acme/exceptions/old.yaml", "declaration: organizations.acme.rules.style\ngrantee: organizations.acme.teams.web\nreason: old\nuntil: 2020-01-01T00:00:00Z\n")
+	writeFile(t, root, "declarations/organizations/acme/exceptions/nobody.yaml", "declaration: organizations.acme.rules.style\ngrantee: organizations.acme.teams.nobody\nreason: whoever\n")
+	writeFile(t, root, "declarations/organizations/acme/rules/style.md", "---\nenforcement: required\n---\nStyle.\n")
+	writeFile(t, root, "declarations/organizations/acme/teams/web/rules/style.md", "Our style.\n")
+	writeFile(t, root, "declarations/organizations/acme/skills/commit/SKILL.md", "---\nname: commit\ndescription: Draft commits.\nmetadata:\n  rein-enforcement: sometimes\n---\n")
+	report := mustRun(t, root)
+	joined := strings.Join(messages(report), "\n")
+	for _, expected := range []string{"skip names organizations.acme.rules.missing, which does not exist", "expired on 2020-01-01", "grantee organizations.acme.teams.nobody is not a team or a project", "for project shop: redeclares organizations.acme.rules.style, which is required", `enforcement "sometimes" is not`} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing %q in %v", expected, messages(report))
+		}
+	}
+	for _, finding := range report.Findings {
+		if strings.Contains(finding.Message, "redeclares") && finding.Address != "organizations.acme.teams.web.rules.style" {
+			t.Fatalf("the resolution problem carries %q", finding.Address)
+		}
+	}
+}

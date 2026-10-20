@@ -6,6 +6,8 @@ import (
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/resolve"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
@@ -250,4 +252,40 @@ func sameFingerprint(recorded []string, found []string) bool {
 func projectRecordOf(tree declaration.Tree, slug string) (declaration.Project, bool) {
 	project, found := tree.Projects[slug]
 	return project, found
+}
+
+// Resolution is what a project resolves: the declarations that apply, in
+// level order, what was skipped and what is wrong.
+type Resolution struct {
+	Organization string
+	Project      string
+	Address      string
+	Labels       []string
+	Teams        []string
+	User         string
+	Result       resolve.Result
+}
+
+// ResolveProject runs the resolution for a project of the named or active
+// organisation, with the user's level, and changes nothing.
+func (orchestrator Orchestrator) ResolveProject(organizationSlug string, projectSlug string) (Resolution, error) {
+	services := orchestrator.Services
+	organization, orgClonePath, err := resolveOrganization(services, organizationSlug)
+	if err != nil {
+		return Resolution{}, err
+	}
+	tree, err := services.Records.Tree(orgClonePath)
+	if err != nil {
+		return Resolution{}, err
+	}
+	userSlug := userSlugOf(services)
+	context, found := resolve.ContextOf(tree, projectSlug, userSlug, services.Clock())
+	if !found {
+		return Resolution{}, refusal.New("project " + projectSlug + " does not exist in " + organization.Slug + "; projects are " + strings.Join(sortedKeys(tree.Projects), ", "))
+	}
+	declarations, err := resolve.LoadDeclarations(orgClonePath)
+	if err != nil {
+		return Resolution{}, err
+	}
+	return Resolution{Organization: organization.Slug, Project: projectSlug, Address: projectAddress(organization.Slug, projectSlug), Labels: context.Labels, Teams: context.Teams, User: userSlug, Result: resolve.Resolve(declarations, context)}, nil
 }

@@ -39,6 +39,30 @@ func (selectors Selectors) check() (problems []Problem) {
 	return problems
 }
 
+// The metadata keys a skill carries its selectors in, since the Agent Skills
+// specification allows only string values under metadata; lists are
+// separated by spaces or commas.
+const (
+	SkillApplyIfKey      = "rein-apply-if"
+	SkillDoNotApplyIfKey = "rein-do-not-apply-if"
+	SkillEnforcementKey  = "rein-enforcement"
+)
+
+// SplitList splits a selector list written as one string.
+func SplitList(text string) []string {
+	return strings.FieldsFunc(text, func(character rune) bool { return character == ',' || character == ' ' })
+}
+
+// SkillSelectors reads a skill's selectors from its metadata.
+func SkillSelectors(skill Skill) (Selectors, []Problem) {
+	selectors := Selectors{
+		ApplyIf:      SplitList(skill.Metadata[SkillApplyIfKey]),
+		DoNotApplyIf: SplitList(skill.Metadata[SkillDoNotApplyIfKey]),
+		Enforcement:  skill.Metadata[SkillEnforcementKey],
+	}
+	return selectors, selectors.check()
+}
+
 // VariablePrefix is what every environment variable a declaration references
 // starts with, so a shell profile shows what rein's declarations need and
 // nothing collides with another program's variables (D22).
