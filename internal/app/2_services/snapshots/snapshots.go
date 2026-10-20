@@ -161,6 +161,11 @@ func (service Service) Latest(project string) ([]Stored, error) {
 	return latest, nil
 }
 
+// RemoveAll deletes every snapshot: the end of a reset, after restore.
+func (service Service) RemoveAll() error {
+	return os.RemoveAll(service.Folder())
+}
+
 // Remove deletes a snapshot file: the compensation of a failed workflow.
 func (Service) Remove(snapshotPath string) error {
 	if snapshotPath == "" {

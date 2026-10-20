@@ -63,19 +63,22 @@ func (orchestrator Orchestrator) Status() (StatusReport, error) {
 	return report, nil
 }
 
-// ResetPlan is what a reset would remove; the gateway shows it and asks.
+// ResetPlan is what a reset would put back and remove; the gateway shows
+// it and asks.
 type ResetPlan struct {
-	All             bool
 	Placements      []machine.Placement
 	Imports         []machine.Import
 	Organizations   []machine.OrganizationRef
 	Projects        []machine.Project
 	ImportsFolder   string
 	OrgClonesFolder string
+	RemovalsFile    string
+	SnapshotsFolder string
+	DistillFolder   string
 }
 
-// PlanReset reads the state and says what a reset would remove.
-func (orchestrator Orchestrator) PlanReset(all bool) (ResetPlan, error) {
+// PlanReset reads the state and says what a reset would do.
+func (orchestrator Orchestrator) PlanReset() (ResetPlan, error) {
 	services := orchestrator.Services
 	placed, imports, err := services.Placements.List()
 	if err != nil {
@@ -90,13 +93,15 @@ func (orchestrator Orchestrator) PlanReset(all bool) (ResetPlan, error) {
 		return ResetPlan{}, err
 	}
 	return ResetPlan{
-		All:             all,
 		Placements:      placed,
 		Imports:         imports,
 		Organizations:   connected,
 		Projects:        projects,
 		ImportsFolder:   services.Placements.ImportsFolder(),
 		OrgClonesFolder: services.Clones.OrgClonesFolder(),
+		RemovalsFile:    services.Ledger.Path(),
+		SnapshotsFolder: services.Snapshots.Folder(),
+		DistillFolder:   services.Distillations.Folder(),
 	}, nil
 }
 

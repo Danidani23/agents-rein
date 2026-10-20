@@ -272,7 +272,7 @@ func TestReset(t *testing.T) {
 		fixture := newHarness(t)
 		fixture.state.Current.Placements = []machine.Placement{{Path: placed}}
 		code, out, _ := fixture.runInteractive("?\n\n", "reset")
-		if code != ExitWorked || !strings.Contains(out, placed) || !strings.Contains(out, "A placement is one link") || !strings.Contains(out, "removed  "+placed) {
+		if code != ExitWorked || !strings.Contains(out, placed) || !strings.Contains(out, "reset is restore for everything") || !strings.Contains(out, "removed  "+placed) {
 			t.Fatalf("code %d out %q", code, out)
 		}
 		if len(fixture.agent.Unplaced) != 1 || len(fixture.state.Current.Placements) != 0 {
@@ -303,18 +303,52 @@ func TestReset(t *testing.T) {
 			t.Fatalf("code %d err %q state %+v", code, errOut, fixture.state.Current)
 		}
 	})
-	t.Run("--all names the organisations and projects and removes the clones", func(t *testing.T) {
+	t.Run("the organisations, their clones and rein's folders go, and a project is put back first", func(t *testing.T) {
 		fixture := newHarness(t)
-		clone := fixture.seedConnectedOrganization(t, 1)
-		code, out, _ := fixture.run("reset", "--all", "--yes")
-		if code != ExitWorked || !strings.Contains(out, "1 organisations with their clones under "+filepath.Join(fixture.home, "orgs")) || !strings.Contains(out, "removed  clone id-1") {
-			t.Fatalf("code %d out %q", code, out)
+		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+		_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+		_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+		folder, _ := filepath.EvalSymlinks(t.TempDir())
+		_ = fake.NewProjectClone(folder, []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, []string{"INSTRUCTIONS.md"})
+		_ = os.WriteFile(filepath.Join(folder, "INSTRUCTIONS.md"), []byte("be brief"), 0o644)
+		_, _, _ = fixture.run("init", "--path", folder, "--project", "shop", "--yes")
+		code, out, errOut := fixture.run("reset", "--yes")
+		for _, expected := range []string{"put back 1 initialised projects", "restored " + folder + ", formerly organizations.acme.projects.shop", "put back: INSTRUCTIONS.md", "committed f4ce000", "forget 1 organisations", "removed  clone ", "removed  " + filepath.Join(fixture.home, "orgs"), "reset done"} {
+			if code != ExitWorked || !strings.Contains(out, expected) {
+				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
+			}
 		}
-		_, err := os.Stat(clone)
-		if err == nil || len(fixture.state.Current.Organizations) != 0 {
-			t.Fatalf("clone %v state %+v", err, fixture.state.Current)
+		content, _ := os.ReadFile(filepath.Join(folder, "INSTRUCTIONS.md"))
+		_, err := os.Stat(filepath.Join(fixture.home, "orgs"))
+		if string(content) != "be brief" || err == nil || len(fixture.state.Current.Organizations) != 0 {
+			t.Fatalf("content %q orgs err %v state %+v", content, err, fixture.state.Current)
 		}
 	})
+}
+
+func TestRestore(t *testing.T) {
+	fixture := newHarness(t)
+	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+	folder, _ := filepath.EvalSymlinks(t.TempDir())
+	_ = fake.NewProjectClone(folder, []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, []string{"INSTRUCTIONS.md"})
+	_ = os.WriteFile(filepath.Join(folder, "INSTRUCTIONS.md"), []byte("be brief"), 0o644)
+	_, _, _ = fixture.run("init", "--path", folder, "--project", "shop", "--yes")
+	code, _, errOut := fixture.run("restore", "--path", folder)
+	if code != ExitRefused || !strings.Contains(errOut, "--yes") {
+		t.Fatalf("code %d err %q", code, errOut)
+	}
+	code, out, errOut := fixture.run("restore", "--path", folder, "--yes")
+	for _, expected := range []string{"restored " + folder + ", formerly organizations.acme.projects.shop", "put back: INSTRUCTIONS.md", ".gitignore: rein block removed", "committed f4ce000: restore agent settings from rein"} {
+		if code != ExitWorked || !strings.Contains(out, expected) {
+			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
+		}
+	}
+	code, _, errOut = fixture.run("restore", "--path", folder, "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "not initialised") {
+		t.Fatalf("code %d err %q", code, errOut)
+	}
 }
 
 func TestOrgCreate(t *testing.T) {

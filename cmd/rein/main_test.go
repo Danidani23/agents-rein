@@ -123,7 +123,7 @@ func TestWiring(t *testing.T) {
 		if code != cli.ExitWorked || !strings.Contains(out, "* acme") {
 			t.Fatalf("list: code %d out %q", code, out)
 		}
-		code, out, _ = run("reset", "--all", "--yes")
+		code, out, _ = run("reset", "--yes")
 		if code != cli.ExitWorked || !strings.Contains(out, "removed  clone") {
 			t.Fatalf("reset: code %d out %q", code, out)
 		}
@@ -232,6 +232,33 @@ func TestWiring(t *testing.T) {
 		current, err := head.Output()
 		if err != nil || strings.TrimSpace(string(current)) != "main" {
 			t.Fatalf("clone on %q err %v", current, err)
+		}
+		// restore puts the project back and commits; the untracked local file returns untracked
+		code, out, errOut = run("restore", "--path", project, "--yes")
+		if code != cli.ExitWorked || !strings.Contains(out, "put back: .claude/rules/go.md, CLAUDE.local.md, CLAUDE.md") || !strings.Contains(out, ".gitignore: rein block removed") || !strings.Contains(out, "committed ") {
+			t.Fatalf("restore: code %d out %q err %q", code, out, errOut)
+		}
+		if git("rev-list", "--count", "HEAD") != "3" || git("status", "--porcelain") != "?? CLAUDE.local.md" || !strings.Contains(git("log", "-1", "--format=%s"), "restore agent settings from rein") {
+			t.Fatalf("after restore: count %s status %q", git("rev-list", "--count", "HEAD"), git("status", "--porcelain"))
+		}
+		content, _ := os.ReadFile(filepath.Join(project, "CLAUDE.md"))
+		if string(content) != "be brief" {
+			t.Fatalf("CLAUDE.md %q", content)
+		}
+		// reset wipes the rest
+		code, out, errOut = run("reset", "--yes")
+		if code != cli.ExitWorked || !strings.Contains(out, "removed  clone") || !strings.Contains(out, "removals.yaml") {
+			t.Fatalf("reset: code %d out %q err %q", code, out, errOut)
+		}
+		for _, gone := range []string{"orgs", "snapshots", "distill", "removals.yaml"} {
+			_, err = os.Stat(filepath.Join(reinHome, gone))
+			if err == nil {
+				t.Fatalf("%s still there after reset", gone)
+			}
+		}
+		state, _ = os.ReadFile(filepath.Join(reinHome, "state.yaml"))
+		if !strings.HasPrefix(string(state), "# Written by rein") || !strings.Contains(string(state), "version: 1") || strings.Contains(string(state), "acme") {
+			t.Fatalf("state %q", state)
 		}
 	})
 	t.Run("org create reports a protection GitHub refuses and still connects", func(t *testing.T) {

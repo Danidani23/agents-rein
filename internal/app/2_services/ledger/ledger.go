@@ -8,6 +8,7 @@ package ledger
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -20,12 +21,22 @@ type Service struct {
 }
 
 // Removal is one path rein took out of an agent's home or a project clone.
+// Tracked says whether the repository tracked it, so restore knows what to
+// commit again; RestoredAt is set once restore put it back (D20).
 type Removal struct {
-	Path      string    `yaml:"path"`
-	Scope     string    `yaml:"scope"`
-	Project   string    `yaml:"project,omitempty"`
-	Snapshot  string    `yaml:"snapshot"`
-	RemovedAt time.Time `yaml:"removed_at"`
+	Path       string    `yaml:"path"`
+	Scope      string    `yaml:"scope"`
+	Project    string    `yaml:"project,omitempty"`
+	Snapshot   string    `yaml:"snapshot"`
+	Tracked    bool      `yaml:"tracked,omitempty"`
+	RemovedAt  time.Time `yaml:"removed_at"`
+	RestoredAt time.Time `yaml:"restored_at,omitempty"`
+}
+
+// Entry is a removal with the agent it belongs to.
+type Entry struct {
+	Agent string
+	Removal
 }
 
 // Scopes of a removal.
@@ -89,6 +100,69 @@ func (service Service) RecordRemovals(agent string, removals []Removal) error {
 		all.Agents[agent] = append(all.Agents[agent], removal)
 	}
 	return service.save(all)
+}
+
+// Pending lists the removals of a project not put back yet, oldest first.
+func (service Service) Pending(project string) ([]Entry, error) {
+	all, err := service.Load()
+	if err != nil {
+		return nil, err
+	}
+	var pending []Entry
+	for agent, removals := range all.Agents {
+		for _, removal := range removals {
+			if removal.Project == project && removal.RestoredAt.IsZero() {
+				pending = append(pending, Entry{Agent: agent, Removal: removal})
+			}
+		}
+	}
+	sort.Slice(pending, func(left, right int) bool {
+		if pending[left].Agent != pending[right].Agent {
+			return pending[left].Agent < pending[right].Agent
+		}
+		return pending[left].Path < pending[right].Path
+	})
+	return pending, nil
+}
+
+// MarkRestored stamps every pending removal of the snapshots as put back.
+func (service Service) MarkRestored(snapshotPaths []string) error {
+	return service.stamp(snapshotPaths, service.now())
+}
+
+// UnmarkRestored takes the stamp off again: the compensation of a restore
+// that failed after marking.
+func (service Service) UnmarkRestored(snapshotPaths []string) error {
+	return service.stamp(snapshotPaths, time.Time{})
+}
+
+func (service Service) stamp(snapshotPaths []string, restoredAt time.Time) error {
+	all, err := service.Load()
+	if err != nil {
+		return err
+	}
+	named := map[string]bool{}
+	for _, snapshotPath := range snapshotPaths {
+		named[snapshotPath] = true
+	}
+	for agent, removals := range all.Agents {
+		for index := range removals {
+			if named[removals[index].Snapshot] {
+				removals[index].RestoredAt = restoredAt
+			}
+		}
+		all.Agents[agent] = removals
+	}
+	return service.save(all)
+}
+
+// Delete removes the file: the end of a reset, after everything is put back.
+func (service Service) Delete() error {
+	err := os.Remove(service.Path())
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 // ForgetSnapshot drops every removal that points at the snapshot: the

@@ -44,3 +44,34 @@ func TestRemovals(t *testing.T) {
 		t.Fatalf("temporary files left: %v", entries)
 	}
 }
+
+func TestPendingAndRestored(t *testing.T) {
+	clock := time.Date(2026, 10, 19, 10, 0, 0, 0, time.UTC)
+	service := Service{Home: t.TempDir(), Clock: func() time.Time { return clock }}
+	_ = service.RecordRemovals("claude-code", []Removal{
+		{Path: "/p/CLAUDE.md", Scope: ScopeProject, Project: "organizations.acme.projects.shop", Snapshot: "/s/1.json", Tracked: true},
+		{Path: "/p/.claude", Scope: ScopeProject, Project: "organizations.acme.projects.shop", Snapshot: "/s/1.json"},
+		{Path: "/q/CLAUDE.md", Scope: ScopeProject, Project: "organizations.acme.projects.other", Snapshot: "/s/2.json"},
+	})
+	pending, err := service.Pending("organizations.acme.projects.shop")
+	if err != nil || len(pending) != 2 || pending[0].Path != "/p/.claude" || !pending[1].Tracked || pending[0].Agent != "claude-code" {
+		t.Fatalf("pending %+v err %v", pending, err)
+	}
+	clock = clock.Add(time.Hour)
+	err = service.MarkRestored([]string{"/s/1.json"})
+	pending, _ = service.Pending("organizations.acme.projects.shop")
+	all, _ := service.Load()
+	if err != nil || len(pending) != 0 || !all.Agents["claude-code"][0].RestoredAt.Equal(clock) || !all.Agents["claude-code"][2].RestoredAt.IsZero() {
+		t.Fatalf("pending %v all %+v err %v", pending, all, err)
+	}
+	err = service.UnmarkRestored([]string{"/s/1.json"})
+	pending, _ = service.Pending("organizations.acme.projects.shop")
+	if err != nil || len(pending) != 2 {
+		t.Fatalf("pending %v err %v", pending, err)
+	}
+	err = service.Delete()
+	_, statErr := os.Stat(service.Path())
+	if err != nil || statErr == nil || service.Delete() != nil {
+		t.Fatalf("delete err %v stat %v", err, statErr)
+	}
+}

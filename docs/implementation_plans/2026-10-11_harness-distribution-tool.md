@@ -1043,9 +1043,15 @@ from that project's snapshot.
   organisations tests on the same fakes; the architecture test lets test files import the
   fakes and checks the one-workflow-per-file rule on the methods of `Orchestrator`. Output
   and exit codes unchanged. Gate: `task rein:check` green.
-- 🟢 **P2.23 — The state file hardened (D19).** [PENDING] With P2.15, where the ledger lands:
-  the header comment, `version`, validation on load, atomic write, lock file, previous copy,
-  snapshot contents as files indexed from the state.
+- ✅ **P2.23 — The state file hardened (D19).** [EXECUTED] 2026-10-19 with P2.15: `state.yaml`
+  opens with a header saying it is rein's, carries `version: 1`, is decoded with unknown
+  fields refused and a newer version refused by name, a file from before the field counting
+  as version 1; every save keeps the previous copy as `state.yaml.previous`, writes through a
+  temporary file and a rename, and holds `state.lock` with the writer's pid, a lock older
+  than ten minutes counting as left behind. The lock spans a save, not a command: two reins
+  can still interleave a load and a save, which the ledger's append-only files tolerate and
+  the state's sections mostly do; a command-wide lock is a later step if it ever bites.
+  Snapshot contents were files already.
 - ✅ **P2.16 — `team create` and `project create`.** [EXECUTED] 2026-10-19. Records written by
   the owner to the org repository (D13): `team.yaml` with id, slug, name, description;
   `project.yaml` with the same plus teams, labels chosen from the seeded registry, and path;
@@ -1139,10 +1145,23 @@ from that project's snapshot.
   temperature zero where the backend allows; `--dry-run` prints exactly what would be sent.
   The original scope, approved 2026-10-12, had distill mechanical first and `--assist` later;
   the user's model of 2026-10-19 brought the model pass in.
-- 🟢 **P2.15 — The ledger, `restore`, and `reset` on it (D12).** [PENDING] Supersedes the
-  undo half of P2.9; `org destroy` and `uninstall` stay there. Storage as D12 says: removals in
-  one file with a section per agent, inserts in one file per organisation, both under
-  `~/.rein/`. Scope added 2026-10-19: the
+- ✅ **P2.15 — The ledger, `restore`, and `reset` on it (D12).** [EXECUTED] 2026-10-19 with
+  P2.23. `rein restore` reverses `init` for one clone through the workflow `RestoreProject`:
+  the pending removals of the project come back from their snapshots, a file now in the way
+  stops it unless `--force`, the block leaves `.gitignore`, the removals get `restored_at`
+  (D20) and stay in the ledger with their snapshots until reset, the clone is forgotten on
+  this machine, and the put-back is committed as the move-out was, only the paths that were
+  tracked, which the ledger now records per removal, plus `.gitignore`; `--no-commit` leaves
+  it staged. `rein reset` is restore for everything, then forgetting: every initialised
+  project is put back and its put-back committed, a project whose folder is gone is skipped
+  with its registration dropped, a project whose restore fails stops the reset before anything
+  is wiped so no snapshot is lost; then the placements in the agents' homes are removed, the
+  organisations forgotten and their clones deleted, and the ledger, the snapshots and the
+  distillations removed; `--all` is gone, since reset means all. Inserts, what `sync` will
+  place, get their file per organisation with P2.5. Supersedes the undo half of P2.9; `org
+  destroy` and `uninstall` stay there. Storage as D12 says: removals in one file with a
+  section per agent, inserts in one file per organisation, both under `~/.rein/`. Scope
+  added 2026-10-19: the
   placement record is generalised, since `sync` places into project clones as well as into
   an agent's home and the ledger treats both the same. It gains the agent whose home or
   clone it is, the scope (agent home or project clone) with the project and organisation it
@@ -1474,3 +1493,6 @@ writes is read from the next session on, not in the same one.
 - (2026-10-19) P2.18 step (d) executed, closing P2.18: the judge port behind `claude -p`, the
   corpus, the brief, the validated answer, the judgements in `distill`'s report and in the
   pull request `propose` opens.
+- (2026-10-19) P2.15 and P2.23 executed: `rein restore` puts a clone back and commits it,
+  `rein reset` restores everything first and then forgets the machine; the state file carries
+  a version, a header, a previous copy, an atomic write and a lock.

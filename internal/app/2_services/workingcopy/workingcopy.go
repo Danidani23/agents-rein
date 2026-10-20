@@ -78,6 +78,33 @@ func (Service) Present(folder string, relativePaths []string) []string {
 	return present
 }
 
+// TrackedAmong says which of the paths, relative to root, the repository
+// tracks, a folder counting when anything under it is tracked.
+func (service Service) TrackedAmong(root string, relativePaths []string) (map[string]bool, error) {
+	tracked := map[string]bool{}
+	if len(relativePaths) == 0 {
+		return tracked, nil
+	}
+	listed, err := service.Repository.TrackedPaths(root, relativePaths)
+	if err != nil {
+		return nil, err
+	}
+	for _, relativePath := range relativePaths {
+		for _, candidate := range listed {
+			if candidate == relativePath || strings.HasPrefix(candidate, strings.TrimSuffix(relativePath, "/")+"/") {
+				tracked[relativePath] = true
+			}
+		}
+	}
+	return tracked, nil
+}
+
+// HasIgnoreBlock says whether folder's .gitignore holds the marked block.
+func (Service) HasIgnoreBlock(folder string) bool {
+	content, err := os.ReadFile(filepath.Join(folder, ".gitignore"))
+	return err == nil && strings.Contains(string(content), ignoreBlockStart)
+}
+
 // Remove deletes the paths under folder, folders with their content.
 func (Service) Remove(folder string, relativePaths []string) error {
 	for _, relativePath := range relativePaths {

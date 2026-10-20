@@ -81,6 +81,11 @@ func (service Service) Write(name string, candidates []distill.Candidate, report
 	return folder, nil
 }
 
+// RemoveAll deletes every distillation: the end of a reset.
+func (service Service) RemoveAll() error {
+	return os.RemoveAll(service.Folder())
+}
+
 // Remove deletes a distillation: the compensation of a failed workflow.
 func (Service) Remove(folder string) error {
 	if folder == "" {

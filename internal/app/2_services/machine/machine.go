@@ -54,8 +54,13 @@ type Import struct {
 	Imported string `yaml:"imported"`
 }
 
+// StateVersion is the version of the state file this build writes and reads;
+// a file from a newer rein is refused (D19).
+const StateVersion = 1
+
 // State is everything rein remembers about this machine.
 type State struct {
+	Version       int               `yaml:"version"`
 	Organizations []OrganizationRef `yaml:"organizations"`
 	Active        string            `yaml:"active,omitempty"`
 	OrgClonePaths map[string]string `yaml:"org_clone_paths"`
@@ -66,7 +71,7 @@ type State struct {
 
 // Empty is the state of a machine rein has never touched.
 func Empty() State {
-	return State{OrgClonePaths: map[string]string{}}
+	return State{Version: StateVersion, OrgClonePaths: map[string]string{}}
 }
 
 // Organization finds a connected organisation by slug.

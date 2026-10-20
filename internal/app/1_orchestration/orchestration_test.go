@@ -174,53 +174,153 @@ func TestStatus(t *testing.T) {
 }
 
 func TestReset(t *testing.T) {
-	t.Run("the plan lists what the state holds", func(t *testing.T) {
+	t.Run("the plan lists what the state holds and where the ledger lives", func(t *testing.T) {
 		fixture := newHarness(t)
 		fixture.state.Current.Placements = []machine.Placement{{Path: "/a"}}
 		fixture.state.Current.Organizations = []machine.OrganizationRef{{Slug: "acme"}}
-		plan, err := fixture.orchestrator().PlanReset(true)
-		if err != nil || len(plan.Placements) != 1 || len(plan.Organizations) != 1 || !plan.All {
+		plan, err := fixture.orchestrator().PlanReset()
+		if err != nil || len(plan.Placements) != 1 || len(plan.Organizations) != 1 {
 			t.Fatalf("plan %+v err %v", plan, err)
 		}
-		if plan.OrgClonesFolder != filepath.Join(fixture.home, "orgs") || plan.ImportsFolder != filepath.Join(fixture.home, "imports") {
+		if plan.OrgClonesFolder != filepath.Join(fixture.home, "orgs") || plan.ImportsFolder != filepath.Join(fixture.home, "imports") || plan.RemovalsFile != filepath.Join(fixture.home, "removals.yaml") || plan.SnapshotsFolder != filepath.Join(fixture.home, "snapshots") || plan.DistillFolder != filepath.Join(fixture.home, "distill") {
 			t.Fatalf("plan %+v", plan)
 		}
 	})
-	t.Run("reset unplaces through the agent, keeps what was skipped, and with all forgets the machine", func(t *testing.T) {
+	t.Run("reset unplaces through the agent, keeps what was skipped, forgets the machine and wipes rein's folders", func(t *testing.T) {
 		fixture := newHarness(t)
 		orgClonePath := filepath.Join(fixture.home, "orgs", "id-1")
 		_ = os.MkdirAll(orgClonePath, 0o755)
-		_ = os.MkdirAll(filepath.Join(fixture.home, "imports"), 0o755)
+		for _, folder := range []string{"imports", "snapshots", "distill"} {
+			_ = os.MkdirAll(filepath.Join(fixture.home, folder), 0o755)
+		}
+		_ = os.WriteFile(filepath.Join(fixture.home, "removals.yaml"), []byte("version: 1\n"), 0o644)
 		fixture.state.Current.Placements = []machine.Placement{{Path: "/a"}, {Path: "/foreign"}}
 		fixture.state.Current.Organizations = []machine.OrganizationRef{{ID: "id-1", Slug: "acme"}}
 		fixture.state.Current.OrgClonePaths = map[string]string{"id-1": orgClonePath}
 		fixture.state.Current.Active = "acme"
-		fixture.state.Current.Projects = []machine.Project{{Organization: "id-1"}}
 		fixture.state.Current.Imports = []machine.Import{{}}
-		plan, _ := fixture.orchestrator().PlanReset(true)
+		plan, _ := fixture.orchestrator().PlanReset()
 		result, err := fixture.orchestrator().ResetMachine(plan)
-		if err != nil || result.Kept != 1 || len(result.RemovedOrgClones) != 1 || len(fixture.agent.Unplaced) != 2 {
+		if err != nil || result.Kept != 1 || len(result.RemovedOrgClones) != 1 || len(fixture.agent.Unplaced) != 2 || len(result.Wiped) != 4 {
 			t.Fatalf("result %+v err %v unplaced %v", result, err, fixture.agent.Unplaced)
 		}
 		state := fixture.state.Current
 		if len(state.Placements) != 1 || state.Placements[0].Path != "/foreign" || state.Active != "" || len(state.Organizations) != 0 || len(state.Projects) != 0 || len(state.Imports) != 0 {
 			t.Fatalf("state %+v", state)
 		}
-		for _, gone := range []string{orgClonePath, filepath.Join(fixture.home, "imports")} {
+		for _, gone := range []string{orgClonePath, filepath.Join(fixture.home, "imports"), filepath.Join(fixture.home, "snapshots"), filepath.Join(fixture.home, "distill"), filepath.Join(fixture.home, "removals.yaml")} {
 			_, err = os.Stat(gone)
 			if err == nil {
 				t.Fatalf("%s still there", gone)
 			}
 		}
 	})
-	t.Run("without all the organisations stay", func(t *testing.T) {
-		fixture := newHarness(t)
-		fixture.state.Current.Organizations = []machine.OrganizationRef{{ID: "id-1", Slug: "acme"}}
-		fixture.state.Current.Active = "acme"
-		plan, _ := fixture.orchestrator().PlanReset(false)
-		_, err := fixture.orchestrator().ResetMachine(plan)
-		if err != nil || len(fixture.state.Current.Organizations) != 1 || fixture.state.Current.Active != "acme" {
-			t.Fatalf("err %v state %+v", err, fixture.state.Current)
+	t.Run("reset puts an initialised project back first, skips a gone folder, and stops when a restore fails", func(t *testing.T) {
+		fixture, _ := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		folder := projectClone(t)
+		_, err := fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
+		if err != nil {
+			t.Fatalf("init: %v", err)
+		}
+		fixture.state.Current.Projects = append(fixture.state.Current.Projects, machine.Project{Organization: "x", Address: "organizations.acme.projects.gone", ClonePath: filepath.Join(t.TempDir(), "gone")})
+		plan, _ := fixture.orchestrator().PlanReset()
+		result, err := fixture.orchestrator().ResetMachine(plan)
+		if err != nil || len(result.Projects) != 2 || result.Projects[0].Restore.Commit == "" || result.Projects[1].Skipped == "" || result.Stopped {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		content, err := os.ReadFile(filepath.Join(folder, "INSTRUCTIONS.md"))
+		if err != nil || string(content) != "be brief" {
+			t.Fatalf("instructions %q err %v", content, err)
+		}
+		_, err = os.Stat(filepath.Join(fixture.home, "removals.yaml"))
+		if err == nil || len(fixture.state.Current.Projects) != 0 || len(fixture.state.Current.Organizations) != 0 {
+			t.Fatalf("ledger err %v state %+v", err, fixture.state.Current)
+		}
+		// a restore that fails stops the reset before the wipe
+		fixture, _ = withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		folder = projectClone(t)
+		_, _ = fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
+		_ = os.WriteFile(filepath.Join(folder, "INSTRUCTIONS.md"), []byte("new work"), 0o644)
+		plan, _ = fixture.orchestrator().PlanReset()
+		result, err = fixture.orchestrator().ResetMachine(plan)
+		if !errors.Is(err, refusal.ErrRefused) || !result.Stopped || !result.Projects[0].Failed || len(fixture.state.Current.Organizations) != 1 {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		_, err = os.Stat(filepath.Join(fixture.home, "removals.yaml"))
+		if err != nil {
+			t.Fatalf("the ledger was wiped although a restore failed")
+		}
+	})
+}
+
+func TestRestoreProject(t *testing.T) {
+	t.Run("puts the files back, removes the block, marks the ledger, unregisters and commits the tracked ones", func(t *testing.T) {
+		fixture, _ := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		folder := projectClone(t)
+		_, err := fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
+		if err != nil {
+			t.Fatalf("init: %v", err)
+		}
+		result, err := fixture.orchestrator().RestoreProject(RestoreRequest{Directory: folder})
+		if err != nil || result.Address != "organizations.acme.projects.shop" || strings.Join(result.Restored, ",") != ".fake-agent/local.md,.fake-agent/rules.md,INSTRUCTIONS.md" || !result.IgnoreRemoved || !result.Unregistered || result.Commit == "" {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		for relative, content := range map[string]string{"INSTRUCTIONS.md": "be brief", ".fake-agent/rules.md": "rule", ".fake-agent/local.md": "mine"} {
+			restored, err := os.ReadFile(filepath.Join(folder, filepath.FromSlash(relative)))
+			if err != nil || string(restored) != content {
+				t.Fatalf("%s: %q err %v", relative, restored, err)
+			}
+		}
+		_, err = os.Stat(filepath.Join(folder, ".gitignore"))
+		if err == nil {
+			t.Fatalf(".gitignore still holds the block")
+		}
+		staged := strings.Join(fixture.repository.Staged, ",")
+		commits := fixture.repository.Commits
+		if commits[len(commits)-1] != restoreCommitMessage || staged != "" {
+			t.Fatalf("commits %v staged %q", commits, staged)
+		}
+		removals, _ := fixture.orchestrator().Ledger.Load()
+		for _, removal := range removals.Agents["fake-agent"] {
+			if removal.RestoredAt.IsZero() {
+				t.Fatalf("not marked restored: %+v", removal)
+			}
+		}
+		pending, _ := fixture.orchestrator().Ledger.Pending("organizations.acme.projects.shop")
+		if len(pending) != 0 || len(fixture.state.Current.Projects) != 0 {
+			t.Fatalf("pending %v projects %v", pending, fixture.state.Current.Projects)
+		}
+		_, err = fixture.orchestrator().RestoreProject(RestoreRequest{Directory: folder})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "not initialised") {
+			t.Fatalf("err %v", err)
+		}
+	})
+	t.Run("a file in the way stops the put-back unless forced, and a failure after it undoes everything", func(t *testing.T) {
+		fixture, _ := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		folder := projectClone(t)
+		_, _ = fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
+		_ = os.WriteFile(filepath.Join(folder, "INSTRUCTIONS.md"), []byte("new work"), 0o644)
+		_, err := fixture.orchestrator().RestoreProject(RestoreRequest{Directory: folder})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "already holds INSTRUCTIONS.md") {
+			t.Fatalf("err %v", err)
+		}
+		fixture.state.FailSaves = 1
+		_, err = fixture.orchestrator().RestoreProject(RestoreRequest{Directory: folder, Force: true})
+		if err == nil || errors.Is(err, refusal.ErrRefused) {
+			t.Fatalf("err %v", err)
+		}
+		content, _ := os.ReadFile(filepath.Join(folder, "INSTRUCTIONS.md"))
+		pending, _ := fixture.orchestrator().Ledger.Pending("organizations.acme.projects.shop")
+		if string(content) != "" || len(pending) != 2 || !fixture.orchestrator().WorkingCopy.HasIgnoreBlock(folder) || len(fixture.state.Current.Projects) != 1 {
+			t.Fatalf("content %q pending %d projects %d", content, len(pending), len(fixture.state.Current.Projects))
+		}
+		result, err := fixture.orchestrator().RestoreProject(RestoreRequest{Directory: folder, Force: true, NoCommit: true})
+		if err != nil || result.Commit != "" || len(result.Restored) != 3 {
+			t.Fatalf("result %+v err %v", result, err)
 		}
 	})
 }

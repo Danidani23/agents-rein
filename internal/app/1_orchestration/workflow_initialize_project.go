@@ -29,6 +29,7 @@ type MoveOut struct {
 	SnapshotPath string
 	Paths        []string
 	files        map[string]string
+	tracked      map[string]bool
 }
 
 // InitializeResult is what InitializeProject did.
@@ -97,7 +98,18 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 					if len(moveOut.Paths) == 0 {
 						return nil
 					}
-					var err error
+					var fromRoot []string
+					for _, removed := range moveOut.Paths {
+						fromRoot = append(fromRoot, path.Join(location.Path, removed))
+					}
+					tracked, err := services.WorkingCopy.TrackedAmong(location.Root, fromRoot)
+					if err != nil {
+						return err
+					}
+					moveOut.tracked = map[string]bool{}
+					for _, removed := range moveOut.Paths {
+						moveOut.tracked[removed] = tracked[path.Join(location.Path, removed)]
+					}
 					moveOut.SnapshotPath, moveOut.files, err = services.Snapshots.Take(agent.Name(), path.Base(result.Address), location.Folder, agent.ProjectHarnessPaths())
 					return err
 				},
@@ -126,7 +138,7 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 					}
 					var removals []ledger.Removal
 					for _, removed := range moveOut.Paths {
-						removals = append(removals, ledger.Removal{Path: path.Join(location.Folder, removed), Scope: ledger.ScopeProject, Project: result.Address, Snapshot: moveOut.SnapshotPath})
+						removals = append(removals, ledger.Removal{Path: path.Join(location.Folder, removed), Scope: ledger.ScopeProject, Project: result.Address, Snapshot: moveOut.SnapshotPath, Tracked: moveOut.tracked[removed]})
 					}
 					return services.Ledger.RecordRemovals(agent.Name(), removals)
 				},

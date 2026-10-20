@@ -2,63 +2,65 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 )
 
-const resetExplanation = "A placement is one link (a copy on Windows) that rein made in your agent's home folder,\n" +
-	"for Claude Code ~/.claude: CLAUDE.md, rules/<id>.md for a rule and skills/<id> for a skill.\n" +
-	"Through those links the agent read your settings. reset removes exactly the ones rein\n" +
-	"recorded, dangling ones included; a link that points somewhere rein did not record is left\n" +
-	"alone and reported. Nothing outside ~/.rein and the placed links is touched. In the current\n" +
-	"design rein writes nothing into the agent's home: every level reaches a project clone through\n" +
-	"rein sync, so after reset nothing needs bringing back."
+const resetExplanation = "reset is restore for everything, then forgetting. Every initialised project is put back as\n" +
+	"rein restore does: the files init moved out return from their snapshots, the rein block\n" +
+	"leaves .gitignore, and the put-back is committed. Every link or copy rein made in an agent's\n" +
+	"home is removed, dangling ones included; one that points somewhere rein did not record is\n" +
+	"left alone and reported. Then the organisations are forgotten and their clones deleted, and\n" +
+	"the ledger, the snapshots and the distillations under ~/.rein are removed. The remotes on\n" +
+	"GitHub are never touched. A project whose restore fails stops the reset before anything is\n" +
+	"wiped, so no snapshot is ever lost."
 
 func newResetCommand(environment *commandEnvironment) *cobra.Command {
-	var all, yes bool
+	var yes bool
 	command := &cobra.Command{
 		Use:   "reset",
-		Short: "Remove everything rein placed into your agent's home; --all forgets this machine entirely",
-		Long: "reset removes every link and copy rein made in the agent's home, dangling ones included,\n" +
-			"and clears them from state, together with any imports left under ~/.rein/imports/ from\n" +
-			"before import went through the org repository. It touches nothing it did not place: a link\n" +
-			"that points somewhere else than rein recorded is left alone and reported. With --all it\n" +
-			"also forgets the connected organisations, deletes their clones and the project\n" +
-			"registrations, which leaves the machine as before rein was first used; the remotes are\n" +
-			"never touched. It confirms before deleting; --yes skips that.",
-		Example: "  rein reset\n  rein reset --all --yes",
+		Short: "Put every project back, remove everything rein placed, and forget this machine",
+		Long: "reset leaves the machine as before rein was first used: it restores every initialised\n" +
+			"project, committing the put-back, removes every link and copy rein made in the agents'\n" +
+			"homes, forgets the connected organisations, deletes their clones, and removes the ledger,\n" +
+			"the snapshots and the distillations. The remotes are never touched. It shows the plan and\n" +
+			"confirms before changing anything; --yes skips that.",
+		Example: "  rein reset\n  rein reset --yes",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			return runReset(environment, all, yes)
+			return runReset(environment, yes)
 		},
 	}
-	command.Flags().BoolVar(&all, "all", false, "also forget organisations, delete their clones and the project registrations")
 	command.Flags().BoolVar(&yes, "yes", false, "do not ask for confirmation")
 	return command
 }
 
-func runReset(environment *commandEnvironment, all bool, yes bool) error {
+func runReset(environment *commandEnvironment, yes bool) error {
 	orchestrator, err := environment.orchestrate()
 	if err != nil {
 		return err
 	}
-	plan, err := orchestrator.PlanReset(all)
+	plan, err := orchestrator.PlanReset()
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(environment.out, "This will remove:\n")
-	fmt.Fprintf(environment.out, "- %d placements: the links rein made in your agent's home so the agent reads your rules\n  and skills. Removing them takes those away from the agent; your own files are untouched.\n", len(plan.Placements))
+	fmt.Fprintf(environment.out, "This will:\n")
+	fmt.Fprintf(environment.out, "- put back %d initialised projects and commit the put-back in each:\n", len(plan.Projects))
+	for _, project := range plan.Projects {
+		fmt.Fprintf(environment.out, "    %s  (%s)\n", project.ClonePath, project.Address)
+	}
+	fmt.Fprintf(environment.out, "- remove %d placements rein made in your agent's home; your own files are untouched\n", len(plan.Placements))
 	for _, placed := range plan.Placements {
 		fmt.Fprintf(environment.out, "    %s\n", placed.Path)
 	}
 	if len(plan.Imports) > 0 {
-		fmt.Fprintf(environment.out, "- %d imports: copies under %s that the placements point at,\n  from before import went through the org repository.\n", len(plan.Imports), plan.ImportsFolder)
+		fmt.Fprintf(environment.out, "- remove %d imports under %s\n", len(plan.Imports), plan.ImportsFolder)
 	}
-	if plan.All {
-		fmt.Fprintf(environment.out, "- %d organisations with their clones under %s, and %d project registrations:\n  what this machine knows about them. The remotes on GitHub are not touched.\n", len(plan.Organizations), plan.OrgClonesFolder, len(plan.Projects))
-	}
+	fmt.Fprintf(environment.out, "- forget %d organisations and delete their clones under %s; the remotes stay\n", len(plan.Organizations), plan.OrgClonesFolder)
+	fmt.Fprintf(environment.out, "- remove the ledger %s, the snapshots under %s and the distillations under %s\n", plan.RemovalsFile, plan.SnapshotsFolder, plan.DistillFolder)
 	if !yes {
 		prompter := environment.prompter()
 		if !prompter.CanAsk() {
@@ -73,6 +75,16 @@ func runReset(environment *commandEnvironment, all bool, yes bool) error {
 		}
 	}
 	result, err := orchestrator.ResetMachine(plan)
+	for _, project := range result.Projects {
+		switch {
+		case project.Failed:
+			fmt.Fprintf(environment.errOut, "failed   %s: %s\n", project.Folder, project.Skipped)
+		case project.Skipped != "":
+			fmt.Fprintf(environment.errOut, "skipped  %s: %s\n", project.Folder, project.Skipped)
+		default:
+			printRestored(environment, project.Restore)
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -89,6 +101,7 @@ func runReset(environment *commandEnvironment, all bool, yes bool) error {
 	for _, organizationID := range result.RemovedOrgClones {
 		fmt.Fprintf(environment.out, "removed  clone %s\n", organizationID)
 	}
+	fmt.Fprintf(environment.out, "removed  %s\n", strings.Join(result.Wiped, ", "))
 	fmt.Fprintf(environment.out, "reset done; %d placements kept because they were not rein's\n", result.Kept)
 	if result.Kept > 0 {
 		return refusal.New(fmt.Sprintf("%d placements skipped", result.Kept))
