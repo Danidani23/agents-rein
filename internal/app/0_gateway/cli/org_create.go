@@ -130,30 +130,42 @@ func runOrgCreate(environment *commandEnvironment, answers orgCreateAnswers) err
 	if err != nil {
 		return err
 	}
-	if prompter.CanAsk() {
-		answers, err = askOrgCreate(prompter, orchestrator, identity, answers)
+	var request orchestration.CreateOrganizationRequest
+	var visibility string
+	again := false
+	for {
+		if prompter.CanAsk() {
+			answers, err = askOrgCreate(prompter, orchestrator, identity, answers, again)
+			if err != nil {
+				return refusal.New(err.Error())
+			}
+		}
+		var reason string
+		request, reason = orgCreateRequest(identity, answers)
+		if reason != "" {
+			return refusal.New(reason)
+		}
+		visibility = "private"
+		if !request.Private {
+			visibility = "public"
+		}
+		fmt.Fprintf(environment.out, "This will create %s/%s (%s) on %s as %s for the organisation %q, slug %s,\nwith @%s as code owner, protect main, and connect this machine to it.\n",
+			request.Owner, request.RepositoryName, visibility, hostLabels[answers.host], identity.Login, request.Name, scaffold.SlugOf(request.Name), identity.Login)
+		if answers.yes {
+			break
+		}
+		decision, err := prompter.ConfirmOrEdit("Continue?", orgCreateConfirmExplanation)
 		if err != nil {
 			return refusal.New(err.Error())
 		}
-	}
-	request, reason := orgCreateRequest(identity, answers)
-	if reason != "" {
-		return refusal.New(reason)
-	}
-	visibility := "private"
-	if !request.Private {
-		visibility = "public"
-	}
-	fmt.Fprintf(environment.out, "This will create %s/%s (%s) on %s as %s for the organisation %q, slug %s,\nwith @%s as code owner, protect main, and connect this machine to it.\n",
-		request.Owner, request.RepositoryName, visibility, hostLabels[answers.host], identity.Login, request.Name, scaffold.SlugOf(request.Name), identity.Login)
-	if !answers.yes {
-		confirmed, err := prompter.Confirm("Continue?", orgCreateConfirmExplanation)
-		if err != nil {
-			return refusal.New(err.Error())
+		if decision == ports.DecisionEdit {
+			again = true
+			continue
 		}
-		if !confirmed {
+		if decision == ports.DecisionNo {
 			return refusal.New("nothing changed")
 		}
+		break
 	}
 	result, err := orchestrator.CreateOrganization(request)
 	if err != nil {
@@ -165,7 +177,7 @@ func runOrgCreate(environment *commandEnvironment, answers orgCreateAnswers) err
 		fmt.Fprintf(environment.out, "created %s/%s (%s) at %s\n", result.Owner, result.RepositoryName, visibility, result.Remote)
 	}
 	if result.ProtectionRefused != "" {
-		fmt.Fprintf(environment.errOut, "warning: main is not protected; %s said: %s\n", hostLabels[answers.host], result.ProtectionRefused)
+		fmt.Fprintf(environment.errOut, "%s\n", environment.style().Yellow(fmt.Sprintf("warning: main is not protected; %s said: %s", hostLabels[answers.host], result.ProtectionRefused)))
 	} else {
 		fmt.Fprintf(environment.out, "protected main: pull requests with a code-owner review\n")
 	}
@@ -216,15 +228,17 @@ func askOrgCreateHost(prompter ports.Prompter, answers orgCreateAnswers) (orgCre
 	return answers, err
 }
 
-// askOrgCreate asks for what the flags did not give.
-func askOrgCreate(prompter ports.Prompter, orchestrator orchestration.Orchestrator, identity ports.Identity, answers orgCreateAnswers) (orgCreateAnswers, error) {
+// askOrgCreate asks for what the flags did not give; with again, it asks
+// everything once more with the earlier answers as the defaults.
+func askOrgCreate(prompter ports.Prompter, orchestrator orchestration.Orchestrator, identity ports.Identity, answers orgCreateAnswers, again bool) (orgCreateAnswers, error) {
 	var err error
 	hostLabel := hostLabels[answers.host]
-	if answers.name == "" {
+	if again || answers.name == "" {
 		answers.name, err = prompter.Ask(ports.Text{
 			Title:       "Organisation name",
 			Description: "The name people see; the address slug is derived from it, lowercase with hyphens.",
 			Explanation: "Every declaration gets an address such as organizations.acme.teams.web.skills.commit; the first segment is this slug. The name itself can change later, the slug and the id never do.",
+			Default:     answers.name,
 			Validate: func(answer string) string {
 				if scaffold.SlugOf(answer) == "" {
 					return "The name must contain at least one letter or digit."
@@ -237,12 +251,12 @@ func askOrgCreate(prompter ports.Prompter, orchestrator orchestration.Orchestrat
 		}
 	}
 	slug := scaffold.SlugOf(answers.name)
-	if answers.repositoryName == "" {
+	if again || answers.repositoryName == "" {
 		answers.repositoryName, err = prompter.Ask(ports.Text{
 			Title:       "Repository name",
 			Description: "The repository on " + hostLabel + " that holds the settings.",
 			Explanation: "The org repository is a plain git repository; teams and projects point at it with rein org connect. Its name does not have to match the slug.",
-			Default:     slug + "-agent-settings",
+			Default:     firstOf(answers.repositoryName, slug+"-agent-settings"),
 			Validate: func(answer string) string {
 				if strings.ContainsAny(answer, " /") {
 					return "A repository name has no spaces or slashes."
@@ -254,7 +268,7 @@ func askOrgCreate(prompter ports.Prompter, orchestrator orchestration.Orchestrat
 			return answers, err
 		}
 	}
-	if answers.owner == "" {
+	if again || answers.owner == "" {
 		accessToken, err := orchestrator.Credentials.AccessToken(identity.Login)
 		if err != nil {
 			return answers, err
@@ -273,24 +287,34 @@ func askOrgCreate(prompter ports.Prompter, orchestrator orchestration.Orchestrat
 			choices = append(choices, ports.Choice{Name: owner, Description: description})
 		}
 		choices = append(choices, ports.Choice{Name: other, Description: "type an account or organisation name"})
+		previousOwner := answers.owner
+		defaultOwner := identity.Login
+		if previousOwner != "" {
+			defaultOwner = other
+			for _, owner := range owners {
+				if owner == previousOwner {
+					defaultOwner = owner
+				}
+			}
+		}
 		answers.owner, err = prompter.Choose(ports.Select{
 			Title:       hostLabel + " owner",
 			Description: "The account or " + hostLabel + " organisation the repository is created under.",
 			Explanation: "Your own account works for a pilot. For a company, a " + hostLabel + " organisation lets teams own their folders through CODEOWNERS later. The organisations listed are the ones the Agents Rein app is installed on; another needs the app installed first, at " + orchestrator.Hosting.InstallURL() + ".",
 			Choices:     choices,
-			Default:     identity.Login,
+			Default:     defaultOwner,
 		})
 		if err != nil {
 			return answers, err
 		}
 		if answers.owner == other {
-			answers.owner, err = prompter.Ask(ports.Text{Title: "Owner name", Description: "The exact name of the account or organisation on " + hostLabel + "."})
+			answers.owner, err = prompter.Ask(ports.Text{Title: "Owner name", Description: "The exact name of the account or organisation on " + hostLabel + ".", Default: previousOwner})
 			if err != nil {
 				return answers, err
 			}
 		}
 	}
-	if answers.visibility == "" {
+	if again || answers.visibility == "" {
 		answers.visibility, err = prompter.Choose(ports.Select{
 			Title:       "Visibility",
 			Description: "Who can see the repository on " + hostLabel + ".",
@@ -299,23 +323,31 @@ func askOrgCreate(prompter ports.Prompter, orchestrator orchestration.Orchestrat
 				{Name: "private", Description: "only people given access"},
 				{Name: "public", Description: "everyone"},
 			},
-			Default: "private",
+			Default: firstOf(answers.visibility, "private"),
 		})
 		if err != nil {
 			return answers, err
 		}
 	}
-	if answers.description == "" {
+	if again || answers.description == "" {
 		answers.description, err = prompter.Ask(ports.Text{
 			Title:       "Description",
 			Description: "One line, shown on " + hostLabel + " and in the organisation record.",
-			Default:     "Agent settings of " + answers.name,
+			Default:     firstOf(answers.description, "Agent settings of "+answers.name),
 		})
 		if err != nil {
 			return answers, err
 		}
 	}
 	return answers, nil
+}
+
+// firstOf is the first non-empty of two texts.
+func firstOf(previous string, fallback string) string {
+	if previous != "" {
+		return previous
+	}
+	return fallback
 }
 
 // orgCreateRequest turns the answers into the workflow's request, or says

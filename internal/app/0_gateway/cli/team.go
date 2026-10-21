@@ -79,24 +79,35 @@ func runTeamCreate(environment *commandEnvironment, answers teamCreateAnswers) e
 		}
 	} else {
 		prompter.Intro(teamCreateIntro)
-		answers, err = askTeamCreate(prompter, answers)
+	}
+	again := false
+	for {
+		if prompter.CanAsk() {
+			answers, err = askTeamCreate(prompter, answers, again)
+			if err != nil {
+				return refusal.New(err.Error())
+			}
+		}
+		slug := scaffold.SlugOf(answers.name)
+		if slug == "" {
+			return refusal.New("the name must contain at least one letter or digit")
+		}
+		fmt.Fprintf(environment.out, "This will add the team %q, slug %s, to %s and push its record to main.\n", answers.name, slug, organization.Slug)
+		if answers.yes {
+			break
+		}
+		decision, err := prompter.ConfirmOrEdit("Continue?", "The record is written into the organisation's clone, committed and pushed. If the push is rejected, the clone is put back as the remote has it and nothing changes.")
 		if err != nil {
 			return refusal.New(err.Error())
 		}
-	}
-	slug := scaffold.SlugOf(answers.name)
-	if slug == "" {
-		return refusal.New("the name must contain at least one letter or digit")
-	}
-	fmt.Fprintf(environment.out, "This will add the team %q, slug %s, to %s and push its record to main.\n", answers.name, slug, organization.Slug)
-	if !answers.yes {
-		confirmed, err := prompter.Confirm("Continue?", "The record is written into the organisation's clone, committed and pushed. If the push is rejected, the clone is put back as the remote has it and nothing changes.")
-		if err != nil {
-			return refusal.New(err.Error())
+		if decision == ports.DecisionEdit {
+			again = true
+			continue
 		}
-		if !confirmed {
+		if decision == ports.DecisionNo {
 			return refusal.New("nothing changed")
 		}
+		break
 	}
 	result, err := orchestrator.CreateTeam(orchestration.CreateTeamRequest{Organization: answers.organization, Name: answers.name, Description: answers.description})
 	if err != nil {
@@ -106,13 +117,14 @@ func runTeamCreate(environment *commandEnvironment, answers teamCreateAnswers) e
 	return nil
 }
 
-func askTeamCreate(prompter ports.Prompter, answers teamCreateAnswers) (teamCreateAnswers, error) {
+func askTeamCreate(prompter ports.Prompter, answers teamCreateAnswers, again bool) (teamCreateAnswers, error) {
 	var err error
-	if answers.name == "" {
+	if again || answers.name == "" {
 		answers.name, err = prompter.Ask(ports.Text{
 			Title:       "Team name",
 			Description: "The name people see; the slug is derived from it, lowercase with hyphens.",
 			Explanation: "The slug becomes part of every address under the team, such as organizations.acme.teams.web.rules.testing, and never changes afterwards.",
+			Default:     answers.name,
 			Validate: func(answer string) string {
 				if scaffold.SlugOf(answer) == "" {
 					return "The name must contain at least one letter or digit."
@@ -124,11 +136,11 @@ func askTeamCreate(prompter ports.Prompter, answers teamCreateAnswers) (teamCrea
 			return answers, err
 		}
 	}
-	if answers.description == "" {
+	if again || answers.description == "" {
 		answers.description, err = prompter.Ask(ports.Text{
 			Title:       "Description",
 			Description: "One line about what the team does.",
-			Default:     "The " + answers.name + " team",
+			Default:     firstOf(answers.description, "The "+answers.name+" team"),
 		})
 		if err != nil {
 			return answers, err

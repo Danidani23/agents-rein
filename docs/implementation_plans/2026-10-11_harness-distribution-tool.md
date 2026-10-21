@@ -1089,6 +1089,17 @@ from that project's snapshot.
   organisations tests on the same fakes; the architecture test lets test files import the
   fakes and checks the one-workflow-per-file rule on the methods of `Orchestrator`. Output
   and exit codes unchanged. Gate: `task rein:check` green.
+- ✅ **P2.26 — `e` at the confirmation, and the steps in colour with their duration.**
+  [EXECUTED] 2026-10-21 on the user's two questions. Moving back and forth between questions
+  is not how command-line tools work and would need a terminal UI library; instead the
+  confirmation of `org create`, `team create` and `project create` takes `e`, which asks
+  every question again with the earlier answers as the defaults, so Enter keeps each and
+  only the changed one is retyped. The saga runner reports each step's start, outcome and
+  duration; on a terminal the step's line appears dim when it starts and is rewritten green
+  with its duration when it is done, red with the error when it fails, yellow when undone,
+  and warnings are yellow; in a file or the session hook only the outcome lines appear,
+  uncoloured. Clock timestamps were declined as noise; the duration is what a step's line
+  should say.
 - ✅ **P2.25 — Visible, interruptible, bounded, and GitHub through the app.** [EXECUTED]
   2026-10-21, after the first real `org create` hung silently on an editor's sign-in dialog
   during the push and was cancelled, leaving a repository and a scaffold behind. Every

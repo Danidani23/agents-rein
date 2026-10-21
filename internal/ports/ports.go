@@ -238,6 +238,16 @@ type Select struct {
 	Optional    bool
 }
 
+// Decision is the answer to a confirmation that may also go back.
+type Decision string
+
+// The decisions.
+const (
+	DecisionYes  Decision = "yes"
+	DecisionNo   Decision = "no"
+	DecisionEdit Decision = "edit"
+)
+
 // Prompter asks the questions of one command.
 type Prompter interface {
 	CanAsk() bool
@@ -246,4 +256,7 @@ type Prompter interface {
 	Choose(question Select) (string, error)
 	ChooseMany(question Select) ([]string, error)
 	Confirm(question string, explanation string) (bool, error)
+	// ConfirmOrEdit is Confirm with a third answer, e: ask everything again
+	// with the previous answers as the defaults.
+	ConfirmOrEdit(question string, explanation string) (Decision, error)
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/scaffold"
 	"github.com/Danidani23/agents-rein/internal/ports"
@@ -92,28 +93,39 @@ func runProjectCreate(environment *commandEnvironment, answers projectCreateAnsw
 		}
 	} else {
 		prompter.Intro(projectCreateIntro)
-		answers, err = askProjectCreate(prompter, organization, answers)
+	}
+	again := false
+	for {
+		if prompter.CanAsk() {
+			answers, err = askProjectCreate(prompter, organization, answers, again)
+			if err != nil {
+				return refusal.New(err.Error())
+			}
+		}
+		slug := scaffold.SlugOf(answers.name)
+		if slug == "" {
+			return refusal.New("the name must contain at least one letter or digit")
+		}
+		labels := "no labels"
+		if len(answers.labels) > 0 {
+			labels = "labels " + strings.Join(answers.labels, ", ")
+		}
+		fmt.Fprintf(environment.out, "This will add the project %q, slug %s, to %s for the team(s) %s, with %s, and push its record to main.\n", answers.name, slug, organization.Slug, strings.Join(answers.teams, ", "), labels)
+		if answers.yes {
+			break
+		}
+		decision, err := prompter.ConfirmOrEdit("Continue?", "The record is written into the organisation's clone, committed and pushed. If the push is rejected, the clone is put back as the remote has it and nothing changes. The fingerprint that binds a clone to the project is added by rein init.")
 		if err != nil {
 			return refusal.New(err.Error())
 		}
-	}
-	slug := scaffold.SlugOf(answers.name)
-	if slug == "" {
-		return refusal.New("the name must contain at least one letter or digit")
-	}
-	labels := "no labels"
-	if len(answers.labels) > 0 {
-		labels = "labels " + strings.Join(answers.labels, ", ")
-	}
-	fmt.Fprintf(environment.out, "This will add the project %q, slug %s, to %s for the team(s) %s, with %s, and push its record to main.\n", answers.name, slug, organization.Slug, strings.Join(answers.teams, ", "), labels)
-	if !answers.yes {
-		confirmed, err := prompter.Confirm("Continue?", "The record is written into the organisation's clone, committed and pushed. If the push is rejected, the clone is put back as the remote has it and nothing changes. The fingerprint that binds a clone to the project is added by rein init.")
-		if err != nil {
-			return refusal.New(err.Error())
+		if decision == ports.DecisionEdit {
+			again = true
+			continue
 		}
-		if !confirmed {
+		if decision == ports.DecisionNo {
 			return refusal.New("nothing changed")
 		}
+		break
 	}
 	result, err := orchestrator.CreateProject(orchestration.CreateProjectRequest{Organization: answers.organization, Name: answers.name, Description: answers.description, Teams: answers.teams, Labels: answers.labels, Path: answers.path})
 	if err != nil {
@@ -123,13 +135,14 @@ func runProjectCreate(environment *commandEnvironment, answers projectCreateAnsw
 	return nil
 }
 
-func askProjectCreate(prompter ports.Prompter, organization orchestration.OrganizationDescription, answers projectCreateAnswers) (projectCreateAnswers, error) {
+func askProjectCreate(prompter ports.Prompter, organization orchestration.OrganizationDescription, answers projectCreateAnswers, again bool) (projectCreateAnswers, error) {
 	var err error
-	if answers.name == "" {
+	if again || answers.name == "" {
 		answers.name, err = prompter.Ask(ports.Text{
 			Title:       "Project name",
 			Description: "The name people see; the slug is derived from it, lowercase with hyphens.",
 			Explanation: "The slug becomes part of every address under the project, such as organizations.acme.projects.shop.rules.checkout, and never changes afterwards.",
+			Default:     answers.name,
 			Validate: func(answer string) string {
 				if scaffold.SlugOf(answer) == "" {
 					return "The name must contain at least one letter or digit."
@@ -141,23 +154,23 @@ func askProjectCreate(prompter ports.Prompter, organization orchestration.Organi
 			return answers, err
 		}
 	}
-	if answers.description == "" {
+	if again || answers.description == "" {
 		answers.description, err = prompter.Ask(ports.Text{
 			Title:       "Description",
 			Description: "One line about what the project is.",
-			Default:     "The " + answers.name + " project",
+			Default:     firstOf(answers.description, "The "+answers.name+" project"),
 		})
 		if err != nil {
 			return answers, err
 		}
 	}
-	if len(answers.teams) == 0 {
+	if again || len(answers.teams) == 0 {
 		var choices []ports.Choice
 		for _, team := range organization.Teams {
 			choices = append(choices, ports.Choice{Name: team.Slug, Description: team.Name})
 		}
-		defaultTeam := ""
-		if len(choices) == 1 {
+		defaultTeam := strings.Join(answers.teams, ",")
+		if defaultTeam == "" && len(choices) == 1 {
 			defaultTeam = choices[0].Name
 		}
 		answers.teams, err = prompter.ChooseMany(ports.Select{
@@ -171,7 +184,15 @@ func askProjectCreate(prompter ports.Prompter, organization orchestration.Organi
 			return answers, err
 		}
 	}
-	if len(answers.labels) == 0 {
+	if again || len(answers.labels) == 0 {
+		previous := map[string][]string{}
+		for _, label := range answers.labels {
+			category, value, ok := declaration.SplitLabel(label)
+			if ok {
+				previous[category] = append(previous[category], value)
+			}
+		}
+		answers.labels = nil
 		for _, category := range organization.LabelCategories {
 			var choices []ports.Choice
 			for _, value := range category.Values {
@@ -182,6 +203,7 @@ func askProjectCreate(prompter ports.Prompter, organization orchestration.Organi
 				Description: "Label " + category.Category + ": what the project is, so declarations can apply to projects like it. Enter for none.",
 				Explanation: "Declarations carry applyIf and doNotApplyIf selectors over these labels; a Go service gets the Go rules without anyone listing it. The registry is edited in the org repository.",
 				Choices:     choices,
+				Default:     strings.Join(previous[category.Category], ","),
 				Optional:    true,
 			})
 			if err != nil {
@@ -192,12 +214,12 @@ func askProjectCreate(prompter ports.Prompter, organization orchestration.Organi
 			}
 		}
 	}
-	if answers.path == "" {
+	if again || answers.path == "" {
 		answers.path, err = prompter.Ask(ports.Text{
 			Title:       "Path",
 			Description: "The project's folder inside its repository; the root unless it is a monorepo.",
 			Explanation: "In a monorepo several projects share one repository, each under its own folder; rein writes each project's settings under its path.",
-			Default:     ".",
+			Default:     firstOf(answers.path, "."),
 		})
 		if err != nil {
 			return answers, err

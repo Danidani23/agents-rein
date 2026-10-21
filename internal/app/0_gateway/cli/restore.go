@@ -87,7 +87,7 @@ func printRestored(environment *commandEnvironment, result orchestration.Restore
 	case result.Commit != "":
 		fmt.Fprintf(environment.out, "committed %s: %s\n", result.Commit[:7], "restore agent settings from rein (rein restore)")
 	case result.CommitError != "":
-		fmt.Fprintf(environment.errOut, "warning: the put-back is staged but not committed: %s\n", result.CommitError)
+		fmt.Fprintf(environment.errOut, "%s\n", environment.style().Yellow(fmt.Sprintf("warning: the put-back is staged but not committed: %s", result.CommitError)))
 	default:
 		fmt.Fprintf(environment.out, "the put-back is staged, not committed\n")
 	}

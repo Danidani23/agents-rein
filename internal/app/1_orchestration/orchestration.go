@@ -47,7 +47,7 @@ type Services struct {
 	// Lock is the machine lock a writing command holds from start to end.
 	Lock ports.MachineLock
 	// Progress is where a workflow reports each step; nil keeps it quiet.
-	Progress func(message string)
+	Progress func(event ProgressEvent)
 	// Clock stamps every record a workflow writes (D20).
 	Clock func() time.Time
 }

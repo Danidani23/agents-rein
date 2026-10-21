@@ -3,7 +3,29 @@ package orchestration
 import (
 	"fmt"
 	"strings"
+	"time"
 )
+
+// ProgressKind says what a progress event reports.
+type ProgressKind string
+
+// The kinds of progress event.
+const (
+	ProgressStarted ProgressKind = "started"
+	ProgressDone    ProgressKind = "done"
+	ProgressFailed  ProgressKind = "failed"
+	ProgressUndoing ProgressKind = "undoing"
+	ProgressUndone  ProgressKind = "undone"
+)
+
+// ProgressEvent is one thing the saga runner reports: a step starting,
+// finishing with its duration, failing with its error, or being undone.
+type ProgressEvent struct {
+	Kind    ProgressKind
+	Step    string
+	Elapsed time.Duration
+	Error   string
+}
 
 // Step is one activity of a workflow with its compensation. Do performs it;
 // Undo reverses it when a later step fails. A step without an Undo cannot be
@@ -34,29 +56,35 @@ func (err *CompensationError) Unwrap() error {
 // completed step runs in reverse order, each reported, and the step's error
 // is returned, wrapped when a compensation failed as well. Nothing a
 // workflow does is silent (P2.25).
-func runSteps(progress func(string), steps []Step) error {
-	report := func(message string) {
+func runSteps(progress func(ProgressEvent), steps []Step) error {
+	report := func(event ProgressEvent) {
 		if progress != nil {
-			progress(message)
+			progress(event)
 		}
 	}
 	for index, step := range steps {
-		report(step.Name)
+		started := time.Now()
+		report(ProgressEvent{Kind: ProgressStarted, Step: step.Name})
 		err := step.Do()
 		if err == nil {
+			report(ProgressEvent{Kind: ProgressDone, Step: step.Name, Elapsed: time.Since(started)})
 			continue
 		}
-		report("failed: " + err.Error())
+		report(ProgressEvent{Kind: ProgressFailed, Step: step.Name, Elapsed: time.Since(started), Error: err.Error()})
 		var failures []string
 		for undo := index - 1; undo >= 0; undo-- {
 			if steps[undo].Undo == nil {
 				continue
 			}
-			report("undoing: " + steps[undo].Name)
+			undoStarted := time.Now()
+			report(ProgressEvent{Kind: ProgressUndoing, Step: steps[undo].Name})
 			undoErr := steps[undo].Undo()
 			if undoErr != nil {
 				failures = append(failures, steps[undo].Name+": "+undoErr.Error())
+				report(ProgressEvent{Kind: ProgressFailed, Step: "undoing " + steps[undo].Name, Elapsed: time.Since(undoStarted), Error: undoErr.Error()})
+				continue
 			}
+			report(ProgressEvent{Kind: ProgressUndone, Step: steps[undo].Name, Elapsed: time.Since(undoStarted)})
 		}
 		if len(failures) > 0 {
 			return &CompensationError{Cause: err, Failures: failures}

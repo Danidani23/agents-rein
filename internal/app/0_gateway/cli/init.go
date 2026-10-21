@@ -149,7 +149,7 @@ func askInitBinding(prompter ports.Prompter, organization orchestration.Organiza
 	if len(organization.Teams) == 0 {
 		return request, "", fmt.Errorf("%s has no teams yet; run rein team create first, since a project belongs to at least one team", organization.Slug)
 	}
-	answers, err := askProjectCreate(prompter, organization, projectCreateAnswers{name: "", path: location.Path})
+	answers, err := askProjectCreate(prompter, organization, projectCreateAnswers{name: "", path: location.Path}, false)
 	if err != nil {
 		return request, "", err
 	}
@@ -176,7 +176,7 @@ func printInitialized(environment *commandEnvironment, result orchestration.Init
 	case result.Commit != "":
 		fmt.Fprintf(environment.out, "committed %s: %s\n", result.Commit[:7], moveOutCommitMessageShown)
 	case result.CommitError != "":
-		fmt.Fprintf(environment.errOut, "warning: the move-out is staged but not committed: %s\n", result.CommitError)
+		fmt.Fprintf(environment.errOut, "%s\n", environment.style().Yellow(fmt.Sprintf("warning: the move-out is staged but not committed: %s", result.CommitError)))
 	default:
 		fmt.Fprintf(environment.out, "the move-out is staged, not committed\n")
 	}

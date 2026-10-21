@@ -106,6 +106,6 @@ func printSynced(environment *commandEnvironment, synced orchestration.CloneSync
 		fmt.Fprintf(environment.out, "  note: %s\n", note)
 	}
 	if len(synced.UnsetVariables) > 0 {
-		fmt.Fprintf(environment.errOut, "warning: the tool servers of %s need %s in your shell, not set\n", synced.Address, strings.Join(synced.UnsetVariables, ", "))
+		fmt.Fprintf(environment.errOut, "%s\n", environment.style().Yellow(fmt.Sprintf("warning: the tool servers of %s need %s in your shell, not set", synced.Address, strings.Join(synced.UnsetVariables, ", "))))
 	}
 }

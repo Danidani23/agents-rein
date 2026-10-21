@@ -374,7 +374,7 @@ func TestOrgCreate(t *testing.T) {
 		// host (Enter: github), name, repository, owner (Enter: the account), visibility, description, confirm
 		code, out, errOut := fixture.runInteractive("\nAcme Corp\n\n\n\n\n\n", "org", "create")
 		// the titles are styled, so the brackets are matched on their own
-		for _, expected := range []string{"1) github", "2) gitlab", "planned, not yet supported", "nothing of them goes to GitHub", "Organisation name", "[acme-corp-agent-settings]", "1) Danidani23  ", "your own account", "1) private", "[Agent settings of Acme Corp]", "This will create Danidani23/acme-corp-agent-settings (private) on GitHub as Danidani23", "[Y/n]", "created Danidani23/acme-corp-agent-settings"} {
+		for _, expected := range []string{"1) github", "2) gitlab", "planned, not yet supported", "nothing of them goes to GitHub", "Organisation name", "[acme-corp-agent-settings]", "1) Danidani23  ", "your own account", "1) private", "[Agent settings of Acme Corp]", "This will create Danidani23/acme-corp-agent-settings (private) on GitHub as Danidani23", "[Y/n/e]", "created Danidani23/acme-corp-agent-settings"} {
 			if code != ExitWorked || !strings.Contains(out, expected) {
 				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 			}
@@ -696,5 +696,42 @@ func TestMachineLock(t *testing.T) {
 	code, out, _ = fixture.run("resolve", "--project", "nope")
 	if code != ExitRefused || strings.Contains(out, "another rein") {
 		t.Fatalf("resolve under a held lock: code %d out %q", code, out)
+	}
+}
+
+func TestEditAtTheConfirmation(t *testing.T) {
+	fixture := newHarness(t)
+	// host, name, repository, owner, visibility, description, e; then name again with the default kept, the rest Enter, confirm
+	code, out, errOut := fixture.runInteractive("\nAcme\n\n\n\n\ne\nAcme Two\n\n\n\n\n\n", "org", "create")
+	if code != ExitWorked || !strings.Contains(out, "[Y/n/e]") || !strings.Contains(out, "Organisation name\x1b[0m [Acme]") || !strings.Contains(out, "for the organisation \"Acme Two\"") || !strings.Contains(out, "created Danidani23/acme-agent-settings") {
+		t.Fatalf("code %d out %q err %q", code, out, errOut)
+	}
+	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+	code, out, errOut = fixture.runInteractive("Shop\n\n\n\n\n\n\ne\n\n\n\n\n\n2\n\n\n", "project", "create")
+	if code != ExitWorked || !strings.Contains(out, "Project name\x1b[0m [Shop]") || !strings.Contains(out, "with labels language:go") || !strings.Contains(out, "created project shop (Shop)") {
+		t.Fatalf("code %d out %q err %q", code, out, errOut)
+	}
+}
+
+func TestProgressLines(t *testing.T) {
+	fixture := newHarness(t)
+	code, out, _ := fixture.run("org", "create", "--name", "Acme", "--yes")
+	if code != ExitWorked || !strings.Contains(out, "  ✓ creating the repository on the host (") || strings.Contains(out, "\x1b[") {
+		t.Fatalf("file output: code %d out %q", code, out)
+	}
+	fixture = newHarness(t)
+	code, out, _ = fixture.runInteractive("\nAcme\n\n\n\n\n\n", "org", "create")
+	if code != ExitWorked || !strings.Contains(out, "\x1b[2mcreating the repository on the host …\x1b[0m") || !strings.Contains(out, "\r\x1b[2K  \x1b[32m✓ creating the repository on the host (") {
+		t.Fatalf("terminal output: code %d out %q", code, out)
+	}
+	// an enclosing step keeps its start line and gets its outcome on a line of its own
+	if !strings.Contains(out, "\x1b[2mconnecting this machine …\x1b[0m\n  \x1b[2mcloning the org repository …\x1b[0m") || !strings.Contains(out, "\n  \x1b[32m✓ connecting this machine (") {
+		t.Fatalf("nested output: out %q", out)
+	}
+	fixture = newHarness(t)
+	fixture.repository.FailPublish = true
+	code, out, errOut := fixture.run("org", "create", "--name", "Acme", "--yes")
+	if code == ExitWorked || !strings.Contains(out, "  ✗ pushing the first commit: git push failed") || !strings.Contains(out, "  ↩ undone writing the first content") {
+		t.Fatalf("failure output: code %d out %q err %q", code, out, errOut)
 	}
 }

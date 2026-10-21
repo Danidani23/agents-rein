@@ -47,6 +47,9 @@ type commandEnvironment struct {
 	errOut      io.Writer
 	terminal    bool
 	orchestrate Orchestrate
+	// pendingStep is the step whose start line is still open on the
+	// terminal, waiting to be rewritten with its outcome.
+	pendingStep string
 }
 
 func (environment *commandEnvironment) prompter() ports.Prompter {
@@ -72,8 +75,64 @@ func (environment *commandEnvironment) orchestrateLocked() (orchestrator orchest
 	if err != nil {
 		return orchestration.Orchestrator{}, nil, refusal.New(err.Error())
 	}
-	orchestrator.Progress = func(message string) { fmt.Fprintf(environment.out, "  %s\n", message) }
+	orchestrator.Progress = environment.printProgress
 	return orchestrator, release, nil
+}
+
+// style paints for a terminal and not for a file.
+func (environment *commandEnvironment) style() terminal.Style {
+	return terminal.Style{Enabled: environment.terminal}
+}
+
+// printProgress shows a workflow's steps. On a terminal a step's line is
+// printed when it starts and rewritten with its outcome and duration when
+// it ends; elsewhere only the outcome lines are printed, so a file shows
+// each step once.
+func (environment *commandEnvironment) printProgress(event orchestration.ProgressEvent) {
+	style := environment.style()
+	elapsed := event.Elapsed.Round(100 * time.Millisecond).String()
+	switch event.Kind {
+	case orchestration.ProgressStarted:
+		environment.openLine(event.Step, style.Dim(event.Step+" …"))
+	case orchestration.ProgressDone:
+		environment.closeLine(event.Step, style.Green("✓ "+event.Step+" ("+elapsed+")"))
+	case orchestration.ProgressFailed:
+		environment.closeLine(event.Step, style.Red("✗ "+event.Step+": "+event.Error))
+	case orchestration.ProgressUndoing:
+		environment.openLine(event.Step, style.Dim("↩ undoing "+event.Step+" …"))
+	case orchestration.ProgressUndone:
+		environment.closeLine(event.Step, style.Yellow("↩ undone "+event.Step+" ("+elapsed+")"))
+	}
+}
+
+// openLine starts a step's line on a terminal, without ending it, so the
+// outcome can replace it. A line still open from an enclosing step is ended
+// first and stays as it is; its outcome gets a line of its own. Off a
+// terminal nothing is printed until the outcome.
+func (environment *commandEnvironment) openLine(step string, text string) {
+	if !environment.terminal {
+		return
+	}
+	if environment.pendingStep != "" {
+		fmt.Fprint(environment.out, "\n")
+	}
+	fmt.Fprintf(environment.out, "  %s", text)
+	environment.pendingStep = step
+}
+
+// closeLine prints a step's outcome: over its own open line on a terminal,
+// on a new line otherwise.
+func (environment *commandEnvironment) closeLine(step string, text string) {
+	if environment.terminal && environment.pendingStep == step {
+		fmt.Fprintf(environment.out, "\r\033[2K  %s\n", text)
+		environment.pendingStep = ""
+		return
+	}
+	if environment.terminal && environment.pendingStep != "" {
+		fmt.Fprint(environment.out, "\n")
+		environment.pendingStep = ""
+	}
+	fmt.Fprintf(environment.out, "  %s\n", text)
 }
 
 // Run executes rein with arguments and returns the exit code. Ctrl-C stops

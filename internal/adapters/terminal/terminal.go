@@ -176,6 +176,58 @@ func (session *Session) Choose(question ports.Select) (string, error) {
 	}
 }
 
+// ConfirmOrEdit asks a yes-or-no question with a way back: e asks every
+// question again with the earlier answers as the defaults.
+func (session *Session) ConfirmOrEdit(question string, explanation string) (ports.Decision, error) {
+	session.separate()
+	for {
+		fmt.Fprintf(session.out, "%s [Y/n/e]: ", session.bold(question))
+		answer, err := session.readLine(question)
+		if err != nil {
+			return ports.DecisionNo, err
+		}
+		switch strings.ToLower(answer) {
+		case "", "y", "yes":
+			return ports.DecisionYes, nil
+		case "n", "no":
+			return ports.DecisionNo, nil
+		case "e", "edit":
+			fmt.Fprintln(session.out)
+			return ports.DecisionEdit, nil
+		case "?":
+			session.explain(explanation + " Answer e to go through the questions again, with your answers as the defaults.")
+			continue
+		}
+		fmt.Fprintf(session.out, "%s\n", session.dim("Answer y, n or e; ? explains."))
+	}
+}
+
+// Style paints text for a terminal and leaves it alone for a file: green
+// for a step that is done, red for one that failed, yellow for an undo or
+// a warning.
+type Style struct {
+	Enabled bool
+}
+
+func (style Style) paint(code string, text string) string {
+	if !style.Enabled {
+		return text
+	}
+	return "\033[" + code + "m" + text + "\033[0m"
+}
+
+// Green is done.
+func (style Style) Green(text string) string { return style.paint("32", text) }
+
+// Red is failed.
+func (style Style) Red(text string) string { return style.paint("31", text) }
+
+// Yellow is an undo or a warning.
+func (style Style) Yellow(text string) string { return style.paint("33", text) }
+
+// Dim is a step still running.
+func (style Style) Dim(text string) string { return style.paint("2", text) }
+
 // ChooseMany asks a selector that takes several choices, by numbers or names
 // separated by spaces or commas. Enter takes the default, or none when the
 // question is optional.

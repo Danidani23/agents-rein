@@ -236,3 +236,23 @@ func TestChooseMany(t *testing.T) {
 		}
 	})
 }
+
+func TestConfirmOrEdit(t *testing.T) {
+	for input, expected := range map[string]ports.Decision{"\n": ports.DecisionYes, "n\n": ports.DecisionNo, "e\n": ports.DecisionEdit, "x\ny\n": ports.DecisionYes} {
+		prompt, out := session(input)
+		decision, err := prompt.ConfirmOrEdit("Continue?", "why")
+		if err != nil || decision != expected || !strings.Contains(out.String(), "[Y/n/e]") {
+			t.Fatalf("%q: decision %q err %v out %q", input, decision, err, out.String())
+		}
+	}
+	prompt, out := session("?\n\n")
+	_, _ = prompt.ConfirmOrEdit("Continue?", "why")
+	if !strings.Contains(out.String(), "Answer e to go through the questions again") {
+		t.Fatalf("out %q", out.String())
+	}
+	painted := Style{Enabled: true}
+	plain := Style{}
+	if painted.Green("ok") != "\033[32mok\033[0m" || plain.Red("x") != "x" {
+		t.Fatalf("styles %q %q", painted.Green("ok"), plain.Red("x"))
+	}
+}
