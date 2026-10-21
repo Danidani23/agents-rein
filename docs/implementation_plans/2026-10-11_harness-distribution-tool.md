@@ -1007,7 +1007,10 @@ In the ADR's order. Gate per item: tests green and the item run against this rep
   environment or the CI secret, and `agent-cli`, the installed agent in non-interactive mode,
   `claude -p` first, which uses the developer's own subscription locally. The pilot's default
   is `agent-cli` locally and `api` in CI. A resolved harness is cached by hash and not judged
-  twice (amended 2026-10-15).
+  twice (amended 2026-10-15). Confirmed 2026-10-21: `org create` asks nothing about the
+  judge until this item exists; then it asks "your agent's CLI, or an API endpoint" and, for
+  an endpoint, the URL, the model and the key's variable name, written as the organisation's
+  `providers` declaration into the first commit. Never the key itself (D22).
 - ✅ **P2.14 — Questions explain themselves: the `prompt` package and `rein status`.** [EXECUTED]
   2026-10-16. Gate: gofmt, vet and tests green over nine packages, the prompts driven by
   scripted input and `config` end to end both interactively and with flags; `rein status` on
