@@ -99,6 +99,9 @@ type Host interface {
 	CreatePullRequest(accessToken string, owner string, name string, request PullRequest) (url string, err error)
 	// InstallURL is where a user installs the app on an account.
 	InstallURL() string
+	// RepositorySettingsURL is the page where a person administers
+	// owner/name by hand, its deletion included; rein never deletes (D26).
+	RepositorySettingsURL(owner string, name string) string
 }
 
 // Keychain keeps the tokens, one per login, in the operating system's own

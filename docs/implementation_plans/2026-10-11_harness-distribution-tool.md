@@ -1367,20 +1367,25 @@ from that project's snapshot.
   nudge, one line, cached in state. An organisation's `minimum_rein_version` makes the
   update mandatory through `sync`. The hook `sync` writes calls the binary by absolute path.
   No signing yet: package and `curl` installs carry no quarantine flag, and certificates cost.
-- 🟢 **P2.9 — Everything the tool does can be undone (part of B2).** [PENDING] Required
-  2026-10-12 so the whole experience can be rerun from scratch: `org destroy` deletes the GitHub
-  repository after an explicit confirmation and removes the local registration; `uninstall` in
-  a project repository removes the generated files and drafts the revert of init's commit;
-  `reset` clears local state. Gate: after the three, no trace on the machine, on GitHub or in
-  `w2going`.
+- ✅ **P2.9 — Everything the tool does can be undone (part of B2).** Required 2026-10-12 so
+  the whole experience can be rerun from scratch. [EXECUTED] 2026-10-21, in the shape D26
+  gave it: `org destroy <slug>` disconnects the organisation on this machine, the same steps
+  as `org disconnect`, and then prints the steps to delete the repository on the host by
+  hand, the settings page's address included; it never deletes and never asks for the scope.
+  `restore` in a project clone (P2.21) is what `uninstall` was to be: the files come back
+  from the snapshot and the put-back is committed. `reset` clears the machine (P2.23). The
+  way back to nothing is therefore `rein restore` in each project clone, `rein org destroy
+  <slug>`, the deletion by hand, `rein reset`. Gate: after the four, no trace on the machine
+  or in `w2going`, and the repository gone by your hand.
 
 ## P3 — Pilot
 
 - 🟢 **P3.1 — The pilot: a GitHub org repository created by the tool, `../w2going` as the
   project repository, this repository as the product repository.** [PENDING] Decided
   2026-10-12. The run is the whole user experience: install the tool (P2.8), `org create` with
-  slug `dani` (P2.7), `init` in `w2going`, `sync`, a session there, then `org destroy`,
-  `uninstall` and `reset` (P2.9) back to nothing. Your user slug is `danielmolnar`. The
+  slug `dani` (P2.7), `init` in `w2going`, `sync`, a session there, then `restore` in
+  `w2going`, `org destroy`, the deletion of the repository by hand, and `reset` (P2.9) back
+  to nothing. Your user slug is `danielmolnar`. The
   personal level moves from [toolkit/](../../toolkit/) into
   `declarations/users/danielmolnar/` in the org repository and reaches `~/.claude/` by symlinks
   into the org repository's local clone, which replaces `install.sh` (D1). `w2going`'s eight
@@ -1647,3 +1652,7 @@ writes is read from the next session on, not in the same one.
   deletion ever. P2.25 executed: every step reported, time limits, Ctrl-C with compensation,
   git through rein's own credential helper, the host and account questions, adoption of an
   empty repository.
+- (2026-10-21) P2.9 executed as `org destroy`: disconnect plus the printed deletion steps,
+  never deleting (D26).
+- (2026-10-21) `org use`, `org disconnect` and `org destroy` offer the connected organisations
+  when the slug is left out, the only one as the default; off a terminal the slug is required.

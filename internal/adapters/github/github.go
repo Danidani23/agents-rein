@@ -50,6 +50,12 @@ func (client Client) InstallURL() string {
 	return client.WebURL + "/apps/" + AppSlug + "/installations/new"
 }
 
+// RepositorySettingsURL is the repository's settings page, where its
+// Danger Zone holds the deletion a person runs by hand (D26).
+func (client Client) RepositorySettingsURL(owner string, name string) string {
+	return client.WebURL + "/" + owner + "/" + name + "/settings"
+}
+
 // deviceResponse is GitHub's answer to the device code request.
 type deviceResponse struct {
 	DeviceCode      string `json:"device_code"`

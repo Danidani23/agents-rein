@@ -45,6 +45,11 @@ func (*Host) InstallURL() string {
 	return "https://github.com/apps/fake/installations/new"
 }
 
+// RepositorySettingsURL is a fake address.
+func (*Host) RepositorySettingsURL(owner string, name string) string {
+	return "https://github.com/" + owner + "/" + name + "/settings"
+}
+
 // StartDeviceFlow hands out a fixed code.
 func (host *Host) StartDeviceFlow() (ports.DeviceCode, error) {
 	host.polls = 0

@@ -197,7 +197,7 @@ func TestOrg(t *testing.T) {
 	t.Run("every org command passes the login gate first", func(t *testing.T) {
 		fixture := newHarness(t)
 		fixture.state.Current.Logins = nil
-		for _, arguments := range [][]string{{"org", "connect", "x"}, {"org", "list"}, {"org", "use", "acme"}, {"org", "disconnect", "acme"}} {
+		for _, arguments := range [][]string{{"org", "connect", "x"}, {"org", "list"}, {"org", "use", "acme"}, {"org", "disconnect", "acme"}, {"org", "destroy", "acme", "--yes"}} {
 			code, _, errOut := fixture.run(arguments...)
 			if code != ExitRefused || !strings.Contains(errOut, "rein login") {
 				t.Fatalf("%v: code %d err %q", arguments, code, errOut)
@@ -244,6 +244,75 @@ func TestOrg(t *testing.T) {
 		}
 		code, out, _ = fixture.run("org", "disconnect", "acme")
 		if code != ExitWorked || !strings.Contains(out, "removed the clone at "+clone+" and 2 project registrations") || !strings.Contains(out, "no active organisation") {
+			t.Fatalf("code %d out %q", code, out)
+		}
+	})
+	t.Run("without a slug, use, disconnect and destroy offer the connected organisations", func(t *testing.T) {
+		fixture := newHarness(t)
+		code, _, errOut := fixture.run("org", "destroy", "--yes")
+		if code != ExitRefused || !strings.Contains(errOut, "no organisations connected") {
+			t.Fatalf("nothing connected: code %d err %q", code, errOut)
+		}
+		clone := fixture.seedConnectedOrganization(t, 0)
+		fixture.state.Current.Organizations = append(fixture.state.Current.Organizations, machine.OrganizationRef{ID: "id-2", Slug: "other", Remote: "r2", Host: "github"})
+		fixture.state.Current.OrgClonePaths["id-2"] = filepath.Join(fixture.home, "orgs", "id-2")
+		code, _, errOut = fixture.run("org", "use")
+		if code != ExitRefused || !strings.Contains(errOut, "name the organisation to make active; rein org list") {
+			t.Fatalf("no terminal: code %d err %q", code, errOut)
+		}
+		code, out, errOut := fixture.runInteractive("2\n", "org", "use")
+		if code != ExitWorked || !strings.Contains(out, "1) acme  \x1b[2;3mr1, active") || !strings.Contains(out, "2) other  \x1b[2;3mr2\x1b[0m\n") || !strings.Contains(out, "\x1b[1mChoose\x1b[0m: ") || !strings.Contains(out, "active organisation: other") {
+			t.Fatalf("use: code %d out %q err %q", code, out, errOut)
+		}
+		code, out, errOut = fixture.runInteractive("\n", "org", "disconnect")
+		if code != ExitRefused || !strings.Contains(out, "A choice is required") {
+			t.Fatalf("several without a default: code %d out %q err %q", code, out, errOut)
+		}
+		code, out, errOut = fixture.runInteractive("other\n", "org", "disconnect")
+		if code != ExitWorked || !strings.Contains(out, "disconnected other") || !strings.Contains(out, "active organisation: acme") {
+			t.Fatalf("disconnect: code %d out %q err %q", code, out, errOut)
+		}
+		code, out, errOut = fixture.runInteractive("\n\n", "org", "destroy")
+		if code != ExitWorked || !strings.Contains(out, "1) acme  \x1b[2;3mr1, active\x1b[0m  \x1b[2;3m(default)") || !strings.Contains(out, "disconnected acme: removed the clone at "+clone) {
+			t.Fatalf("destroy with the only one as default: code %d out %q err %q", code, out, errOut)
+		}
+	})
+	t.Run("destroy disconnects and prints the deletion steps, never deleting", func(t *testing.T) {
+		fixture := newHarness(t)
+		clone := fixture.seedConnectedOrganization(t, 1)
+		fixture.state.Current.Organizations[0].Owner = "Danidani23"
+		fixture.state.Current.Organizations[0].Repository = "acme-agent-settings"
+		code, _, errOut := fixture.run("org", "destroy", "nobody", "--yes")
+		if code != ExitRefused || !strings.Contains(errOut, "not connected") {
+			t.Fatalf("unknown: code %d err %q", code, errOut)
+		}
+		code, _, errOut = fixture.run("org", "destroy", "acme")
+		if code != ExitRefused || !strings.Contains(errOut, "pass --yes") || len(fixture.state.Current.Organizations) != 1 {
+			t.Fatalf("no terminal: code %d err %q", code, errOut)
+		}
+		code, out, errOut := fixture.runInteractive("n\n", "org", "destroy", "acme")
+		if code != ExitRefused || !strings.Contains(out, "This will disconnect acme on this machine: forget it, remove its clone at "+clone+" and forget 1 project registrations.") || !strings.Contains(out, "  /projects/0") || !strings.Contains(out, "The repository Danidani23/acme-agent-settings on GitHub stays; rein never deletes a repository.") || !strings.Contains(errOut, "nothing changed") || len(fixture.state.Current.Organizations) != 1 {
+			t.Fatalf("declined: code %d out %q err %q", code, out, errOut)
+		}
+		code, out, errOut = fixture.runInteractive("\n", "org", "destroy", "acme")
+		for _, expected := range []string{"disconnected acme: removed the clone at " + clone + " and 1 project registrations", "no active organisation", "To delete Danidani23/acme-agent-settings on GitHub by hand:", "1. Open https://github.com/Danidani23/acme-agent-settings/settings", "Danger Zone", "3. Type Danidani23/acme-agent-settings to confirm", "Afterwards rein reset"} {
+			if code != ExitWorked || !strings.Contains(out, expected) {
+				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
+			}
+		}
+		if len(fixture.state.Current.Organizations) != 0 || len(fixture.host.Repositories) != 0 {
+			t.Fatalf("state %+v repositories %v", fixture.state.Current, fixture.host.Repositories)
+		}
+		_, err := os.Stat(clone)
+		if err == nil {
+			t.Fatalf("clone still there")
+		}
+	})
+	t.Run("destroy of an organisation connected from a plain remote names the remote", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.seedConnectedOrganization(t, 0)
+		code, out, _ := fixture.run("org", "destroy", "acme", "--yes")
+		if code != ExitWorked || !strings.Contains(out, "The remote r1 stays; rein never deletes a repository.") || !strings.Contains(out, "The remote r1 is untouched; delete it where it lives") {
 			t.Fatalf("code %d out %q", code, out)
 		}
 	})

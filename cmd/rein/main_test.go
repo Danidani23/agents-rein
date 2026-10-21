@@ -344,9 +344,18 @@ func TestWiring(t *testing.T) {
 		if string(content) != "be brief" {
 			t.Fatalf("CLAUDE.md %q", content)
 		}
+		// destroy disconnects and prints the deletion steps; the stub remote stays
+		code, out, errOut = run("org", "destroy", "acme", "--yes")
+		if code != cli.ExitWorked || !strings.Contains(out, "disconnected acme: removed the clone at") || !strings.Contains(out, "1. Open "+os.Getenv("REIN_GITHUB_WEB")+"/Danidani23/acme-agent-settings/settings") || !strings.Contains(out, "Danger Zone") {
+			t.Fatalf("destroy: code %d out %q err %q", code, out, errOut)
+		}
+		_, err = os.Stat(remote)
+		if err != nil {
+			t.Fatalf("the remote is gone after destroy: %v", err)
+		}
 		// reset wipes the rest
 		code, out, errOut = run("reset", "--yes")
-		if code != cli.ExitWorked || !strings.Contains(out, "removed  clone") || !strings.Contains(out, "removals.yaml") {
+		if code != cli.ExitWorked || !strings.Contains(out, "removals.yaml") {
 			t.Fatalf("reset: code %d out %q err %q", code, out, errOut)
 		}
 		for _, gone := range []string{"orgs", "snapshots", "distill", "removals.yaml", "inserts"} {

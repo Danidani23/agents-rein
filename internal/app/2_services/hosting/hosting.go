@@ -46,6 +46,12 @@ func (service Service) InstallURL() string {
 	return service.Host.InstallURL()
 }
 
+// RepositorySettingsURL is the page where a person deletes owner/name by
+// hand; rein never does (D26).
+func (service Service) RepositorySettingsURL(owner string, name string) string {
+	return service.Host.RepositorySettingsURL(owner, name)
+}
+
 // RepositoryOf splits a clone URL of the host into owner and name; false
 // for a remote that is not one, such as a local path.
 func RepositoryOf(cloneURL string) (owner string, name string, ok bool) {
