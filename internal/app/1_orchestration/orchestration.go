@@ -10,10 +10,12 @@ package orchestration
 import (
 	"time"
 
+	"strings"
+
 	"github.com/Danidani23/agents-rein/internal/app/2_services/clones"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/credentials"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distillations"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/hosting"
-	"github.com/Danidani23/agents-rein/internal/app/2_services/identity"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/judge"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/ledger"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
@@ -30,7 +32,7 @@ import (
 // directly, each over the ports it needs.
 type Services struct {
 	Home          string
-	Identity      identity.Service
+	Credentials   credentials.Service
 	Organizations organizations.Service
 	Clones        clones.Service
 	Placements    placements.Service
@@ -44,6 +46,8 @@ type Services struct {
 	Judge         judge.Service
 	// Lock is the machine lock a writing command holds from start to end.
 	Lock ports.MachineLock
+	// Progress is where a workflow reports each step; nil keeps it quiet.
+	Progress func(message string)
 	// Clock stamps every record a workflow writes (D20).
 	Clock func() time.Time
 }
@@ -54,10 +58,10 @@ type Services struct {
 // snapshots over the agents, the judge over its backend, which may be nil.
 // Nothing runs here; main calls it once with the real adapters and the
 // tests with the fakes.
-func NewServices(home string, host ports.Host, repository ports.Repository, state ports.State, agents []ports.Agent, judgeBackend ports.Judge, lock ports.MachineLock) Services {
+func NewServices(home string, host ports.Host, repository ports.Repository, state ports.State, agents []ports.Agent, judgeBackend ports.Judge, lock ports.MachineLock, keychain ports.Keychain) Services {
 	return Services{
 		Home:          home,
-		Identity:      identity.Service{Host: host},
+		Credentials:   credentials.Service{Keychain: keychain, Host: host, State: state, Clock: time.Now},
 		Organizations: organizations.Service{State: state, Clock: time.Now},
 		Clones:        clones.Service{Home: home, Repository: repository},
 		Placements:    placements.Service{Home: home, State: state, Agents: agents},
@@ -72,6 +76,17 @@ func NewServices(home string, host ports.Host, repository ports.Repository, stat
 		Lock:          lock,
 		Clock:         time.Now,
 	}
+}
+
+// accessOf is the remote access of an organisation: its login's token.
+func accessOf(organization machine.OrganizationRef) ports.RemoteAccess {
+	return ports.RemoteAccess{Login: organization.Login}
+}
+
+// userSlugOf is the user level's slug for an organisation: the lowercase
+// form of the login that acts on it (D8).
+func userSlugOf(organization machine.OrganizationRef) string {
+	return strings.ToLower(organization.Login)
 }
 
 // resolveOrganization is the organisation a command works in: the one named,

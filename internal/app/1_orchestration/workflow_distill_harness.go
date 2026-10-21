@@ -77,7 +77,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 	distill.Compare(candidates, catalogue, level)
 	result := DistillResult{Level: level, Candidates: candidates}
 	if request.Judge != "none" && len(candidates) > 0 {
-		corpus, err := distill.LoadCorpus(orgClonePath, level, teamsOfLevel(services, orgClonePath, level), userSlugOf(services), candidates)
+		corpus, err := distill.LoadCorpus(orgClonePath, level, teamsOfLevel(services, orgClonePath, level), userSlugOf(organization), candidates)
 		if err != nil {
 			return DistillResult{}, err
 		}
@@ -97,9 +97,9 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 	}
 	report.Candidates = distill.Summarise(level, candidates)
 	result.Report = report
-	err = runSteps([]Step{
+	err = runSteps(services.Progress, []Step{
 		{
-			Name: "write",
+			Name: "writing the distillation",
 			Do: func() error {
 				var err error
 				result.Folder, err = services.Distillations.Write(path.Base(strings.ReplaceAll(level, ".", "/")), candidates, report)
@@ -129,10 +129,6 @@ func distillSources(orchestrator Orchestrator, request DistillRequest) (level st
 		request.Home = true
 	}
 	if request.Home {
-		who, err := services.Identity.Who()
-		if err != nil {
-			return "", machine.OrganizationRef{}, nil, refusal.New(err.Error())
-		}
 		organization, _, err := resolveOrganization(services, request.Organization)
 		if err != nil {
 			return "", machine.OrganizationRef{}, nil, err
@@ -143,7 +139,7 @@ func distillSources(orchestrator Orchestrator, request DistillRequest) (level st
 				return "", machine.OrganizationRef{}, nil, err
 			}
 		}
-		return "users." + who.Slug, organization, stored, nil
+		return "users." + userSlugOf(organization), organization, stored, nil
 	}
 	var address string
 	if request.Project != "" {
@@ -209,13 +205,4 @@ func teamsOfLevel(services Services, orgClonePath string, level string) []string
 		return tree.Projects[segments[3]].Teams
 	}
 	return nil
-}
-
-// userSlugOf is the user's slug when the host answers, else empty.
-func userSlugOf(services Services) string {
-	who, err := services.Identity.Who()
-	if err != nil {
-		return ""
-	}
-	return who.Slug
 }

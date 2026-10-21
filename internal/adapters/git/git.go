@@ -3,10 +3,39 @@ package git
 
 import (
 	"errors"
+	"os"
+	"strconv"
+	"strings"
+
 	"github.com/Danidani23/agents-rein/internal/adapters/execute"
 	"github.com/Danidani23/agents-rein/internal/ports"
-	"strings"
 )
+
+// askpassVariables are the ways an editor or a desktop injects a dialog
+// into git; rein's git never shows one, it fails instead.
+var askpassVariables = []string{"GIT_ASKPASS", "SSH_ASKPASS", "SSH_ASKPASS_REQUIRE", "VSCODE_GIT_ASKPASS_NODE", "VSCODE_GIT_ASKPASS_MAIN", "VSCODE_GIT_ASKPASS_EXTRA_ARGS", "VSCODE_GIT_IPC_HANDLE"}
+
+// network runs a git command that talks to a remote: a longer time limit,
+// no dialog, and rein itself as the only credential helper, answering with
+// the login's token (D25). A remote without a login, a local path, gets no
+// helper.
+func network(access ports.RemoteAccess, directory string, arguments ...string) error {
+	options := execute.Options{Directory: directory, Timeout: execute.NetworkTimeout, Unset: append([]string{"GIT_CONFIG_COUNT"}, askpassVariables...)}
+	if access.Login != "" {
+		executable, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		options.Environment = []string{
+			"REIN_LOGIN=" + access.Login,
+			"GIT_CONFIG_COUNT=2",
+			"GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0=",
+			"GIT_CONFIG_KEY_1=credential.helper", "GIT_CONFIG_VALUE_1=!" + strconv.Quote(executable) + " git-credential",
+		}
+	}
+	_, err := execute.RunWith(options, "git", arguments...)
+	return err
+}
 
 // Repository runs git on this machine.
 type Repository struct{}
@@ -21,14 +50,13 @@ func (Repository) Preflight() error {
 // Clone clones remote into directory, quietly and without prompting.
 // Publish initialises directory on main, commits everything in it with the
 // user's own git identity, and pushes to remote as origin.
-func (Repository) Publish(directory string, remote string, message string) error {
+func (Repository) Publish(access ports.RemoteAccess, directory string, remote string, message string) error {
 	steps := [][]string{
 		{"init", "-q"},
 		{"symbolic-ref", "HEAD", "refs/heads/main"},
 		{"add", "-A"},
 		{"commit", "-q", "-m", message},
 		{"remote", "add", "origin", remote},
-		{"push", "-q", "-u", "origin", "main"},
 	}
 	for _, arguments := range steps {
 		_, err := execute.Run(directory, "git", arguments...)
@@ -36,14 +64,13 @@ func (Repository) Publish(directory string, remote string, message string) error
 			return err
 		}
 	}
-	return nil
+	return network(access, directory, "push", "-q", "-u", "origin", "main")
 }
 
 // Pull fast-forwards the clone to its origin; a diverged clone is an error,
 // since rein never merges.
-func (Repository) Pull(directory string) error {
-	_, err := execute.Run(directory, "git", "pull", "-q", "--ff-only")
-	return err
+func (Repository) Pull(access ports.RemoteAccess, directory string) error {
+	return network(access, directory, "pull", "-q", "--ff-only")
 }
 
 // CommitPaths stages the paths and commits them with the user's identity.
@@ -58,9 +85,8 @@ func (Repository) CommitPaths(directory string, relativePaths []string, message 
 }
 
 // Push pushes main to origin.
-func (Repository) Push(directory string) error {
-	_, err := execute.Run(directory, "git", "push", "-q", "origin", "main")
-	return err
+func (Repository) Push(access ports.RemoteAccess, directory string) error {
+	return network(access, directory, "push", "-q", "origin", "main")
 }
 
 // ResetToRemote throws away local commits and changes: the clone is rein's
@@ -155,18 +181,15 @@ func (Repository) DeleteBranch(directory string, branch string) error {
 }
 
 // PushBranch pushes the branch to origin.
-func (Repository) PushBranch(directory string, branch string) error {
-	_, err := execute.Run(directory, "git", "push", "-q", "-u", "origin", branch)
-	return err
+func (Repository) PushBranch(access ports.RemoteAccess, directory string, branch string) error {
+	return network(access, directory, "push", "-q", "-u", "origin", branch)
 }
 
 // DeleteRemoteBranch removes the branch from origin.
-func (Repository) DeleteRemoteBranch(directory string, branch string) error {
-	_, err := execute.Run(directory, "git", "push", "-q", "origin", "--delete", branch)
-	return err
+func (Repository) DeleteRemoteBranch(access ports.RemoteAccess, directory string, branch string) error {
+	return network(access, directory, "push", "-q", "origin", "--delete", branch)
 }
 
-func (Repository) Clone(remote string, directory string) error {
-	_, err := execute.Run("", "git", "clone", "--quiet", remote, directory)
-	return err
+func (Repository) Clone(access ports.RemoteAccess, remote string, directory string) error {
+	return network(access, "", "clone", "--quiet", remote, directory)
 }

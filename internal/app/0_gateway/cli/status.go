@@ -13,12 +13,13 @@ func newStatusCommand(environment *commandEnvironment) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Show who you are to rein and what it has set up on this machine",
-		Long: "status shows the GitHub account gh is logged in as, which is your identity (gh can hold\n" +
-			"several accounts; the active one counts), the supported agents found on this machine,\n" +
+		Long: "status shows the GitHub accounts logged in on this machine, which are your identities\n" +
+			"(each organisation remembers the one that connected it), the supported agents found here,\n" +
 			"every file rein placed into the agent's home and whether its target still exists, the\n" +
 			"connected organisations with the active one marked, the initialised project clones with\n" +
 			"the drift of what sync wrote, and the\n" +
-			"imports. It changes nothing and runs without an identity: when gh is not logged in it\n" +
+			"imports. It changes nothing and runs without a login: a machine without one is reported,\n" +
+			"not refused, and it\n" +
 			"says so and still shows the rest.",
 		Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
@@ -37,10 +38,10 @@ func newStatusCommand(environment *commandEnvironment) *cobra.Command {
 }
 
 func printStatus(environment *commandEnvironment, report orchestration.StatusReport) {
-	if report.IdentityError != "" {
-		fmt.Fprintf(environment.out, "github      none: %s\n", report.IdentityError)
+	if len(report.Logins) == 0 {
+		fmt.Fprintf(environment.out, "logins      none; run rein login\n")
 	} else {
-		fmt.Fprintf(environment.out, "github      %s  (active gh account; slug %s)\n", report.Identity.Login, report.Identity.Slug)
+		fmt.Fprintf(environment.out, "logins      %s\n", strings.Join(report.Logins, ", "))
 	}
 	if len(report.Agents) == 0 {
 		fmt.Fprintf(environment.out, "agents      none found; this build writes for claude-code\n")

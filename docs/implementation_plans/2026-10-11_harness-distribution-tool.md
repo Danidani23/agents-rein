@@ -313,6 +313,32 @@ committed instead of gitignored (D4).
   Claude Code appends there on "always allow". Sync leaves `CLAUDE.local.md` alone, neither
   moved out by `init` nor generated, since it is the personal, uncommitted file the memory
   shortcut writes to. An initialised clone is a project clone, in code and in prose.
+- ✅ **D25 — Rein is a GitHub App; a login is the device flow and a token in the keychain;
+  `gh` is no prerequisite.** Decided 2026-10-21 over three exchanges with the user, replacing
+  the earlier "act through `gh`" direction. The app "Agents Rein" is registered once, under
+  the user's account today, with the permissions rein needs on repositories: administration,
+  contents and pull requests read and write, metadata read; its client ID,
+  `Iv23liA2ozfi2MzGuobI`, is public and compiled in. `rein login` runs GitHub's device flow,
+  shows a code and an address, and stores the token GitHub hands back, with its refresh token,
+  in the operating system's keychain under the login, never in a file of rein's: macOS through
+  the `security` command today, Linux and Windows later; a token file exists for tests and is
+  chosen only by `REIN_KEYCHAIN_FILE`. No environment variable carries a token for a person;
+  inside a GitHub Actions job rein accepts the job's own `GITHUB_TOKEN`, the one exception.
+  Rein talks to GitHub's REST API itself and authenticates its git pushes and clones through
+  its own credential helper, `rein git-credential`, which answers with the login's token and
+  ignores the machine's git credential setup and any editor's askpass. The token acts as the
+  user, so commits and pull requests are theirs and GitHub shows the app beside them. Several
+  logins live side by side, one keychain entry each; every organisation remembers the login
+  that connected or created it and acts with it, and `org create` and `org connect` ask which
+  when several are logged in. The app must be installed on an account or organisation to
+  reach its repositories; `org create` names the installation address when GitHub refuses.
+  A GitHub Enterprise has its own registration, so the addresses and the client ID are
+  overridable. `gh` is no longer required anywhere.
+- ✅ **D26 — Rein never deletes a repository.** Decided 2026-10-21 by the user. Deletion is the
+  one irreversible act, so rein never asks for the scope and never calls it: a failed `org
+  create` leaves the empty repository and says so, a rerun with the same name adopts an empty
+  repository, and `org destroy` (P2.9) becomes "disconnect, forget, and print the deletion
+  command for you to run". The clones under `~/.rein/orgs/` stay rein's to delete.
 - ✅ **D23 — The judge's backends, and the organisation's provider wins.** Decided 2026-10-19.
   One judge port with two backends: `api`, an endpoint speaking Anthropic Messages or OpenAI
   Chat Completions, which covers vendors, gateways and private inference, with the model and
@@ -1063,6 +1089,31 @@ from that project's snapshot.
   organisations tests on the same fakes; the architecture test lets test files import the
   fakes and checks the one-workflow-per-file rule on the methods of `Orchestrator`. Output
   and exit codes unchanged. Gate: `task rein:check` green.
+- ✅ **P2.25 — Visible, interruptible, bounded, and GitHub through the app.** [EXECUTED]
+  2026-10-21, after the first real `org create` hung silently on an editor's sign-in dialog
+  during the push and was cancelled, leaving a repository and a scaffold behind. Every
+  workflow step now reports as it starts, "creating the repository on the host", "pushing
+  the first commit", and every undo as it runs, through a reporter the gateway gives the saga
+  runner; the session-start hook stays quiet. Every external program has a time limit, sixty
+  seconds by default and five minutes for a clone, a pull or a push, and is killed when it
+  passes, with "timed out, it was probably waiting for input" as the error. Ctrl-C kills the
+  running program, the step fails, the runner undoes the completed steps while the user
+  watches, and rein exits 130; a second Ctrl-C quits at once. Git never sees an editor's
+  askpass again and authenticates through `rein git-credential` with the login's token
+  (D25). `org create` asks for the host first, `github` available and `gitlab` planned and
+  refused, so every later question names the host; then the account when several are logged
+  in, logging in inline when none is; then the owner from the account and the organisations
+  the app reaches, or another name; its intro says the snapshot stays on this machine and
+  names the host as "the version control host (GitHub, GitLab and others)". It adopts an
+  empty repository of the chosen name and never deletes one (D26). Stale `.create-*` and
+  `.connect-*` folders older than an hour are removed by the next run. New: the `credentials`
+  service in place of `identity`, the `Keychain` and the token-bearing `Host` port, the
+  `github` adapter over the REST API, the `keychain` adapter, `rein login`, `rein logout`,
+  the hidden `rein git-credential`, `--login` on `org create` and `org connect`, logins on
+  `status`. Arrow keys at a prompt stay as they are, by the user's choice. Tests: the
+  credentials service, the GitHub client against a local server, the file keychain, and the
+  end-to-end run against a fake GitHub over HTTP whose repositories are bare git repositories
+  real git pushes into, with a device-flow login first. Gate: `task rein:check` green.
 - ✅ **P2.24 — The machine lock spans a command.** [EXECUTED] 2026-10-20, on the user's
   decision, before the pilot run. A `MachineLock` port, the state store behind it: every
   command that changes the machine, `org create`, `connect`, `use`, `disconnect`, `team` and
@@ -1580,3 +1631,8 @@ writes is read from the next session on, not in the same one.
   found by the first real `rein reset`.
 - (2026-10-20) P2.24 executed: the machine lock spans every writing command; readers run
   without it.
+- (2026-10-21) The first real `org create` hung on a sign-in dialog and was cancelled. D25 and
+  D26 decided: rein is a GitHub App with the device flow and the keychain, `gh` gone, no
+  deletion ever. P2.25 executed: every step reported, time limits, Ctrl-C with compensation,
+  git through rein's own credential helper, the host and account questions, adoption of an
+  empty repository.

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Danidani23/agents-rein/internal/adapters/fake"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
@@ -27,11 +28,12 @@ type harness struct {
 	agent      *fake.Agent
 	judge      *fake.Judge
 	lock       *fake.Lock
+	keychain   *fake.Keychain
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
-	return &harness{
+	fixture := &harness{
 		home:       t.TempDir(),
 		host:       &fake.Host{Login: "Danidani23"},
 		repository: &fake.Repository{Record: validRecord},
@@ -39,11 +41,14 @@ func newHarness(t *testing.T) *harness {
 		agent:      &fake.Agent{Present: true, HomePath: t.TempDir()},
 		judge:      &fake.Judge{Unavailable: "no judge in this test"},
 		lock:       &fake.Lock{},
+		keychain:   &fake.Keychain{Tokens: map[string]ports.Token{"Danidani23": {Login: "Danidani23", AccessToken: "token-of-Danidani23", ExpiresAt: time.Now().Add(time.Hour)}}},
 	}
+	fixture.state.Current.Logins = []string{"Danidani23"}
+	return fixture
 }
 
 func (fixture *harness) orchestrator() Orchestrator {
-	return New(NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock))
+	return New(NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock, fixture.keychain))
 }
 
 func (fixture *harness) orgCloneFolders(t *testing.T) []string {
@@ -59,7 +64,7 @@ func (fixture *harness) orgCloneFolders(t *testing.T) []string {
 func TestConnectOrganization(t *testing.T) {
 	t.Run("a clone with one record is kept under orgs and becomes active", func(t *testing.T) {
 		fixture := newHarness(t)
-		result, err := fixture.orchestrator().ConnectOrganization("git@example:acme.git")
+		result, err := fixture.orchestrator().ConnectOrganization("git@example:acme.git", "")
 		if err != nil || result.Slug != "acme" || result.Name != "Acme" || !result.BecameActive {
 			t.Fatalf("result %+v err %v", result, err)
 		}
@@ -73,20 +78,20 @@ func TestConnectOrganization(t *testing.T) {
 	t.Run("the agents' homes are snapshotted on the way", func(t *testing.T) {
 		fixture := newHarness(t)
 		_ = os.WriteFile(filepath.Join(fixture.agent.HomePath, "INSTRUCTIONS.md"), []byte("be brief"), 0o644)
-		result, err := fixture.orchestrator().ConnectOrganization("x")
+		result, err := fixture.orchestrator().ConnectOrganization("x", "")
 		if err != nil || len(result.SnapshotPaths) != 1 || !strings.HasPrefix(result.SnapshotPaths[0], filepath.Join(fixture.home, "snapshots")) {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 	})
 	t.Run("a second connect of the same organisation is refused and leaves the first clone alone", func(t *testing.T) {
 		fixture := newHarness(t)
-		first, err := fixture.orchestrator().ConnectOrganization("x")
+		first, err := fixture.orchestrator().ConnectOrganization("x", "")
 		if err != nil || first.OrgClonePath == "" {
 			t.Fatalf("first connect: %+v err %v", first, err)
 		}
 		marker := filepath.Join(first.OrgClonePath, "marker")
 		_ = os.WriteFile(marker, []byte("x"), 0o644)
-		_, err = fixture.orchestrator().ConnectOrganization("x")
+		_, err = fixture.orchestrator().ConnectOrganization("x", "")
 		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "already connected") {
 			t.Fatalf("err %v", err)
 		}
@@ -98,7 +103,7 @@ func TestConnectOrganization(t *testing.T) {
 	t.Run("a clone without a record is refused and removed", func(t *testing.T) {
 		fixture := newHarness(t)
 		fixture.repository = &fake.Repository{}
-		_, err := fixture.orchestrator().ConnectOrganization("x")
+		_, err := fixture.orchestrator().ConnectOrganization("x", "")
 		if !errors.Is(err, refusal.ErrRefused) || len(fixture.orgCloneFolders(t)) != 0 {
 			t.Fatalf("err %v clones %v", err, fixture.orgCloneFolders(t))
 		}
@@ -106,15 +111,23 @@ func TestConnectOrganization(t *testing.T) {
 	t.Run("a failed clone is not a refusal", func(t *testing.T) {
 		fixture := newHarness(t)
 		fixture.repository = &fake.Repository{Fail: true}
-		_, err := fixture.orchestrator().ConnectOrganization("x")
+		_, err := fixture.orchestrator().ConnectOrganization("x", "")
 		if err == nil || errors.Is(err, refusal.ErrRefused) {
+			t.Fatalf("err %v", err)
+		}
+	})
+	t.Run("without a login connecting refuses", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.state.Current.Logins = nil
+		_, err := fixture.orchestrator().ConnectOrganization("x", "")
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "rein login") {
 			t.Fatalf("err %v", err)
 		}
 	})
 	t.Run("a failure after cloning compensates: the clone is removed and nothing is registered", func(t *testing.T) {
 		fixture := newHarness(t)
 		fixture.state.FailSaves = 1
-		_, err := fixture.orchestrator().ConnectOrganization("x")
+		_, err := fixture.orchestrator().ConnectOrganization("x", "")
 		if err == nil || errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "disk full") {
 			t.Fatalf("err %v", err)
 		}
@@ -127,7 +140,7 @@ func TestConnectOrganization(t *testing.T) {
 func TestDisconnectOrganization(t *testing.T) {
 	t.Run("forgets the organisation and removes its clone", func(t *testing.T) {
 		fixture := newHarness(t)
-		_, _ = fixture.orchestrator().ConnectOrganization("x")
+		_, _ = fixture.orchestrator().ConnectOrganization("x", "")
 		result, err := fixture.orchestrator().DisconnectOrganization("acme")
 		if err != nil || result.ActiveAfter != "" || len(fixture.state.Current.Organizations) != 0 {
 			t.Fatalf("result %+v err %v state %+v", result, err, fixture.state.Current)
@@ -147,12 +160,17 @@ func TestDisconnectOrganization(t *testing.T) {
 }
 
 func TestStatus(t *testing.T) {
-	t.Run("a logged-out host is reported, not refused", func(t *testing.T) {
+	t.Run("a machine without a login is reported, not refused", func(t *testing.T) {
 		fixture := newHarness(t)
-		orchestrator := New(NewServices(fixture.home, &fake.Host{}, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock))
-		report, err := orchestrator.Status()
-		if err != nil || !strings.Contains(report.IdentityError, "gh auth login") || report.Identity.Login != "" {
+		fixture.state.Current.Logins = nil
+		report, err := fixture.orchestrator().Status()
+		if err != nil || len(report.Logins) != 0 {
 			t.Fatalf("report %+v err %v", report, err)
+		}
+		fixture.state.Current.Logins = []string{"Danidani23"}
+		report, _ = fixture.orchestrator().Status()
+		if strings.Join(report.Logins, ",") != "Danidani23" {
+			t.Fatalf("logins %v", report.Logins)
 		}
 	})
 	t.Run("placements are checked for their targets and agents are listed", func(t *testing.T) {
@@ -329,13 +347,17 @@ func TestRestoreProject(t *testing.T) {
 }
 
 func TestCreateOrganization(t *testing.T) {
-	request := CreateOrganizationRequest{Name: "Acme", Description: "Agent settings of Acme", Owner: "Danidani23", RepositoryName: "acme-agent-settings", Private: true, Codeowner: "Danidani23"}
+	request := CreateOrganizationRequest{Name: "Acme", Description: "Agent settings of Acme", Owner: "Danidani23", RepositoryName: "acme-agent-settings", Private: true}
 	t.Run("creates, publishes, protects and connects; the scaffold folder is gone afterwards", func(t *testing.T) {
 		fixture := newHarness(t)
 		_ = os.WriteFile(filepath.Join(fixture.agent.HomePath, "INSTRUCTIONS.md"), []byte("be brief"), 0o644)
 		result, err := fixture.orchestrator().CreateOrganization(request)
-		if err != nil || result.Remote != "fake://Danidani23/acme-agent-settings" || result.ProtectionRefused != "" || result.Connected.Slug != "acme" || !result.Connected.BecameActive {
+		if err != nil || result.Remote != "https://github.com/Danidani23/acme-agent-settings.git" || result.ProtectionRefused != "" || result.Connected.Slug != "acme" || !result.Connected.BecameActive || result.Login != "Danidani23" {
 			t.Fatalf("result %+v err %v", result, err)
+		}
+		connected := fixture.state.Current.Organizations[0]
+		if connected.Login != "Danidani23" || connected.Owner != "Danidani23" || connected.Repository != "acme-agent-settings" {
+			t.Fatalf("organisation %+v", connected)
 		}
 		if len(fixture.host.Created) != 1 || !fixture.host.Created[0].Private || fixture.host.Created[0].Description != "Agent settings of Acme" || len(fixture.host.ProtectedBranches) != 1 {
 			t.Fatalf("host %+v", fixture.host)
@@ -353,15 +375,25 @@ func TestCreateOrganization(t *testing.T) {
 			t.Fatalf("state %+v", fixture.state.Current)
 		}
 	})
-	t.Run("a failed publish deletes the repository again and leaves nothing behind", func(t *testing.T) {
+	t.Run("a failed publish leaves the empty repository, which a rerun adopts; nothing is deleted (D26)", func(t *testing.T) {
 		fixture := newHarness(t)
 		fixture.repository.FailPublish = true
 		_, err := fixture.orchestrator().CreateOrganization(request)
 		if err == nil || errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "remote rejected") {
 			t.Fatalf("err %v", err)
 		}
-		if len(fixture.host.Deleted) != 1 || fixture.host.Deleted[0] != "Danidani23/acme-agent-settings" || len(fixture.orgCloneFolders(t)) != 0 || len(fixture.state.Current.Organizations) != 0 {
-			t.Fatalf("deleted %v folders %v state %+v", fixture.host.Deleted, fixture.orgCloneFolders(t), fixture.state.Current)
+		if !fixture.host.Repositories["Danidani23/acme-agent-settings"].Exists || len(fixture.orgCloneFolders(t)) != 0 || len(fixture.state.Current.Organizations) != 0 {
+			t.Fatalf("repositories %v folders %v state %+v", fixture.host.Repositories, fixture.orgCloneFolders(t), fixture.state.Current)
+		}
+		fixture.repository.FailPublish = false
+		result, err := fixture.orchestrator().CreateOrganization(request)
+		if err != nil || !result.Adopted || len(fixture.host.Created) != 1 || result.Connected.Slug != "acme" {
+			t.Fatalf("rerun %+v err %v created %d", result, err, len(fixture.host.Created))
+		}
+		fixture.host.Repositories["Danidani23/other"] = ports.RepositoryInfo{Exists: true, Empty: false}
+		_, err = fixture.orchestrator().CreateOrganization(CreateOrganizationRequest{Name: "Other", Owner: "Danidani23", RepositoryName: "other", Private: true})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "holds commits") {
+			t.Fatalf("err %v", err)
 		}
 	})
 	t.Run("a refused protection is reported, not fatal", func(t *testing.T) {
@@ -372,7 +404,7 @@ func TestCreateOrganization(t *testing.T) {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 	})
-	t.Run("a name without a letter or digit and a failed create are refused or failed before anything exists", func(t *testing.T) {
+	t.Run("a name without a letter or digit, a failed create and a missing login are refused or failed before anything exists", func(t *testing.T) {
 		fixture := newHarness(t)
 		_, err := fixture.orchestrator().CreateOrganization(CreateOrganizationRequest{Name: "!!!"})
 		if !errors.Is(err, refusal.ErrRefused) {
@@ -380,16 +412,21 @@ func TestCreateOrganization(t *testing.T) {
 		}
 		fixture.host.FailCreate = true
 		_, err = fixture.orchestrator().CreateOrganization(request)
-		if err == nil || errors.Is(err, refusal.ErrRefused) || len(fixture.host.Deleted) != 0 || len(fixture.orgCloneFolders(t)) != 0 {
-			t.Fatalf("err %v deleted %v folders %v", err, fixture.host.Deleted, fixture.orgCloneFolders(t))
+		if err == nil || errors.Is(err, refusal.ErrRefused) || len(fixture.orgCloneFolders(t)) != 0 {
+			t.Fatalf("err %v folders %v", err, fixture.orgCloneFolders(t))
+		}
+		fixture.host.FailCreate = false
+		_, err = fixture.orchestrator().CreateOrganization(CreateOrganizationRequest{Name: "Acme", Login: "nobody", RepositoryName: "x"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "nobody is not logged in") {
+			t.Fatalf("err %v", err)
 		}
 	})
-	t.Run("creating an organisation that is already connected is refused and the new repository deleted", func(t *testing.T) {
+	t.Run("creating an organisation that is already connected is refused; the new repository stays for a rerun", func(t *testing.T) {
 		fixture := newHarness(t)
-		_, _ = fixture.orchestrator().ConnectOrganization("x")
+		_, _ = fixture.orchestrator().ConnectOrganization("x", "")
 		_, err := fixture.orchestrator().CreateOrganization(request)
-		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "already connected") || len(fixture.host.Deleted) != 1 || len(fixture.orgCloneFolders(t)) != 1 {
-			t.Fatalf("err %v deleted %v folders %v", err, fixture.host.Deleted, fixture.orgCloneFolders(t))
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "already connected") || !fixture.host.Repositories["Danidani23/acme-agent-settings"].Exists || len(fixture.orgCloneFolders(t)) != 1 {
+			t.Fatalf("err %v repositories %v folders %v", err, fixture.host.Repositories, fixture.orgCloneFolders(t))
 		}
 	})
 }
@@ -398,7 +435,7 @@ func TestCreateOrganization(t *testing.T) {
 func withOrganization(t *testing.T) (*harness, CreateResult) {
 	t.Helper()
 	fixture := newHarness(t)
-	created, err := fixture.orchestrator().CreateOrganization(CreateOrganizationRequest{Name: "Acme", Owner: "Danidani23", RepositoryName: "acme-agent-settings", Private: true, Codeowner: "Danidani23"})
+	created, err := fixture.orchestrator().CreateOrganization(CreateOrganizationRequest{Name: "Acme", Owner: "Danidani23", RepositoryName: "acme-agent-settings", Private: true})
 	if err != nil {
 		t.Fatalf("create organisation: %v", err)
 	}
@@ -745,7 +782,7 @@ func TestProposeDeclarations(t *testing.T) {
 			t.Fatalf("distill: %v", err)
 		}
 		result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.Folder})
-		if err != nil || result.Level != "organizations.acme.projects.shop" || len(result.Included) != 2 || len(result.LeftOut) != 1 || !strings.HasPrefix(result.Branch, "rein/propose-shop-") || result.PullRequestURL != "https://github.com/fake/pull/1" {
+		if err != nil || result.Level != "organizations.acme.projects.shop" || len(result.Included) != 2 || len(result.LeftOut) != 1 || !strings.HasPrefix(result.Branch, "rein/propose-shop-") || result.PullRequestURL != "https://github.com/Danidani23/acme-agent-settings/pull/1" {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		if result.LeftOut[0].ID != "go" || result.LeftOut[0].Related[0] != "organizations.acme.rules.go" {
@@ -785,7 +822,7 @@ func TestProposeDeclarations(t *testing.T) {
 			t.Fatalf("user record %q err %v", record, err)
 		}
 	})
-	t.Run("refusals: no declarations, a bad level, a level of another organisation, the lint, nothing new", func(t *testing.T) {
+	t.Run("refusals: no declarations, a bad level, a level of another organisation, the lint, nothing new, no GitHub remote", func(t *testing.T) {
 		fixture, created := withTeam(t)
 		empty := t.TempDir()
 		_, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: empty})
@@ -817,6 +854,13 @@ func TestProposeDeclarations(t *testing.T) {
 		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: folder, Level: "organizations.acme.teams.web"})
 		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "nothing new") || len(fixture.repository.Branches) != 0 {
 			t.Fatalf("err %v branches %v", err, fixture.repository.Branches)
+		}
+		local := newHarness(t)
+		local.repository = &fake.Repository{Record: validRecord}
+		_, _ = local.orchestrator().ConnectOrganization("/a/local/path", "")
+		_, err = local.orchestrator().ProposeDeclarations(ProposeRequest{Source: folder, Level: "organizations.acme"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "not on GitHub") {
+			t.Fatalf("err %v", err)
 		}
 	})
 	t.Run("a failed pull request abandons the branch locally and on the remote", func(t *testing.T) {

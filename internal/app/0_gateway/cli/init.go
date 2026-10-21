@@ -60,7 +60,7 @@ func runInit(environment *commandEnvironment, answers initAnswers) error {
 		return err
 	}
 	defer release()
-	err = requireIdentity(orchestrator)
+	err = requireLogin(orchestrator)
 	if err != nil {
 		return err
 	}

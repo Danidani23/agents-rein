@@ -45,7 +45,10 @@ func runSync(environment *commandEnvironment, request orchestration.SyncRequest,
 		return hookOrError(environment, hook, err)
 	}
 	defer release()
-	err = requireIdentity(orchestrator)
+	if hook {
+		orchestrator.Progress = nil
+	}
+	err = requireLogin(orchestrator)
 	if err != nil {
 		return hookOrError(environment, hook, err)
 	}

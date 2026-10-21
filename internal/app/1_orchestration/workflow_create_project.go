@@ -57,13 +57,13 @@ func (orchestrator Orchestrator) CreateProject(request CreateProjectRequest) (Cr
 		}
 		return CreateProjectResult{}, refusal.New(strings.Join(messages, "; "))
 	}
-	err = runSteps([]Step{
+	err = runSteps(services.Progress, []Step{
 		{
-			Name: "pull",
-			Do:   func() error { return services.Records.Pull(orgClonePath) },
+			Name: "pulling the org repository",
+			Do:   func() error { return services.Records.Pull(accessOf(organization), orgClonePath) },
 		},
 		{
-			Name: "check",
+			Name: "checking the records",
 			Do: func() error {
 				tree, err := services.Records.Tree(orgClonePath)
 				if err != nil {
@@ -73,14 +73,14 @@ func (orchestrator Orchestrator) CreateProject(request CreateProjectRequest) (Cr
 			},
 		},
 		{
-			Name: "write",
+			Name: "writing the record",
 			Do:   func() error { return services.Records.Write(orgClonePath, relativePath, content) },
 			Undo: func() error { return services.Records.Discard(orgClonePath) },
 		},
 		{
-			Name: "publish",
+			Name: "committing and pushing the record",
 			Do: func() error {
-				return services.Records.Publish(orgClonePath, []string{relativePath}, fmt.Sprintf("project %s (rein project create)", slug))
+				return services.Records.Publish(accessOf(organization), orgClonePath, []string{relativePath}, fmt.Sprintf("project %s (rein project create)", slug))
 			},
 		},
 	})

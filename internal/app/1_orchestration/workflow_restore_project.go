@@ -122,9 +122,9 @@ func (orchestrator Orchestrator) RestoreProject(request RestoreRequest) (Restore
 		snapshots = append(snapshots, snapshotPath)
 	}
 	sort.Strings(snapshots)
-	err = runSteps([]Step{
+	err = runSteps(services.Progress, []Step{
 		{
-			Name: "remove inserts",
+			Name: "removing what sync wrote",
 			Do: func() error {
 				if len(verification.Unchanged) == 0 {
 					return nil
@@ -142,12 +142,12 @@ func (orchestrator Orchestrator) RestoreProject(request RestoreRequest) (Restore
 			},
 		},
 		{
-			Name: "put back",
+			Name: "putting the files back",
 			Do:   func() error { return services.WorkingCopy.Restore(location.Folder, files) },
 			Undo: func() error { return services.WorkingCopy.Remove(location.Folder, result.Restored) },
 		},
 		{
-			Name: "ignore block",
+			Name: "taking the .gitignore block out",
 			Do: func() error {
 				if !hadBlock {
 					return nil
@@ -164,12 +164,12 @@ func (orchestrator Orchestrator) RestoreProject(request RestoreRequest) (Restore
 			},
 		},
 		{
-			Name: "ledger",
+			Name: "marking the removals restored",
 			Do:   func() error { return services.Ledger.MarkRestored(snapshots) },
 			Undo: func() error { return services.Ledger.UnmarkRestored(snapshots) },
 		},
 		{
-			Name: "unregister",
+			Name: "forgetting the clone",
 			Do: func() error {
 				result.Unregistered = true
 				return services.Organizations.UnregisterProjectClone(location.Folder)

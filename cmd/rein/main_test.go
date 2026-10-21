@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,34 +23,94 @@ func run(arguments ...string) (code int, out string, errOut string) {
 	return code, outBuffer.String(), errBuffer.String()
 }
 
+// gitHubServer is a GitHub that answers what rein asks: the device flow,
+// approved at the first poll; the user and its organisations; repositories
+// as bare git repositories under remotes, so real git pushes into them.
+func gitHubServer(t *testing.T, login string, remotes string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		answer := func(status int, body any) {
+			writer.WriteHeader(status)
+			_ = json.NewEncoder(writer).Encode(body)
+		}
+		bare := func(name string) string { return filepath.Join(remotes, name+".git") }
+		parts := strings.Split(strings.Trim(request.URL.Path, "/"), "/")
+		switch {
+		case request.URL.Path == "/login/device/code":
+			answer(http.StatusOK, map[string]any{"device_code": "d", "user_code": "ABCD-1234", "verification_uri": "https://github.com/login/device", "expires_in": 900, "interval": 1})
+		case request.URL.Path == "/login/oauth/access_token":
+			if login == "" {
+				answer(http.StatusOK, map[string]any{"error": "access_denied"})
+				return
+			}
+			answer(http.StatusOK, map[string]any{"access_token": "ghu_" + login, "refresh_token": "r", "expires_in": 28800})
+		case request.URL.Path == "/user":
+			if request.Header.Get("Authorization") != "Bearer ghu_"+login {
+				answer(http.StatusUnauthorized, map[string]any{"message": "Bad credentials"})
+				return
+			}
+			answer(http.StatusOK, map[string]any{"login": login})
+		case request.URL.Path == "/user/orgs":
+			answer(http.StatusOK, []any{})
+		case request.URL.Path == "/user/repos" && request.Method == http.MethodPost:
+			var body map[string]any
+			_ = json.NewDecoder(request.Body).Decode(&body)
+			name := body["name"].(string)
+			for _, arguments := range [][]string{{"init", "-q", "--bare", bare(name)}, {"--git-dir", bare(name), "symbolic-ref", "HEAD", "refs/heads/main"}} {
+				output, err := exec.Command("git", arguments...).CombinedOutput()
+				if err != nil {
+					answer(http.StatusInternalServerError, map[string]any{"message": string(output)})
+					return
+				}
+			}
+			answer(http.StatusCreated, map[string]any{"clone_url": bare(name)})
+		case len(parts) == 3 && parts[0] == "repos":
+			_, err := os.Stat(bare(parts[2]))
+			if err != nil {
+				answer(http.StatusNotFound, map[string]any{"message": "Not Found"})
+				return
+			}
+			answer(http.StatusOK, map[string]any{"clone_url": bare(parts[2])})
+		case len(parts) == 4 && parts[0] == "repos" && parts[3] == "commits":
+			err := exec.Command("git", "--git-dir", bare(parts[2]), "rev-parse", "HEAD").Run()
+			if err != nil {
+				answer(http.StatusConflict, map[string]any{"message": "Git Repository is empty."})
+				return
+			}
+			answer(http.StatusOK, []map[string]any{{"sha": "x"}})
+		case strings.HasSuffix(request.URL.Path, "/branches/main/protection"):
+			if os.Getenv("GH_STUB_PROTECTION") == "403" {
+				answer(http.StatusForbidden, map[string]any{"message": "Upgrade to GitHub Pro or make this repository public to enable this feature."})
+				return
+			}
+			answer(http.StatusOK, map[string]any{})
+		case strings.HasSuffix(request.URL.Path, "/pulls"):
+			answer(http.StatusCreated, map[string]any{"html_url": "https://github.com/" + parts[1] + "/" + parts[2] + "/pull/1"})
+		default:
+			answer(http.StatusNotFound, map[string]any{"message": "no such endpoint in the test server: " + request.URL.Path})
+		}
+	}))
+}
+
+// isolate gives a test its own rein home, agent home, fake GitHub, file
+// keychain and stub claude, and logs in when a login is given.
 func isolate(t *testing.T, login string) (reinHome string) {
 	t.Helper()
 	reinHome = t.TempDir()
 	t.Setenv("REIN_HOME", reinHome)
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), ".claude"))
-	directory := t.TempDir()
+	t.Setenv("REIN_KEYCHAIN_FILE", filepath.Join(reinHome, "keychain.json"))
 	remotes := filepath.Join(reinHome, "stub-remotes")
 	_ = os.MkdirAll(remotes, 0o755)
-	script := "#!/bin/sh\nREMOTES=\"" + remotes + "\"\ncase \"$*\" in\n  \"api user --jq .login\")"
-	if login == "" {
-		script += " echo 'gh: not logged in' >&2; exit 1;;\n"
-	} else {
-		script += " echo " + login + ";;\n"
-	}
-	script += "  \"config get git_protocol\") echo https;;\n" +
-		"  \"repo create \"*) name=\"${3#*/}\"; git init -q --bare \"$REMOTES/$name.git\" && git --git-dir=\"$REMOTES/$name.git\" symbolic-ref HEAD refs/heads/main;;\n" +
-		"  \"repo view \"*) name=\"${3#*/}\"; echo \"$REMOTES/$name.git\";;\n" +
-		"  \"repo delete \"*) name=\"${3#*/}\"; rm -rf \"$REMOTES/$name.git\";;\n" +
-		"  \"api -X PUT \"*) if [ \"$GH_STUB_PROTECTION\" = 403 ]; then echo 'gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)' >&2; exit 1; fi;;\n" +
-		"  \"pr create \"*) echo https://github.com/Danidani23/acme-agent-settings/pull/1;;\n" +
-		"  *) exit 1;;\nesac\n"
-	err := os.WriteFile(filepath.Join(directory, "gh"), []byte(script), 0o755)
-	if err != nil {
-		t.Fatalf("stub gh: %v", err)
-	}
-	// the stub claude answers a judge brief with a canned verdict for the three rules of the init test
+	server := gitHubServer(t, login, remotes)
+	t.Cleanup(server.Close)
+	t.Setenv("REIN_GITHUB_WEB", server.URL)
+	t.Setenv("REIN_GITHUB_API", server.URL)
+	directory := t.TempDir()
+	// the stub claude answers a judge brief with a canned verdict for the rules of the init test
 	claudeStub := "#!/bin/sh\nif [ \"$1\" = \"-p\" ]; then\n  cat >/dev/null\n  printf '%s' '" + stubJudgeAnswer + "'\nfi\nexit 0\n"
-	err = os.WriteFile(filepath.Join(directory, "claude"), []byte(claudeStub), 0o755)
+	err := os.WriteFile(filepath.Join(directory, "claude"), []byte(claudeStub), 0o755)
 	if err != nil {
 		t.Fatalf("stub claude: %v", err)
 	}
@@ -62,6 +125,12 @@ func isolate(t *testing.T, login string) (reinHome string) {
 	}
 	for _, variable := range []string{"GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"} {
 		t.Setenv(variable, "test@example.com")
+	}
+	if login != "" {
+		code, out, errOut := run("login")
+		if code != cli.ExitWorked || !strings.Contains(out, "enter the code ABCD-1234") || !strings.Contains(out, "logged in as "+login) {
+			t.Fatalf("login: code %d out %q err %q", code, out, errOut)
+		}
 	}
 	return reinHome
 }
@@ -93,18 +162,18 @@ func TestWiring(t *testing.T) {
 	t.Run("status shows the stubbed identity and agent", func(t *testing.T) {
 		isolate(t, "Danidani23")
 		code, out, _ := run("status")
-		if code != cli.ExitWorked || !strings.Contains(out, "github      Danidani23") || !strings.Contains(out, "agents      claude-code") {
+		if code != cli.ExitWorked || !strings.Contains(out, "logins      Danidani23") || !strings.Contains(out, "agents      claude-code") {
 			t.Fatalf("code %d out %q", code, out)
 		}
 	})
-	t.Run("a logged-out gh refuses org list and is shown by status", func(t *testing.T) {
+	t.Run("a machine without a login refuses org list and is shown by status", func(t *testing.T) {
 		isolate(t, "")
 		code, _, errOut := run("org", "list")
-		if code != cli.ExitRefused || !strings.Contains(errOut, "gh auth login") {
+		if code != cli.ExitRefused || !strings.Contains(errOut, "rein login") {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
 		code, out, _ := run("status")
-		if code != cli.ExitWorked || !strings.Contains(out, "github      none") {
+		if code != cli.ExitWorked || !strings.Contains(out, "logins      none") {
 			t.Fatalf("code %d out %q", code, out)
 		}
 	})
@@ -132,14 +201,14 @@ func TestWiring(t *testing.T) {
 			t.Fatalf("orgs folder still there")
 		}
 	})
-	t.Run("org create runs through the stubbed gh and real git, and snapshots the agent home", func(t *testing.T) {
+	t.Run("org create runs through the fake GitHub and real git, and snapshots the agent home", func(t *testing.T) {
 		reinHome := isolate(t, "Danidani23")
 		claudeHome := os.Getenv("CLAUDE_CONFIG_DIR")
 		_ = os.MkdirAll(claudeHome, 0o755)
 		_ = os.WriteFile(filepath.Join(claudeHome, "CLAUDE.md"), []byte("be brief"), 0o644)
 		code, out, errOut := run("org", "create", "--name", "Acme", "--yes")
 		remote := filepath.Join(reinHome, "stub-remotes", "acme-agent-settings.git")
-		if code != cli.ExitWorked || !strings.Contains(out, "created Danidani23/acme-agent-settings (private) at "+remote) || !strings.Contains(out, "protected main") || !strings.Contains(out, "connected acme (Acme) at") || !strings.Contains(out, "snapshot of an agent's home: "+filepath.Join(reinHome, "snapshots")) {
+		if code != cli.ExitWorked || !strings.Contains(out, "created Danidani23/acme-agent-settings (private) at "+remote) || !strings.Contains(out, "protected main") || !strings.Contains(out, "connected acme (Acme) at") || !strings.Contains(out, "snapshot of an agent's local settings, kept on this machine: "+filepath.Join(reinHome, "snapshots")) {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
 		entries, _ := os.ReadDir(filepath.Join(reinHome, "orgs"))
@@ -295,7 +364,7 @@ func TestWiring(t *testing.T) {
 		isolate(t, "Danidani23")
 		t.Setenv("GH_STUB_PROTECTION", "403")
 		code, out, errOut := run("org", "create", "--name", "Acme", "--yes")
-		if code != cli.ExitWorked || !strings.Contains(errOut, "warning: main is not protected; GitHub said: gh: Upgrade to GitHub Pro") || !strings.Contains(out, "connected acme (Acme)") {
+		if code != cli.ExitWorked || !strings.Contains(errOut, "warning: main is not protected; GitHub said: Upgrade to GitHub Pro") || !strings.Contains(out, "connected acme (Acme)") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
 	})

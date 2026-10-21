@@ -26,8 +26,8 @@ func (Service) Tree(orgClonePath string) (declaration.Tree, error) {
 }
 
 // Pull brings the clone up to date before anything is written.
-func (service Service) Pull(orgClonePath string) error {
-	return service.Repository.Pull(orgClonePath)
+func (service Service) Pull(access ports.RemoteAccess, orgClonePath string) error {
+	return service.Repository.Pull(access, orgClonePath)
 }
 
 // Write puts a new record file into the clone; an existing file is an error,
@@ -56,12 +56,12 @@ func (Service) Rewrite(orgClonePath string, relativePath string, content string)
 }
 
 // Publish commits the paths and pushes main.
-func (service Service) Publish(orgClonePath string, relativePaths []string, message string) error {
+func (service Service) Publish(access ports.RemoteAccess, orgClonePath string, relativePaths []string, message string) error {
 	err := service.Repository.CommitPaths(orgClonePath, relativePaths, message)
 	if err != nil {
 		return err
 	}
-	return service.Repository.Push(orgClonePath)
+	return service.Repository.Push(access, orgClonePath)
 }
 
 // Discard puts the clone back to what the remote holds: the compensation

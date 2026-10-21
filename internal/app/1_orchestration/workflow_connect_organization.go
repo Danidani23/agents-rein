@@ -2,8 +2,10 @@ package orchestration
 
 import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/hosting"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 // ConnectResult is what ConnectOrganization did.
@@ -22,26 +24,38 @@ type ConnectResult struct {
 // active. When a step fails the registration is undone and the clone
 // removed, and an organisation that is already connected is refused before
 // its clone is touched.
-func (orchestrator Orchestrator) ConnectOrganization(remote string) (ConnectResult, error) {
+func (orchestrator Orchestrator) ConnectOrganization(remote string, login string) (ConnectResult, error) {
+	owner, repositoryName, _ := hosting.RepositoryOf(remote)
+	return connectOrganization(orchestrator, remote, login, owner, repositoryName)
+}
+
+// connectOrganization is the connect with the repository on the host known,
+// as org create knows it even when the clone address does not say.
+func connectOrganization(orchestrator Orchestrator, remote string, login string, owner string, repositoryName string) (ConnectResult, error) {
 	services := orchestrator.Services
 	err := services.Clones.Preflight()
 	if err != nil {
 		return ConnectResult{}, refusal.New(err.Error())
 	}
+	identity, err := services.Credentials.Resolve(login)
+	if err != nil {
+		return ConnectResult{}, err
+	}
+	access := ports.RemoteAccess{Login: identity.Login}
 	var temporaryOrgClonePath string
 	var organization declaration.Organization
 	var result ConnectResult
-	err = runSteps([]Step{
+	err = runSteps(services.Progress, []Step{
 		{
-			Name: "clone",
+			Name: "cloning the org repository",
 			Do: func() error {
-				temporaryOrgClonePath, err = services.Clones.CloneTemporary(remote)
+				temporaryOrgClonePath, err = services.Clones.CloneTemporary(access, remote)
 				return err
 			},
 			Undo: func() error { return services.Clones.Remove(temporaryOrgClonePath) },
 		},
 		{
-			Name: "verify",
+			Name: "verifying the organisation record",
 			Do: func() error {
 				organization, err = services.Clones.Verify(temporaryOrgClonePath)
 				if err != nil {
@@ -51,9 +65,9 @@ func (orchestrator Orchestrator) ConnectOrganization(remote string) (ConnectResu
 			},
 		},
 		{
-			Name: "register",
+			Name: "registering the organisation",
 			Do: func() error {
-				organizationRef := machine.OrganizationRef{ID: organization.ID, Slug: organization.Slug, Remote: remote, Host: organization.Host}
+				organizationRef := machine.OrganizationRef{ID: organization.ID, Slug: organization.Slug, Remote: remote, Host: organization.Host, Login: identity.Login, Owner: owner, Repository: repositoryName}
 				result.BecameActive, err = services.Organizations.Register(organizationRef, services.Clones.OrgClonePath(organization.ID))
 				return err
 			},
@@ -63,7 +77,7 @@ func (orchestrator Orchestrator) ConnectOrganization(remote string) (ConnectResu
 			},
 		},
 		{
-			Name: "place",
+			Name: "placing the clone",
 			Do: func() error {
 				result.OrgClonePath, err = services.Clones.Place(temporaryOrgClonePath, organization.ID)
 				return err
@@ -71,7 +85,7 @@ func (orchestrator Orchestrator) ConnectOrganization(remote string) (ConnectResu
 			Undo: func() error { return services.Clones.Remove(result.OrgClonePath) },
 		},
 		{
-			Name: "snapshot agent homes",
+			Name: "snapshotting the agents' homes",
 			Do: func() error {
 				result.SnapshotPaths, err = services.Snapshots.TakeAgentHomes()
 				return err

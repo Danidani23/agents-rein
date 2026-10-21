@@ -17,9 +17,9 @@ func (orchestrator Orchestrator) DisconnectOrganization(slug string) (Disconnect
 	services := orchestrator.Services
 	var forgotten organizations.Forgotten
 	var err error
-	err = runSteps([]Step{
+	err = runSteps(services.Progress, []Step{
 		{
-			Name: "forget",
+			Name: "forgetting the organisation",
 			Do: func() error {
 				forgotten, err = services.Organizations.Forget(slug)
 				return err
@@ -27,7 +27,7 @@ func (orchestrator Orchestrator) DisconnectOrganization(slug string) (Disconnect
 			Undo: func() error { return services.Organizations.Restore(forgotten) },
 		},
 		{
-			Name: "remove clone",
+			Name: "removing the clone",
 			Do:   func() error { return services.Clones.Remove(forgotten.OrgClonePath) },
 		},
 	})

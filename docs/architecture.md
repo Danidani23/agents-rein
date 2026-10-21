@@ -26,12 +26,12 @@ flowchart TB
             runner["saga runner"]
         end
         subgraph services["2_services"]
-            svc["services<br/>identity, organizations, clones, placements, hosting, snapshots, records, workingcopy, ledger, distillations, proposals, judge"]
+            svc["services<br/>credentials, organizations, clones, placements, hosting, snapshots, records, workingcopy, ledger, distillations, proposals, judge"]
             libs["libraries<br/>address, declaration, lint, exchange, machine, refusal, scaffold, distill, resolve, compile"]
         end
     end
-    ports["internal/ports<br/>Host, Repository, Agent, State, Prompter, Judge, MachineLock"]
-    adapters["internal/adapters<br/>github, git, claudecode, localstate, terminal, execute<br/>fake, for the tests"]
+    ports["internal/ports<br/>Host, Repository, Agent, State, Prompter, Judge, MachineLock, Keychain"]
+    adapters["internal/adapters<br/>github (REST, device flow), git, claudecode, keychain, localstate, terminal, execute<br/>fake, for the tests"]
 
     main --> gateway
     main --> adapters
@@ -80,14 +80,16 @@ holds this table as its `allowed` map and fails on any import outside it.
    `clones` the folders under `~/.rein/orgs/`, `snapshots` the files under
    `~/.rein/snapshots/`, `hosting` the repositories on the host, `records` the record files
    in an org clone and their publication, `workingcopy` a project's working copy, `ledger`
-   the removals file, `identity` the answer to "who". A service
+   the removals and inserts files, `credentials` the logins and their tokens in the keychain.
+   A service
    reaches the outside only through a port, so a test gives it a memory state or a fake host.
    Enforced by the test: a service package may import the ports and the libraries, never a
    sibling service.
 4. **A single operation is a service method, and the gateway calls it directly.** `org list`
    and `org use` reach `organizations` through `orchestrator.Organizations`. The identity gate
-   is the gateway's: a command that acts for a user calls `requireIdentity` first and refuses
-   without one, like authentication at a gateway, so no workflow checks it again.
+   is the gateway's: a command that acts for a user calls `requireLogin` first and refuses
+   without a login on the machine, like authentication at a gateway; the workflow then
+   resolves which login acts, the organisation's own.
 5. **Several operations in order are a workflow, and a workflow is a list of steps with
    compensations.** The saga runner performs the steps and, when one fails, runs the `Undo`
    of every completed step in reverse order. A step without an `Undo` is allowed for a read
@@ -112,18 +114,22 @@ holds this table as its `allowed` map and fails on any import outside it.
    `os.Stderr` anywhere but `main`. Enforced by a guard test in the gateway.
 9. **A port exists only where a second implementation is plausible.** The host (GitHub, later
    GitLab), the agent (Claude Code, later others), the repository (git), the state, the
-   prompter, and later the judge and the snapshots. Everything else is a concrete type, the
-   orchestrator included.
-10. **No library for the workflows.** A durable-execution engine brings a server to run
+   prompter, the judge, the machine lock and the keychain (the system's, or a file for tests).
+   Everything else is a concrete type, the orchestrator included.
+10. **Nothing a workflow does is silent, unbounded or unstoppable.** The saga runner reports
+    every step and every undo through the progress hook; every external program runs under a
+    time limit through `execute`; Ctrl-C kills the running program and lets the runner undo
+    what was done (P2.25).
+11. **No library for the workflows.** A durable-execution engine brings a server to run
     beside the binary, and rein has none by decision (ADR, N1). The runner is fifty lines in
     [saga.go](../internal/app/1_orchestration/saga.go): `Step{Name, Do, Undo}`, `runSteps`,
     and `CompensationError` for the case where an undo fails too.
-11. **Names are descriptive everywhere**, in the words of the toolkit's `go-style` skill: a
+12. **Names are descriptive everywhere**, in the words of the toolkit's `go-style` skill: a
     name says its subject, its kind and its role (`temporaryOrgClonePath`, `OrgClonesFolder`,
     `seedConnectedOrganization`), no abbreviations and no single letters beyond the ones Go
     convention fixes. A field is named by what it holds (`Current machine.State`), a bool
     reads as a fact (`BecameActive`), a result struct says what it reports (`ActiveAfter`).
-12. **Every record carries the time it was written** (D20): `OrganizationRef.ConnectedAt`
+13. **Every record carries the time it was written** (D20): `OrganizationRef.ConnectedAt`
     today, the ledger's entries later. A service that writes records takes a `Clock` so its
     tests can fix the time; nil means the wall clock.
 

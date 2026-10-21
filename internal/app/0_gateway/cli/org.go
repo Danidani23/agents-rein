@@ -22,7 +22,8 @@ func newOrgCommand(environment *commandEnvironment) *cobra.Command {
 }
 
 func newOrgConnectCommand(environment *commandEnvironment) *cobra.Command {
-	return &cobra.Command{
+	var login string
+	command := &cobra.Command{
 		Use:   "connect <remote>",
 		Short: "Clone an existing org repository and remember it",
 		Long: "connect clones the org repository at <remote>, a git URL or a local path, checks that it\n" +
@@ -36,11 +37,11 @@ func newOrgConnectCommand(environment *commandEnvironment) *cobra.Command {
 				return err
 			}
 			defer release()
-			err = requireIdentity(orchestrator)
+			err = requireLogin(orchestrator)
 			if err != nil {
 				return err
 			}
-			result, err := orchestrator.ConnectOrganization(arguments[0])
+			result, err := orchestrator.ConnectOrganization(arguments[0], login)
 			if err != nil {
 				return err
 			}
@@ -48,6 +49,8 @@ func newOrgConnectCommand(environment *commandEnvironment) *cobra.Command {
 			return nil
 		},
 	}
+	command.Flags().StringVar(&login, "login", "", "the GitHub account to act with (default: the only one logged in)")
+	return command
 }
 
 func newOrgListCommand(environment *commandEnvironment) *cobra.Command {
@@ -61,7 +64,7 @@ func newOrgListCommand(environment *commandEnvironment) *cobra.Command {
 				return err
 			}
 			defer release()
-			err = requireIdentity(orchestrator)
+			err = requireLogin(orchestrator)
 			if err != nil {
 				return err
 			}
@@ -96,7 +99,7 @@ func newOrgUseCommand(environment *commandEnvironment) *cobra.Command {
 				return err
 			}
 			defer release()
-			err = requireIdentity(orchestrator)
+			err = requireLogin(orchestrator)
 			if err != nil {
 				return err
 			}
@@ -124,7 +127,7 @@ func newOrgDisconnectCommand(environment *commandEnvironment) *cobra.Command {
 				return err
 			}
 			defer release()
-			err = requireIdentity(orchestrator)
+			err = requireLogin(orchestrator)
 			if err != nil {
 				return err
 			}

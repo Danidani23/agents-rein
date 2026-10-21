@@ -11,10 +11,15 @@ import "time"
 // its record, mirrored here so the right adapter is picked without reading
 // the clone.
 type OrganizationRef struct {
-	ID          string    `yaml:"id"`
-	Slug        string    `yaml:"slug"`
-	Remote      string    `yaml:"remote"`
-	Host        string    `yaml:"host,omitempty"`
+	ID     string `yaml:"id"`
+	Slug   string `yaml:"slug"`
+	Remote string `yaml:"remote"`
+	Host   string `yaml:"host,omitempty"`
+	// Login is the host account whose token acts on this organisation; Owner
+	// and Repository name the org repository on the host (D25).
+	Login       string    `yaml:"login,omitempty"`
+	Owner       string    `yaml:"owner,omitempty"`
+	Repository  string    `yaml:"repository,omitempty"`
 	ConnectedAt time.Time `yaml:"connected_at,omitempty"`
 }
 
@@ -60,7 +65,10 @@ const StateVersion = 1
 
 // State is everything rein remembers about this machine.
 type State struct {
-	Version       int               `yaml:"version"`
+	Version int `yaml:"version"`
+	// Logins are the host accounts logged in on this machine; their tokens
+	// are in the keychain (D25).
+	Logins        []string          `yaml:"logins,omitempty"`
 	Organizations []OrganizationRef `yaml:"organizations"`
 	Active        string            `yaml:"active,omitempty"`
 	OrgClonePaths map[string]string `yaml:"org_clone_paths"`

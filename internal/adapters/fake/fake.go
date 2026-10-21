@@ -16,57 +16,102 @@ import (
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
-// Host is a version-control host with one account; an empty Login is a
-// logged-out host and answers as gh does. It records the repositories it
-// was asked to create and delete.
+// Host is a version-control host reached with tokens, as the app's device
+// flow hands them out. Login is the account every token acts as; a device
+// flow approves after Pending polls. It records what it was asked to do.
 type Host struct {
 	Login             string
-	Protocol          string
+	Pending           int
+	Organizations     []string
+	Repositories      map[string]ports.RepositoryInfo
 	Created           []ports.NewRepository
-	Deleted           []string
 	FailCreate        bool
 	ProtectionRefusal string
 	FailProtection    bool
 	ProtectedBranches []string
 	PullRequests      []ports.PullRequest
 	FailPullRequest   bool
+	Refreshed         int
+	polls             int
 }
 
-// Identity returns the account or the error that names the way in.
-func (host *Host) Identity() (ports.Identity, error) {
+// Name is github, which the fake stands in for.
+func (*Host) Name() string {
+	return "github"
+}
+
+// InstallURL is a fake address.
+func (*Host) InstallURL() string {
+	return "https://github.com/apps/fake/installations/new"
+}
+
+// StartDeviceFlow hands out a fixed code.
+func (host *Host) StartDeviceFlow() (ports.DeviceCode, error) {
+	host.polls = 0
+	return ports.DeviceCode{DeviceCode: "device-1", UserCode: "ABCD-1234", VerificationURI: "https://github.com/login/device", Interval: time.Millisecond, ExpiresAt: time.Now().Add(time.Hour)}, nil
+}
+
+// PollDeviceFlow is pending for Pending polls, then approved.
+func (host *Host) PollDeviceFlow(code ports.DeviceCode) (ports.Token, bool, error) {
 	if host.Login == "" {
-		return ports.Identity{}, errors.New("gh is not logged in to GitHub; run gh auth login, then try again")
+		return ports.Token{}, false, errors.New("the authorisation was declined on GitHub")
 	}
-	return ports.Identity{Login: host.Login, Slug: strings.ToLower(host.Login)}, nil
+	host.polls++
+	if host.polls <= host.Pending {
+		return ports.Token{}, true, nil
+	}
+	return ports.Token{AccessToken: "token-of-" + host.Login, RefreshToken: "refresh-of-" + host.Login, ExpiresAt: time.Now().Add(8 * time.Hour)}, false, nil
 }
 
-// GitProtocol is the configured protocol, https by default.
-func (host *Host) GitProtocol() (string, error) {
-	if host.Protocol == "" {
-		return "https", nil
-	}
-	return host.Protocol, nil
+// RefreshToken renews with a fresh expiry.
+func (host *Host) RefreshToken(token ports.Token) (ports.Token, error) {
+	host.Refreshed++
+	token.AccessToken = "renewed-" + token.AccessToken
+	token.ExpiresAt = time.Now().Add(8 * time.Hour)
+	return token, nil
 }
 
-// CreateRepository records the request and returns a fake remote.
-func (host *Host) CreateRepository(repository ports.NewRepository) (string, error) {
+// Identity is the account a token of this host acts as.
+func (host *Host) Identity(accessToken string) (ports.Identity, error) {
+	if accessToken == "" {
+		return ports.Identity{}, errors.New("GitHub answered 401: Bad credentials")
+	}
+	login := strings.TrimPrefix(strings.TrimPrefix(accessToken, "renewed-"), "token-of-")
+	return ports.Identity{Login: login, Slug: strings.ToLower(login)}, nil
+}
+
+// Owners is the login and the organisations.
+func (host *Host) Owners(accessToken string) ([]string, error) {
+	identity, err := host.Identity(accessToken)
+	if err != nil {
+		return nil, err
+	}
+	return append([]string{identity.Login}, host.Organizations...), nil
+}
+
+// Repository answers from Repositories, else "does not exist".
+func (host *Host) Repository(accessToken string, owner string, name string) (ports.RepositoryInfo, error) {
+	return host.Repositories[owner+"/"+name], nil
+}
+
+// CreateRepository records the request and returns a fake clone URL.
+func (host *Host) CreateRepository(accessToken string, repository ports.NewRepository) (string, error) {
 	if host.FailCreate {
-		return "", errors.New("gh repo create failed: name already exists on this account")
+		return "", errors.New("GitHub answered 422: name already exists on this account")
 	}
 	host.Created = append(host.Created, repository)
-	return "fake://" + repository.Owner + "/" + repository.Name, nil
-}
-
-// DeleteRepository records the deletion.
-func (host *Host) DeleteRepository(owner string, name string) error {
-	host.Deleted = append(host.Deleted, owner+"/"+name)
-	return nil
+	cloneURL := "https://github.com/" + repository.Owner + "/" + repository.Name + ".git"
+	if host.Repositories == nil {
+		host.Repositories = map[string]ports.RepositoryInfo{}
+	}
+	host.Repositories[repository.Owner+"/"+repository.Name] = ports.RepositoryInfo{Exists: true, Empty: true, CloneURL: cloneURL}
+	return cloneURL, nil
 }
 
 // ProtectMainBranch records the protection, or refuses or fails on demand.
-func (host *Host) ProtectMainBranch(owner string, name string) (string, error) {
+func (host *Host) ProtectMainBranch(accessToken string, owner string, name string) (string, error) {
 	if host.FailProtection {
-		return "", errors.New("gh api failed: network down")
+		return "", errors.New("GitHub could not be reached: network down")
 	}
 	if host.ProtectionRefusal != "" {
 		return host.ProtectionRefusal, nil
@@ -76,12 +121,47 @@ func (host *Host) ProtectMainBranch(owner string, name string) (string, error) {
 }
 
 // CreatePullRequest records the request and returns a fake URL.
-func (host *Host) CreatePullRequest(directory string, request ports.PullRequest) (string, error) {
+func (host *Host) CreatePullRequest(accessToken string, owner string, name string, request ports.PullRequest) (string, error) {
 	if host.FailPullRequest {
-		return "", errors.New("gh pr create failed: a pull request for this branch already exists")
+		return "", errors.New("GitHub answered 422: a pull request for this branch already exists")
 	}
 	host.PullRequests = append(host.PullRequests, request)
-	return fmt.Sprintf("https://github.com/fake/pull/%d", len(host.PullRequests)), nil
+	return fmt.Sprintf("https://github.com/%s/%s/pull/%d", owner, name, len(host.PullRequests)), nil
+}
+
+// Keychain keeps tokens in memory.
+type Keychain struct {
+	Tokens      map[string]ports.Token
+	Unavailable string
+}
+
+// Available is false with a reason when Unavailable is set.
+func (keychain *Keychain) Available() (string, bool) {
+	if keychain.Unavailable != "" {
+		return keychain.Unavailable, false
+	}
+	return "", true
+}
+
+// Store keeps the token.
+func (keychain *Keychain) Store(token ports.Token) error {
+	if keychain.Tokens == nil {
+		keychain.Tokens = map[string]ports.Token{}
+	}
+	keychain.Tokens[token.Login] = token
+	return nil
+}
+
+// Load reads a token.
+func (keychain *Keychain) Load(login string) (ports.Token, bool, error) {
+	token, found := keychain.Tokens[login]
+	return token, found, nil
+}
+
+// Delete removes a token.
+func (keychain *Keychain) Delete(login string) error {
+	delete(keychain.Tokens, login)
+	return nil
 }
 
 // Repository "clones" by writing an org repository with the organisation
@@ -137,7 +217,7 @@ func (*Repository) Preflight() error {
 }
 
 // Clone writes the fake org repository into directory.
-func (repository *Repository) Clone(remote string, directory string) error {
+func (repository *Repository) Clone(access ports.RemoteAccess, remote string, directory string) error {
 	if repository.Fail {
 		return errors.New("git clone failed: repository not found")
 	}
@@ -170,7 +250,7 @@ func (repository *Repository) Clone(remote string, directory string) error {
 
 // Publish remembers directory as the content of remote, so a later clone of
 // the remote returns it.
-func (repository *Repository) Publish(directory string, remote string, message string) error {
+func (repository *Repository) Publish(access ports.RemoteAccess, directory string, remote string, message string) error {
 	if repository.FailPublish {
 		return errors.New("git push failed: remote rejected")
 	}
@@ -183,7 +263,7 @@ func (repository *Repository) Publish(directory string, remote string, message s
 }
 
 // Pull is a no-op: the fake remote never moves on its own.
-func (*Repository) Pull(directory string) error {
+func (*Repository) Pull(access ports.RemoteAccess, directory string) error {
 	return nil
 }
 
@@ -194,7 +274,7 @@ func (repository *Repository) CommitPaths(directory string, relativePaths []stri
 }
 
 // Push publishes the clone's current content under its origin.
-func (repository *Repository) Push(directory string) error {
+func (repository *Repository) Push(access ports.RemoteAccess, directory string) error {
 	if repository.FailPush {
 		return errors.New("git push failed: remote rejected (protected branch)")
 	}
@@ -312,7 +392,7 @@ func (repository *Repository) DeleteBranch(directory string, branch string) erro
 }
 
 // PushBranch publishes the clone's content under origin#branch.
-func (repository *Repository) PushBranch(directory string, branch string) error {
+func (repository *Repository) PushBranch(access ports.RemoteAccess, directory string, branch string) error {
 	if repository.FailPushBranch {
 		return errors.New("git push failed: could not read from remote")
 	}
@@ -320,7 +400,7 @@ func (repository *Repository) PushBranch(directory string, branch string) error 
 }
 
 // DeleteRemoteBranch records the deletion on the remote.
-func (repository *Repository) DeleteRemoteBranch(directory string, branch string) error {
+func (repository *Repository) DeleteRemoteBranch(access ports.RemoteAccess, directory string, branch string) error {
 	repository.RemoteDeleted = append(repository.RemoteDeleted, branch)
 	delete(repository.Published, originOf(directory)+"#"+branch)
 	return nil

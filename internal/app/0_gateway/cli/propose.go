@@ -44,7 +44,7 @@ func runPropose(environment *commandEnvironment, request orchestration.ProposeRe
 		return err
 	}
 	defer release()
-	err = requireIdentity(orchestrator)
+	err = requireLogin(orchestrator)
 	if err != nil {
 		return err
 	}

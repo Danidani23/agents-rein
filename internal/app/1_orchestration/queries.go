@@ -8,7 +8,6 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/resolve"
-	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 // PlacementStatus is one placement and whether its target still exists.
@@ -28,8 +27,8 @@ type CloneStatus struct {
 
 // StatusReport is everything status shows.
 type StatusReport struct {
-	Identity      ports.Identity
-	IdentityError string
+	// Logins are the host accounts logged in on this machine (D25).
+	Logins        []string
 	Agents        []string
 	Home          string
 	Placements    []PlacementStatus
@@ -41,17 +40,16 @@ type StatusReport struct {
 	Imports       []machine.Import
 }
 
-// Status reads across the services and changes nothing. It runs without an
-// identity: a logged-out host is reported, not refused.
+// Status reads across the services and changes nothing. It runs without a
+// login: a machine without one is reported, not refused.
 func (orchestrator Orchestrator) Status() (StatusReport, error) {
 	services := orchestrator.Services
 	report := StatusReport{Home: services.Home, Agents: services.Placements.InstalledAgents()}
-	who, err := services.Identity.Who()
+	logins, err := services.Credentials.Logins()
 	if err != nil {
-		report.IdentityError = err.Error()
-	} else {
-		report.Identity = who
+		return StatusReport{}, err
 	}
+	report.Logins = logins
 	placed, imports, err := services.Placements.List()
 	if err != nil {
 		return StatusReport{}, err
@@ -306,7 +304,7 @@ func (orchestrator Orchestrator) ResolveProject(organizationSlug string, project
 	if err != nil {
 		return Resolution{}, err
 	}
-	userSlug := userSlugOf(services)
+	userSlug := userSlugOf(organization)
 	context, found := resolve.ContextOf(tree, projectSlug, userSlug, services.Clock())
 	if !found {
 		return Resolution{}, refusal.New("project " + projectSlug + " does not exist in " + organization.Slug + "; projects are " + strings.Join(sortedKeys(tree.Projects), ", "))

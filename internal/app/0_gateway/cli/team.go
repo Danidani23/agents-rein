@@ -64,7 +64,7 @@ func runTeamCreate(environment *commandEnvironment, answers teamCreateAnswers) e
 		return err
 	}
 	defer release()
-	err = requireIdentity(orchestrator)
+	err = requireLogin(orchestrator)
 	if err != nil {
 		return err
 	}

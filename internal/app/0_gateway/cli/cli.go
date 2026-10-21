@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -23,12 +25,14 @@ import (
 )
 
 // Exit codes: 0 worked, 1 refused (a precondition or a check failed), 2
-// crashed (an error the command did not expect), 3 a program rein ran failed.
+// crashed (an error the command did not expect), 3 a program rein ran
+// failed, 130 interrupted by Ctrl-C after undoing what was done.
 const (
-	ExitWorked     = 0
-	ExitRefused    = 1
-	ExitCrashed    = 2
-	ExitToolFailed = 3
+	ExitWorked      = 0
+	ExitRefused     = 1
+	ExitCrashed     = 2
+	ExitToolFailed  = 3
+	ExitInterrupted = 130
 )
 
 // Orchestrate returns the orchestrator a command talks to; it runs lazily so
@@ -68,12 +72,29 @@ func (environment *commandEnvironment) orchestrateLocked() (orchestrator orchest
 	if err != nil {
 		return orchestration.Orchestrator{}, nil, refusal.New(err.Error())
 	}
+	orchestrator.Progress = func(message string) { fmt.Fprintf(environment.out, "  %s\n", message) }
 	return orchestrator, release, nil
 }
 
-// Run executes rein with arguments and returns the exit code.
+// Run executes rein with arguments and returns the exit code. Ctrl-C stops
+// the running program so the workflow undoes what it did; a second Ctrl-C
+// quits at once.
 func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer, orchestrate Orchestrate) int {
 	environment := &commandEnvironment{in: in, out: out, errOut: errOut, terminal: terminal.IsTerminal(in), orchestrate: orchestrate}
+	signals := make(chan os.Signal, 2)
+	signal.Notify(signals, os.Interrupt)
+	defer signal.Stop(signals)
+	go func() {
+		first := true
+		for range signals {
+			if !first || !execute.Running() {
+				os.Exit(ExitInterrupted)
+			}
+			first = false
+			fmt.Fprintf(errOut, "\ninterrupted; undoing what was done, press Ctrl-C again to quit at once\n")
+			execute.Interrupt()
+		}
+	}()
 	return runCommand(environment, arguments)
 }
 
@@ -85,6 +106,9 @@ func runCommand(environment *commandEnvironment, arguments []string) int {
 		return ExitWorked
 	}
 	fmt.Fprintf(environment.errOut, "rein: %v\n", err)
+	if errors.Is(err, execute.ErrInterrupted) {
+		return ExitInterrupted
+	}
 	var failure *execute.Failure
 	if errors.As(err, &failure) {
 		return ExitToolFailed
@@ -95,12 +119,15 @@ func runCommand(environment *commandEnvironment, arguments []string) int {
 	return ExitCrashed
 }
 
-// requireIdentity is the gate in front of every command that acts for a
-// user: without a logged-in host it refuses and names the way in (D8, D18).
-func requireIdentity(orchestrator orchestration.Orchestrator) error {
-	_, err := orchestrator.Identity.Who()
+// requireLogin is the gate in front of every command that acts for a user:
+// without a login on this machine it refuses and names the way in (D25).
+func requireLogin(orchestrator orchestration.Orchestrator) error {
+	logins, err := orchestrator.Credentials.Logins()
 	if err != nil {
-		return refusal.New(err.Error())
+		return err
+	}
+	if len(logins) == 0 {
+		return refusal.New("not logged in; run rein login, which opens the GitHub device flow")
 	}
 	return nil
 }
@@ -135,6 +162,6 @@ func newRootCommand(environment *commandEnvironment) *cobra.Command {
 	root.SetOut(environment.out)
 	root.SetErr(environment.errOut)
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newStatusCommand(environment), newOrgCommand(environment), newTeamCommand(environment), newProjectCommand(environment), newInitCommand(environment), newSyncCommand(environment), newDistillCommand(environment), newProposeCommand(environment), newResolveCommand(environment), newRestoreCommand(environment), newLintCommand(environment), newResetCommand(environment), newVersionCommand(environment))
+	root.AddCommand(newStatusCommand(environment), newLoginCommand(environment), newLogoutCommand(environment), newGitCredentialCommand(environment), newOrgCommand(environment), newTeamCommand(environment), newProjectCommand(environment), newInitCommand(environment), newSyncCommand(environment), newDistillCommand(environment), newProposeCommand(environment), newResolveCommand(environment), newRestoreCommand(environment), newLintCommand(environment), newResetCommand(environment), newVersionCommand(environment))
 	return root
 }

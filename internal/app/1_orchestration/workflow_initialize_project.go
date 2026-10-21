@@ -79,10 +79,10 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 	var registration machine.ProjectClone
 	steps := []Step{
 		{
-			Name: "bind",
+			Name: "binding the project record",
 			Do: func() error {
 				var err error
-				result.Address, result.Created, result.Bound, err = bindProject(orchestrator, request, organization.Slug, orgClonePath, location)
+				result.Address, result.Created, result.Bound, err = bindProject(orchestrator, request, organization, orgClonePath, location)
 				return err
 			},
 		},
@@ -92,7 +92,7 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 		moveOut := MoveOut{Agent: agent.Name()}
 		steps = append(steps,
 			Step{
-				Name: "snapshot " + agent.Name(),
+				Name: "snapshotting the files of " + agent.Name(),
 				Do: func() error {
 					moveOut.Paths = services.WorkingCopy.Present(location.Folder, agent.ProjectHarnessPaths())
 					if len(moveOut.Paths) == 0 {
@@ -116,7 +116,7 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 				Undo: func() error { return services.Snapshots.Remove(moveOut.SnapshotPath) },
 			},
 			Step{
-				Name: "move out " + agent.Name(),
+				Name: "moving the files of " + agent.Name() + " out",
 				Do: func() error {
 					if len(moveOut.Paths) == 0 {
 						return nil
@@ -131,7 +131,7 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 				Undo: func() error { return services.WorkingCopy.Restore(location.Folder, moveOut.files) },
 			},
 			Step{
-				Name: "ledger " + agent.Name(),
+				Name: "recording the removals of " + agent.Name(),
 				Do: func() error {
 					if len(moveOut.Paths) == 0 {
 						return nil
@@ -148,7 +148,7 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 	}
 	steps = append(steps,
 		Step{
-			Name: "ignore block",
+			Name: "writing the .gitignore block",
 			Do: func() error {
 				var err error
 				result.IgnoreChanged, err = services.WorkingCopy.WriteIgnoreBlock(location.Folder, ignoreEntries(services))
@@ -162,7 +162,7 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 			},
 		},
 		Step{
-			Name: "register",
+			Name: "registering the clone",
 			Do: func() error {
 				registration = machine.ProjectClone{Organization: organization.ID, Address: result.Address, ClonePath: location.Folder, Fingerprint: strings.Join(location.Fingerprint, ",")}
 				return services.Organizations.RegisterProjectClone(registration)
@@ -170,7 +170,7 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 			Undo: func() error { return services.Organizations.UnregisterProjectClone(location.Folder) },
 		},
 	)
-	err = runSteps(steps)
+	err = runSteps(services.Progress, steps)
 	if err != nil {
 		return InitializeResult{}, err
 	}
@@ -200,8 +200,9 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 // bindProject makes sure a project record carries the clone's fingerprint
 // and path: it finds the one that already does, creates one, or writes the
 // fingerprint into the named one and publishes it.
-func bindProject(orchestrator Orchestrator, request InitializeProjectRequest, organizationSlug string, orgClonePath string, location workingcopy.Location) (address string, created bool, bound bool, err error) {
+func bindProject(orchestrator Orchestrator, request InitializeProjectRequest, organization machine.OrganizationRef, orgClonePath string, location workingcopy.Location) (address string, created bool, bound bool, err error) {
 	services := orchestrator.Services
+	organizationSlug := organization.Slug
 	if request.Create != nil {
 		create := *request.Create
 		create.Organization = request.Organization
@@ -213,7 +214,7 @@ func bindProject(orchestrator Orchestrator, request InitializeProjectRequest, or
 		}
 		return projectAddress(organizationSlug, result.Slug), true, true, nil
 	}
-	err = services.Records.Pull(orgClonePath)
+	err = services.Records.Pull(accessOf(organization), orgClonePath)
 	if err != nil {
 		return "", false, false, err
 	}
@@ -250,7 +251,7 @@ func bindProject(orchestrator Orchestrator, request InitializeProjectRequest, or
 	if err != nil {
 		return "", false, false, err
 	}
-	err = services.Records.Publish(orgClonePath, []string{relativePath}, fmt.Sprintf("project %s bound to its repository (rein init)", project.Slug))
+	err = services.Records.Publish(accessOf(organization), orgClonePath, []string{relativePath}, fmt.Sprintf("project %s bound to its repository (rein init)", project.Slug))
 	if err != nil {
 		discardErr := services.Records.Discard(orgClonePath)
 		if discardErr != nil {

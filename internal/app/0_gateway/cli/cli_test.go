@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Danidani23/agents-rein/internal/adapters/fake"
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
@@ -59,11 +60,12 @@ type harness struct {
 	agent      *fake.Agent
 	judge      *fake.Judge
 	lock       *fake.Lock
+	keychain   *fake.Keychain
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
-	return &harness{
+	fixture := &harness{
 		home:       t.TempDir(),
 		host:       &fake.Host{Login: "Danidani23"},
 		repository: &fake.Repository{Record: validRecord},
@@ -71,11 +73,14 @@ func newHarness(t *testing.T) *harness {
 		agent:      &fake.Agent{Present: true, HomePath: t.TempDir()},
 		judge:      &fake.Judge{Unavailable: "no judge in this test"},
 		lock:       &fake.Lock{},
+		keychain:   &fake.Keychain{Tokens: map[string]ports.Token{"Danidani23": {Login: "Danidani23", AccessToken: "token-of-Danidani23", ExpiresAt: time.Now().Add(time.Hour)}}},
 	}
+	fixture.state.Current.Logins = []string{"Danidani23"}
+	return fixture
 }
 
 func (fixture *harness) orchestrate() (orchestration.Orchestrator, error) {
-	return orchestration.New(orchestration.NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock)), nil
+	return orchestration.New(orchestration.NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock, fixture.keychain)), nil
 }
 
 // seedConnectedOrganization leaves the state as a connect of acme would, with a clone folder
@@ -127,9 +132,9 @@ func writeFile(t *testing.T, root string, relative string, content string) {
 func TestExitCodes(t *testing.T) {
 	t.Run("a refusal exits 1", func(t *testing.T) {
 		fixture := newHarness(t)
-		fixture.host = &fake.Host{}
+		fixture.state.Current.Logins = nil
 		code, _, errOut := fixture.run("org", "list")
-		if code != ExitRefused || !strings.Contains(errOut, "rein: gh is not logged in") {
+		if code != ExitRefused || !strings.Contains(errOut, "rein: not logged in") {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
 	})
@@ -189,12 +194,12 @@ func TestLint(t *testing.T) {
 }
 
 func TestOrg(t *testing.T) {
-	t.Run("every org command passes the identity gate first", func(t *testing.T) {
+	t.Run("every org command passes the login gate first", func(t *testing.T) {
 		fixture := newHarness(t)
-		fixture.host = &fake.Host{}
+		fixture.state.Current.Logins = nil
 		for _, arguments := range [][]string{{"org", "connect", "x"}, {"org", "list"}, {"org", "use", "acme"}, {"org", "disconnect", "acme"}} {
 			code, _, errOut := fixture.run(arguments...)
-			if code != ExitRefused || !strings.Contains(errOut, "gh auth login") {
+			if code != ExitRefused || !strings.Contains(errOut, "rein login") {
 				t.Fatalf("%v: code %d err %q", arguments, code, errOut)
 			}
 		}
@@ -251,18 +256,18 @@ func TestStatus(t *testing.T) {
 		fixture.state.Current.Organizations = []machine.OrganizationRef{{Slug: "acme", Remote: "r"}}
 		fixture.state.Current.Active = "acme"
 		code, out, _ := fixture.run("status")
-		for _, expected := range []string{"github      Danidani23  (active gh account; slug danidani23)", "agents      fake-agent", "placements  1", "missing  import", "1 targets are missing", "* acme  r"} {
+		for _, expected := range []string{"logins      Danidani23", "agents      fake-agent", "placements  1", "missing  import", "1 targets are missing", "* acme  r"} {
 			if code != ExitWorked || !strings.Contains(out, expected) {
 				t.Fatalf("missing %q: code %d out %q", expected, code, out)
 			}
 		}
 	})
-	t.Run("a logged-out identity is shown, not refused", func(t *testing.T) {
+	t.Run("a machine without a login is shown, not refused", func(t *testing.T) {
 		fixture := newHarness(t)
-		fixture.host = &fake.Host{}
+		fixture.state.Current.Logins = nil
 		fixture.agent.Present = false
 		code, out, _ := fixture.run("status")
-		if code != ExitWorked || !strings.Contains(out, "github      none: gh is not logged in") || !strings.Contains(out, "agents      none found") {
+		if code != ExitWorked || !strings.Contains(out, "logins      none; run rein login") || !strings.Contains(out, "agents      none found") {
 			t.Fatalf("code %d out %q", code, out)
 		}
 	})
@@ -357,7 +362,7 @@ func TestOrgCreate(t *testing.T) {
 	t.Run("with flags and --yes it creates, protects and connects, and prints each step", func(t *testing.T) {
 		fixture := newHarness(t)
 		code, out, errOut := fixture.run("org", "create", "--name", "Acme Corp", "--yes")
-		if code != ExitWorked || !strings.Contains(out, "created Danidani23/acme-corp-agent-settings (private) at fake://Danidani23/acme-corp-agent-settings") || !strings.Contains(out, "protected main") || !strings.Contains(out, "connected acme-corp (Acme Corp) at "+filepath.Join(fixture.home, "orgs")) || !strings.Contains(out, "active organisation: acme-corp") {
+		if code != ExitWorked || !strings.Contains(out, "created Danidani23/acme-corp-agent-settings (private) at https://github.com/Danidani23/acme-corp-agent-settings.git") || !strings.Contains(out, "protected main") || !strings.Contains(out, "connected acme-corp (Acme Corp) at "+filepath.Join(fixture.home, "orgs")) || !strings.Contains(out, "active organisation: acme-corp") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
 		if len(fixture.host.Created) != 1 || fixture.host.Created[0].Owner != "Danidani23" || fixture.host.Created[0].Description != "Agent settings of Acme Corp" {
@@ -366,9 +371,10 @@ func TestOrgCreate(t *testing.T) {
 	})
 	t.Run("the questions are asked in order and Enter takes every default", func(t *testing.T) {
 		fixture := newHarness(t)
-		code, out, errOut := fixture.runInteractive("Acme Corp\n\n\n\n\n\n", "org", "create")
+		// host (Enter: github), name, repository, owner (Enter: the account), visibility, description, confirm
+		code, out, errOut := fixture.runInteractive("\nAcme Corp\n\n\n\n\n\n", "org", "create")
 		// the titles are styled, so the brackets are matched on their own
-		for _, expected := range []string{"Organisation name", "[acme-corp-agent-settings]", "[Danidani23]", "1) private", "[Agent settings of Acme Corp]", "This will create Danidani23/acme-corp-agent-settings (private)", "[Y/n]", "created Danidani23/acme-corp-agent-settings"} {
+		for _, expected := range []string{"1) github", "2) gitlab", "planned, not yet supported", "nothing of them goes to GitHub", "Organisation name", "[acme-corp-agent-settings]", "1) Danidani23  ", "your own account", "1) private", "[Agent settings of Acme Corp]", "This will create Danidani23/acme-corp-agent-settings (private) on GitHub as Danidani23", "[Y/n]", "created Danidani23/acme-corp-agent-settings"} {
 			if code != ExitWorked || !strings.Contains(out, expected) {
 				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 			}
@@ -376,7 +382,7 @@ func TestOrgCreate(t *testing.T) {
 	})
 	t.Run("a no changes nothing", func(t *testing.T) {
 		fixture := newHarness(t)
-		code, _, errOut := fixture.runInteractive("Acme\n\n\n\n\nn\n", "org", "create")
+		code, _, errOut := fixture.runInteractive("\nAcme\n\n\n\n\nn\n", "org", "create")
 		if code != ExitRefused || !strings.Contains(errOut, "nothing changed") || len(fixture.host.Created) != 0 {
 			t.Fatalf("code %d err %q created %v", code, errOut, fixture.host.Created)
 		}
@@ -400,11 +406,11 @@ func TestOrgCreate(t *testing.T) {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
 	})
-	t.Run("the identity gate holds", func(t *testing.T) {
+	t.Run("the login gate holds without a terminal", func(t *testing.T) {
 		fixture := newHarness(t)
-		fixture.host = &fake.Host{}
+		fixture.state.Current.Logins = nil
 		code, _, errOut := fixture.run("org", "create", "--name", "Acme", "--yes")
-		if code != ExitRefused || !strings.Contains(errOut, "gh auth login") {
+		if code != ExitRefused || !strings.Contains(errOut, "rein login") {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
 	})
@@ -549,7 +555,7 @@ func TestPropose(t *testing.T) {
 		t.Fatalf("code %d err %q", code, errOut)
 	}
 	code, out, errOut := fixture.run("propose", folder, "--level", "organizations.acme", "--yes")
-	for _, expected := range []string{"proposed 1 declarations to organizations.acme on branch rein/propose-acme-", "new        rules/brief", "pull request: https://github.com/fake/pull/1"} {
+	for _, expected := range []string{"proposed 1 declarations to organizations.acme on branch rein/propose-acme-", "new        rules/brief", "pull request: https://github.com/Danidani23/acme-agent-settings/pull/1"} {
 		if code != ExitWorked || !strings.Contains(out, expected) {
 			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 		}

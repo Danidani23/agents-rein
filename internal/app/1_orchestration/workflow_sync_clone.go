@@ -118,7 +118,7 @@ func syncOne(orchestrator Orchestrator, clone machine.ProjectClone, request Sync
 	if err != nil {
 		return synced, err
 	}
-	err = services.Records.Pull(orgClonePath)
+	err = services.Records.Pull(accessOf(organization), orgClonePath)
 	if err != nil {
 		synced.Notes = append(synced.Notes, "the org repository could not be pulled; synced from the clone as it was: "+err.Error())
 	}
@@ -127,7 +127,7 @@ func syncOne(orchestrator Orchestrator, clone machine.ProjectClone, request Sync
 		return synced, err
 	}
 	projectSlug := path.Base(strings.ReplaceAll(clone.Address, ".", "/"))
-	context, found := resolve.ContextOf(tree, projectSlug, userSlugOf(services), services.Clock())
+	context, found := resolve.ContextOf(tree, projectSlug, userSlugOf(organization), services.Clock())
 	if !found {
 		return synced, refusal.New(fmt.Sprintf("the project record %s is gone from the org repository; rein restore puts the clone back", clone.Address))
 	}
@@ -214,9 +214,9 @@ func writeHarness(orchestrator Orchestrator, clone machine.ProjectClone, organiz
 	sort.Strings(stale)
 	var previousContents map[string]string
 	var alwaysOn strings.Builder
-	err = runSteps([]Step{
+	err = runSteps(services.Progress, []Step{
 		{
-			Name: "remove stale",
+			Name: "removing stale files",
 			Do: func() error {
 				if len(stale) == 0 {
 					return nil
@@ -231,7 +231,7 @@ func writeHarness(orchestrator Orchestrator, clone machine.ProjectClone, organiz
 			},
 		},
 		{
-			Name: "write",
+			Name: "writing the harness",
 			Do: func() error {
 				var err error
 				previousContents, err = services.WorkingCopy.WriteFiles(clone.ClonePath, files)
@@ -253,7 +253,7 @@ func writeHarness(orchestrator Orchestrator, clone machine.ProjectClone, organiz
 			},
 		},
 		{
-			Name: "record",
+			Name: "recording the inserts",
 			Do:   func() error { return services.Ledger.RecordInserts(organization.ID, clone.ClonePath, inserts) },
 		},
 	})

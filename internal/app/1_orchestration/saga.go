@@ -29,20 +29,30 @@ func (err *CompensationError) Unwrap() error {
 	return err.Cause
 }
 
-// runSteps performs the steps in order. When one fails, the Undo of every
-// completed step runs in reverse order, and the step's error is returned,
-// wrapped when a compensation failed as well.
-func runSteps(steps []Step) error {
+// runSteps performs the steps in order, reporting each as it starts
+// through progress, which may be nil. When one fails, the Undo of every
+// completed step runs in reverse order, each reported, and the step's error
+// is returned, wrapped when a compensation failed as well. Nothing a
+// workflow does is silent (P2.25).
+func runSteps(progress func(string), steps []Step) error {
+	report := func(message string) {
+		if progress != nil {
+			progress(message)
+		}
+	}
 	for index, step := range steps {
+		report(step.Name)
 		err := step.Do()
 		if err == nil {
 			continue
 		}
+		report("failed: " + err.Error())
 		var failures []string
 		for undo := index - 1; undo >= 0; undo-- {
 			if steps[undo].Undo == nil {
 				continue
 			}
+			report("undoing: " + steps[undo].Name)
 			undoErr := steps[undo].Undo()
 			if undoErr != nil {
 				failures = append(failures, steps[undo].Name+": "+undoErr.Error())

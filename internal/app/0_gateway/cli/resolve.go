@@ -38,7 +38,7 @@ func runResolve(environment *commandEnvironment, organization string, project st
 	if err != nil {
 		return err
 	}
-	err = requireIdentity(orchestrator)
+	err = requireLogin(orchestrator)
 	if err != nil {
 		return err
 	}

@@ -25,51 +25,110 @@ type NewRepository struct {
 	Private     bool
 }
 
-// PullRequest describes a pull request to open from a branch of a clone.
+// RepositoryInfo is what the host says about owner/name.
+type RepositoryInfo struct {
+	Exists   bool
+	Empty    bool
+	CloneURL string
+}
+
+// PullRequest describes a pull request to open from a pushed branch.
 type PullRequest struct {
 	Branch string
 	Title  string
 	Body   string
 }
 
-// Host is the forge that holds org repositories and identities.
+// Token is what the host handed rein for one login through the app's
+// device flow (D25): it acts as that user and expires, with a refresh
+// token to renew it. It lives in the keychain only.
+type Token struct {
+	Login            string    `json:"login"`
+	AccessToken      string    `json:"access_token"`
+	RefreshToken     string    `json:"refresh_token,omitempty"`
+	ExpiresAt        time.Time `json:"expires_at,omitempty"`
+	RefreshExpiresAt time.Time `json:"refresh_expires_at,omitempty"`
+}
+
+// Expired says whether the access token is past use, with a minute to spare.
+func (token Token) Expired(now time.Time) bool {
+	return !token.ExpiresAt.IsZero() && token.ExpiresAt.Before(now.Add(time.Minute))
+}
+
+// DeviceCode is the first step of the device flow: the code the user types
+// at the verification address.
+type DeviceCode struct {
+	DeviceCode      string
+	UserCode        string
+	VerificationURI string
+	Interval        time.Duration
+	ExpiresAt       time.Time
+}
+
+// RemoteAccess says which login's token a git operation on a remote uses.
+type RemoteAccess struct {
+	Login string
+}
+
+// Host is the forge that holds org repositories and identities, reached
+// through its API with a token of the app (D25). Rein never deletes a
+// repository (D26).
 type Host interface {
-	// Identity returns the active account, or an error that says how to log in.
-	Identity() (Identity, error)
-	// GitProtocol is what the user's host tooling clones and pushes with,
-	// "ssh" or "https".
-	GitProtocol() (string, error)
-	// CreateRepository creates the repository and returns the remote URL to
-	// push to and clone from.
-	CreateRepository(repository NewRepository) (remote string, err error)
-	// DeleteRepository deletes owner/name: the compensation of a failed create.
-	DeleteRepository(owner string, name string) error
+	// Name is the host's slug, github.
+	Name() string
+	// StartDeviceFlow asks the host for a code the user approves.
+	StartDeviceFlow() (DeviceCode, error)
+	// PollDeviceFlow asks once whether the user approved; pending while not.
+	PollDeviceFlow(code DeviceCode) (token Token, pending bool, err error)
+	// RefreshToken renews an expired token.
+	RefreshToken(token Token) (Token, error)
+	// Identity is the user the token acts as.
+	Identity(accessToken string) (Identity, error)
+	// Owners lists where the user may create repositories: the login and
+	// the organisations it belongs to that the app reaches.
+	Owners(accessToken string) ([]string, error)
+	// Repository describes owner/name.
+	Repository(accessToken string, owner string, name string) (RepositoryInfo, error)
+	// CreateRepository creates the repository and returns its clone URL.
+	CreateRepository(accessToken string, repository NewRepository) (cloneURL string, err error)
 	// ProtectMainBranch requires a pull request with a code-owner review on
 	// the default branch, administrators excepted (D13). A host that refuses
 	// it for the account's plan returns the reason and no error.
-	ProtectMainBranch(owner string, name string) (refusedReason string, err error)
-	// CreatePullRequest opens a pull request for the pushed branch of the
-	// clone at directory, against its default branch, and returns its URL.
-	CreatePullRequest(directory string, request PullRequest) (url string, err error)
+	ProtectMainBranch(accessToken string, owner string, name string) (refusedReason string, err error)
+	// CreatePullRequest opens a pull request for a pushed branch.
+	CreatePullRequest(accessToken string, owner string, name string, request PullRequest) (url string, err error)
+	// InstallURL is where a user installs the app on an account.
+	InstallURL() string
 }
 
-// Repository is version control on this machine.
+// Keychain keeps the tokens, one per login, in the operating system's own
+// store; rein's files never hold one (D22, D25).
+type Keychain interface {
+	// Available says whether this machine has a keychain rein can use, or why not.
+	Available() (reason string, ok bool)
+	Store(token Token) error
+	Load(login string) (token Token, found bool, err error)
+	Delete(login string) error
+}
+
+// Repository is version control on this machine. Operations on a remote
+// take the login whose token authenticates them.
 type Repository interface {
 	// Preflight checks that version control is installed, before anything
 	// changes.
 	Preflight() error
 	// Clone clones remote into directory, which must not exist, without ever
 	// prompting.
-	Clone(remote string, directory string) error
+	Clone(access RemoteAccess, remote string, directory string) error
 	// Publish makes directory a repository on main with one commit of
 	// everything in it, and pushes it to remote as origin.
-	Publish(directory string, remote string, message string) error
+	Publish(access RemoteAccess, directory string, remote string, message string) error
 	// Pull brings a clone up to date with its origin, fast-forward only.
-	Pull(directory string) error
+	Pull(access RemoteAccess, directory string) error
 	// CommitPaths commits the given paths, relative to directory, as one commit.
 	CommitPaths(directory string, relativePaths []string, message string) error
 	// Push pushes the clone's main to its origin.
-	Push(directory string) error
+	Push(access RemoteAccess, directory string) error
 	// ResetToRemote discards every local change and commit, back to origin's main.
 	ResetToRemote(directory string) error
 	// Root is the top folder of the repository that holds directory.
@@ -93,9 +152,9 @@ type Repository interface {
 	// DeleteBranch deletes a local branch, merged or not.
 	DeleteBranch(directory string, branch string) error
 	// PushBranch pushes a branch to origin.
-	PushBranch(directory string, branch string) error
+	PushBranch(access RemoteAccess, directory string, branch string) error
 	// DeleteRemoteBranch deletes a branch on origin.
-	DeleteRemoteBranch(directory string, branch string) error
+	DeleteRemoteBranch(access RemoteAccess, directory string, branch string) error
 }
 
 // Agent is one coding agent rein writes settings for.

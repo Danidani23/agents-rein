@@ -54,11 +54,11 @@ func (orchestrator Orchestrator) ProposeDeclarations(request ProposeRequest) (Pr
 		level = candidates.Report.Level
 	}
 	if level == "" {
-		who, err := services.Identity.Who()
+		organization, _, err := resolveOrganization(services, request.Organization)
 		if err != nil {
-			return ProposeResult{}, refusal.New(err.Error())
+			return ProposeResult{}, err
 		}
-		level = "users." + who.Slug
+		level = "users." + userSlugOf(organization)
 	}
 	parsedLevel, err := address.Parse(level)
 	if err != nil || parsedLevel.IsDeclaration() {
@@ -68,13 +68,21 @@ func (orchestrator Orchestrator) ProposeDeclarations(request ProposeRequest) (Pr
 	if err != nil {
 		return ProposeResult{}, err
 	}
+	if organization.Owner == "" || organization.Repository == "" {
+		return ProposeResult{}, refusal.New(fmt.Sprintf("the org repository of %s is not on GitHub (%s); a pull request needs one", organization.Slug, organization.Remote))
+	}
+	accessToken, err := services.Credentials.AccessToken(organization.Login)
+	if err != nil {
+		return ProposeResult{}, err
+	}
+	access := accessOf(organization)
 	levelPath := strings.ReplaceAll(level, ".", "/")
 	grouped := groupCandidates(candidates.Files)
 	err = lintCandidates(levelPath, candidates.Files)
 	if err != nil {
 		return ProposeResult{}, err
 	}
-	err = services.Records.Pull(orgClonePath)
+	err = services.Records.Pull(access, orgClonePath)
 	if err != nil {
 		return ProposeResult{}, err
 	}
@@ -100,7 +108,7 @@ func (orchestrator Orchestrator) ProposeDeclarations(request ProposeRequest) (Pr
 		return ProposeResult{}, refusal.New("nothing new to propose: every candidate is identical to a declaration the organisation has")
 	}
 	if strings.HasPrefix(level, "users.") {
-		userRecord, err := userRecordIfMissing(orgClonePath, levelPath, strings.TrimPrefix(level, "users."), services)
+		userRecord, err := userRecordIfMissing(orgClonePath, levelPath, strings.TrimPrefix(level, "users."), organization, services)
 		if err != nil {
 			return ProposeResult{}, err
 		}
@@ -115,20 +123,20 @@ func (orchestrator Orchestrator) ProposeDeclarations(request ProposeRequest) (Pr
 	}
 	body := pullRequestBody(request.Source, level, result, candidates.Report)
 	pushed := false
-	err = runSteps([]Step{
+	err = runSteps(services.Progress, []Step{
 		{
-			Name: "branch",
+			Name: "branching the org repository",
 			Do:   func() error { return services.Proposals.Branch(orgClonePath, result.Branch) },
-			Undo: func() error { return services.Proposals.Abandon(orgClonePath, result.Branch, pushed) },
+			Undo: func() error { return services.Proposals.Abandon(access, orgClonePath, result.Branch, pushed) },
 		},
 		{
-			Name: "write and push",
+			Name: "writing and pushing the proposal",
 			Do: func() error {
 				relativePaths, err := services.Proposals.Write(orgClonePath, levelPath, files)
 				if err != nil {
 					return err
 				}
-				err = services.Proposals.Publish(orgClonePath, result.Branch, relativePaths, title+" (rein propose)")
+				err = services.Proposals.Publish(access, orgClonePath, result.Branch, relativePaths, title+" (rein propose)")
 				if err != nil {
 					return err
 				}
@@ -137,10 +145,10 @@ func (orchestrator Orchestrator) ProposeDeclarations(request ProposeRequest) (Pr
 			},
 		},
 		{
-			Name: "pull request",
+			Name: "opening the pull request",
 			Do: func() error {
 				var err error
-				result.PullRequestURL, err = services.Proposals.OpenPullRequest(orgClonePath, ports.PullRequest{Branch: result.Branch, Title: title, Body: body})
+				result.PullRequestURL, err = services.Proposals.OpenPullRequest(accessToken, organization.Owner, organization.Repository, ports.PullRequest{Branch: result.Branch, Title: title, Body: body})
 				return err
 			},
 		},
@@ -239,15 +247,12 @@ func lintCandidates(levelPath string, files map[string]string) error {
 
 // userRecordIfMissing adds the user's record to the proposal when the org
 // repository has none yet, so the level exists.
-func userRecordIfMissing(orgClonePath string, levelPath string, userSlug string, services Services) (map[string]string, error) {
+func userRecordIfMissing(orgClonePath string, levelPath string, userSlug string, organization machine.OrganizationRef, services Services) (map[string]string, error) {
 	_, err := os.Stat(filepath.Join(orgClonePath, "declarations", filepath.FromSlash(levelPath), "user.yaml"))
 	if err == nil {
 		return nil, nil
 	}
-	who, err := services.Identity.Who()
-	if err != nil {
-		return nil, refusal.New(err.Error())
-	}
+	who := ports.Identity{Login: organization.Login, Slug: userSlugOf(organization)}
 	if who.Slug != userSlug {
 		return nil, refusal.New(fmt.Sprintf("the level users.%s is not yours (%s); a user's level is proposed by that user", userSlug, who.Slug))
 	}

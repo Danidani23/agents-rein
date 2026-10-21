@@ -110,17 +110,17 @@ func (Service) Write(orgClonePath string, levelPath string, files map[string]str
 }
 
 // Publish commits the paths on the branch and pushes it.
-func (service Service) Publish(orgClonePath string, branch string, relativePaths []string, message string) error {
+func (service Service) Publish(access ports.RemoteAccess, orgClonePath string, branch string, relativePaths []string, message string) error {
 	err := service.Repository.CommitPaths(orgClonePath, relativePaths, message)
 	if err != nil {
 		return err
 	}
-	return service.Repository.PushBranch(orgClonePath, branch)
+	return service.Repository.PushBranch(access, orgClonePath, branch)
 }
 
 // OpenPullRequest opens the pull request for the pushed branch.
-func (service Service) OpenPullRequest(orgClonePath string, request ports.PullRequest) (url string, err error) {
-	return service.Host.CreatePullRequest(orgClonePath, request)
+func (service Service) OpenPullRequest(accessToken string, owner string, name string, request ports.PullRequest) (url string, err error) {
+	return service.Host.CreatePullRequest(accessToken, owner, name, request)
 }
 
 // BackToMain leaves the clone on main without the branch, which lives on in
@@ -135,7 +135,7 @@ func (service Service) BackToMain(orgClonePath string, branch string) error {
 
 // Abandon throws the branch away, locally and, when pushed, on the remote,
 // and puts the clone back on main as the remote has it: the compensation.
-func (service Service) Abandon(orgClonePath string, branch string, pushed bool) error {
+func (service Service) Abandon(access ports.RemoteAccess, orgClonePath string, branch string, pushed bool) error {
 	var failures []string
 	err := service.Repository.ResetToRemote(orgClonePath)
 	if err != nil {
@@ -150,7 +150,7 @@ func (service Service) Abandon(orgClonePath string, branch string, pushed bool) 
 		failures = append(failures, err.Error())
 	}
 	if pushed {
-		err = service.Repository.DeleteRemoteBranch(orgClonePath, branch)
+		err = service.Repository.DeleteRemoteBranch(access, orgClonePath, branch)
 		if err != nil {
 			failures = append(failures, err.Error())
 		}
