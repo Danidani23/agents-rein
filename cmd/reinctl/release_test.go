@@ -212,3 +212,16 @@ func TestRunExitCodes(t *testing.T) {
 		t.Fatalf("unknown command: %d %q", code, errOut.String())
 	}
 }
+
+// TestBuildOutputIsIgnored guards the next release: GoReleaser writes its
+// archives under dist/, and an untracked dist/ would make release refuse
+// the tree as unclean.
+func TestBuildOutputIsIgnored(t *testing.T) {
+	ignore, err := os.ReadFile(filepath.Join("..", "..", ".gitignore"))
+	if err != nil {
+		t.Fatalf("gitignore: %v", err)
+	}
+	if !strings.Contains("\n"+string(ignore), "\n/dist/\n") {
+		t.Fatalf(".gitignore does not ignore /dist/, where the publish writes its archives")
+	}
+}
