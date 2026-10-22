@@ -16,7 +16,7 @@ import (
 func newProjectCommand(environment *commandEnvironment) *cobra.Command {
 	project := &cobra.Command{
 		Use:   "project",
-		Short: "Create projects in an organisation",
+		Short: "Create, list and edit the projects of an organisation",
 		Long: "A project is a record in the org repository, declarations/organizations/<org>/projects/<slug>/project.yaml,\n" +
 			"with an id, a slug, a name, a description, the teams it belongs to, its labels from the\n" +
 			"registry (language, kind, data) and, in a monorepo, its path. rein init later binds a clone\n" +

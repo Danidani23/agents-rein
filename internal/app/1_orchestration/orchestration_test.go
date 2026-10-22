@@ -28,6 +28,7 @@ type harness struct {
 	state      *fake.State
 	agent      *fake.Agent
 	judge      *fake.Judge
+	releases   *fake.Releases
 	lock       *fake.Lock
 	keychain   *fake.Keychain
 }
@@ -41,6 +42,7 @@ func newHarness(t *testing.T) *harness {
 		state:      fake.NewState(),
 		agent:      &fake.Agent{Present: true, HomePath: t.TempDir()},
 		judge:      &fake.Judge{Unavailable: "no judge in this test"},
+		releases:   &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}},
 		lock:       &fake.Lock{},
 		keychain:   &fake.Keychain{Tokens: map[string]ports.Token{"Danidani23": {Login: "Danidani23", AccessToken: "token-of-Danidani23", ExpiresAt: time.Now().Add(time.Hour)}}},
 	}
@@ -49,7 +51,7 @@ func newHarness(t *testing.T) *harness {
 }
 
 func (fixture *harness) orchestrator() Orchestrator {
-	return New(NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock, fixture.keychain))
+	return New(NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock, fixture.keychain, fixture.releases, "v0.1.0", filepath.Join(fixture.home, "bin", "rein")))
 }
 
 func (fixture *harness) orgCloneFolders(t *testing.T) []string {

@@ -25,10 +25,41 @@ GitHub account, and the agents on your machine are detected.
 | `rein lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, skills that share a name, and in an org repository every record: organisation, teams, projects, users and the label registry, with their references. Needs no identity, so CI runs it on an org repository. |
 | `rein restore` | Reverses `init` for one clone: the files it moved out come back from their snapshots, the rein block leaves `.gitignore`, the clone is forgotten on this machine, and the put-back is committed as the move-out was. |
 | `rein reset` | Restores every initialised project first, then removes everything rein placed into an agent's home, forgets the organisations and deletes their clones, and removes the ledger, the snapshots and the proposals: the machine as before rein. A restore that fails stops it before anything is wiped. |
+| `rein update` | Asks GitHub for the latest release. A rein installed by Homebrew, Scoop or `go install` is updated by that tool, and `update` prints its command; a rein from the install script is replaced by rein itself after the archive passed the release's checksum. `--check` only reports. `sync` and `status` print one line when a newer release exists, at most once a day; an organisation's `minimum_rein_version` makes an older rein refuse to `sync`. |
 | `rein version` | Prints the version. |
 
 Planned, in the board's order: `rein import` and `rein export`, which move a level into and
-out of an org repository; `rein review`; `rein migrate`; `rein update`.
+out of an org repository; `rein review`; `rein migrate`.
+
+## Installing and releasing
+
+A release is cut by hand, with `task rein:release`, which runs `reinctl release`, the operator
+CLI of this repository under `cmd/reinctl`. It reads the conventional commits since the last
+tag, a breaking change raising the major version, a `feat` the minor, a `fix` or a `perf` the
+patch, and nothing else releasing; refuses off `main`, on a dirty tree, when `main` is not what
+`origin` has, and when the tag exists; runs the gate before anything changes; then writes the
+section into `CHANGELOG.md`, commits `chore(release): vX.Y.Z`, tags, and pushes `main` and the
+tag; then GoReleaser builds rein for macOS, Linux and Windows on amd64 and arm64 on the same
+machine, and publishes the GitHub Release with the archives and a checksum file, with the token
+`gh` holds, handed to the build for that run and never written anywhere. The Homebrew cask goes
+into `Danidani23/homebrew-tap` and the Scoop manifest into `Danidani23/scoop-bucket` when both
+repositories exist; otherwise they are skipped and said so. Everything happens on the machine
+and nothing on the host: no workflow, no secret on GitHub. `task rein:publish` repeats the last
+step for a release whose publish failed after the tag was pushed. The doors, all pointing at
+the release:
+
+| How | Command |
+|---|---|
+| the script, macOS and Linux | `curl -fsSL https://raw.githubusercontent.com/Danidani23/agents-rein/main/install.sh \| sh` |
+| the script, Windows | `irm https://raw.githubusercontent.com/Danidani23/agents-rein/main/install.ps1 \| iex` |
+| Homebrew | `brew install --cask Danidani23/tap/rein` |
+| Scoop | `scoop bucket add danidani23 https://github.com/Danidani23/scoop-bucket` then `scoop install rein` |
+| Go | `go install github.com/Danidani23/agents-rein/cmd/rein@latest` |
+
+`REIN_VERSION` pins the script to a release, `REIN_INSTALL_DIR` changes where it puts the
+binary. The binaries are not signed yet; the cask removes macOS's quarantine flag at install,
+and the script's download carries none. `task rein:release-check` validates the GoReleaser
+configuration, and runs as part of the gate before every release.
 
 The reasoning is the [ADR](docs/decisions/2026-10-11_harness-tool-compiler-and-linter.md); the
 design, the decisions and what is next are on the

@@ -1,0 +1,93 @@
+# The release of rein, run by reinctl release from the maintainer's machine:
+# every platform, a GitHub Release with checksums, and the cask and the
+# manifest for the package managers (P2.8).
+version: 2
+
+project_name: rein
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: rein
+    main: ./cmd/rein
+    binary: rein
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/Danidani23/agents-rein/internal/version.tagged=v{{ .Version }}
+
+archives:
+  - id: rein
+    ids: [rein]
+    name_template: "rein_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "rein_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs"
+      - "^test"
+      - "^chore"
+
+release:
+  github:
+    owner: Danidani23
+    name: agents-rein
+  # a publish run again for the same tag replaces what the first left
+  mode: replace
+  draft: false
+  prerelease: auto
+  header: |
+    Install or update: `rein update` on a script install, `brew upgrade rein`, `scoop update rein`,
+    or `curl -fsSL https://raw.githubusercontent.com/Danidani23/agents-rein/main/install.sh | sh`.
+
+# The tap and the bucket are written only when reinctl found their
+# repositories and set the token; without it, the release still happens.
+homebrew_casks:
+  - name: rein
+    ids: [rein]
+    repository:
+      owner: Danidani23
+      name: homebrew-tap
+      token: '{{ index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}'
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
+    directory: Casks
+    homepage: https://github.com/Danidani23/agents-rein
+    description: Keeps the settings of AI coding agents in one repository per organisation and brings them to every project
+    # the binary is not signed yet, so the quarantine flag comes off at install
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/rein"]
+          end
+
+scoops:
+  - name: rein
+    ids: [rein]
+    repository:
+      owner: Danidani23
+      name: scoop-bucket
+      token: '{{ index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}'
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
+    homepage: https://github.com/Danidani23/agents-rein
+    description: Keeps the settings of AI coding agents in one repository per organisation and brings them to every project
+    license: Apache-2.0

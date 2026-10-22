@@ -26,8 +26,8 @@ flowchart TB
             runner["saga runner"]
         end
         subgraph services["2_services"]
-            svc["services<br/>credentials, organizations, clones, placements, hosting, snapshots, records, workingcopy, ledger, proposalfiles, proposals, judge"]
-            libs["libraries<br/>address, declaration, lint, exchange, machine, refusal, scaffold, distill, proposal, resolve, compile"]
+            svc["services<br/>credentials, organizations, clones, placements, hosting, snapshots, records, workingcopy, ledger, proposalfiles, proposals, judge, updates"]
+            libs["libraries<br/>address, declaration, lint, exchange, machine, refusal, scaffold, distill, proposal, resolve, compile, semver"]
         end
     end
     ports["internal/ports<br/>Host, Repository, Agent, State, Prompter, Judge, MachineLock, Keychain"]
@@ -51,10 +51,11 @@ flowchart TB
 | Layer | Folder | Holds | May import |
 |---|---|---|---|
 | Composition root | `cmd/rein` | `main` and `wire`, the one place that knows every adapter | everything |
+| Operator CLI | `cmd/reinctl` | what a maintainer runs on this repository, `release`; never shipped to users, wraps the git commands the human runs | `adapters/execute` |
 | Gateway | `internal/app/0_gateway/cli` | cobra commands: read flags, ask through the prompter, call, print, map errors to exit codes | `1_orchestration`, `ports`, the libraries, `adapters/terminal`, `adapters/execute`, `version` |
 | Orchestration | `internal/app/1_orchestration` | the one concrete `Orchestrator`, which embeds `Services`: the workflows, the queries, the saga runner, `NewServices` and `New` | `2_services`, `ports` |
 | Services | `internal/app/2_services/<service>` | one piece of state or one kind of side effect each, behind the ports | `ports`, the libraries |
-| Libraries | `internal/app/2_services/{address, declaration, lint, exchange, machine, refusal, scaffold, distill, proposal, resolve, compile}` | pure logic and data types, no I/O beyond reading or writing files they are pointed at | the other libraries |
+| Libraries | `internal/app/2_services/{address, declaration, lint, exchange, machine, refusal, scaffold, distill, proposal, resolve, compile, semver}` | pure logic and data types, no I/O beyond reading or writing files they are pointed at | the other libraries |
 | Ports | `internal/ports` | the interfaces at the edge and their data types | the libraries |
 | Adapters | `internal/adapters/<name>` | one implementation of a port each; `fake` holds the in-memory ones every layer's tests use | `ports`, the libraries, `adapters/execute` |
 

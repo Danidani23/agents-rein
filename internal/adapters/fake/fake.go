@@ -620,3 +620,33 @@ func (lock *Lock) Acquire(wait time.Duration) (func(), error) {
 	lock.Acquired++
 	return func() { lock.Released++ }, nil
 }
+
+// Releases is a fake source of rein's releases: Latest_ is what Latest
+// returns, Files what Download returns by URL, Fail an error for both.
+type Releases struct {
+	Latest_ ports.Release
+	Files   map[string][]byte
+	Fail    error
+	Calls   int
+}
+
+// Latest returns the configured release.
+func (releases *Releases) Latest() (ports.Release, error) {
+	releases.Calls++
+	if releases.Fail != nil {
+		return ports.Release{}, releases.Fail
+	}
+	return releases.Latest_, nil
+}
+
+// Download returns the configured bytes for the URL.
+func (releases *Releases) Download(url string) ([]byte, error) {
+	if releases.Fail != nil {
+		return nil, releases.Fail
+	}
+	content, found := releases.Files[url]
+	if !found {
+		return nil, errors.New("no such asset: " + url)
+	}
+	return content, nil
+}

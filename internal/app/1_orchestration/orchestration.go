@@ -25,6 +25,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/proposals"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/records"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/snapshots"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/updates"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/workingcopy"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
@@ -45,6 +46,9 @@ type Services struct {
 	ProposalFiles proposalfiles.Service
 	Proposals     proposals.Service
 	Judge         judge.Service
+	Updates       updates.Service
+	// ReinVersion is the running build, for the organisation's minimum.
+	ReinVersion string
 	// Lock is the machine lock a writing command holds from start to end.
 	Lock ports.MachineLock
 	// Progress is where a workflow reports each step; nil keeps it quiet.
@@ -59,8 +63,10 @@ type Services struct {
 // snapshots over the agents, the judge over its backend, which may be nil.
 // Nothing runs here; main calls it once with the real adapters and the
 // tests with the fakes.
-func NewServices(home string, host ports.Host, repository ports.Repository, state ports.State, agents []ports.Agent, judgeBackend ports.Judge, lock ports.MachineLock, keychain ports.Keychain) Services {
+func NewServices(home string, host ports.Host, repository ports.Repository, state ports.State, agents []ports.Agent, judgeBackend ports.Judge, lock ports.MachineLock, keychain ports.Keychain, releases ports.Releases, reinVersion string, executable string) Services {
 	return Services{
+		ReinVersion:   reinVersion,
+		Updates:       updates.Service{Home: home, Releases: releases, Current: reinVersion, Executable: executable, Clock: time.Now},
 		Home:          home,
 		Credentials:   credentials.Service{Keychain: keychain, Host: host, State: state, Clock: time.Now},
 		Organizations: organizations.Service{State: state, Clock: time.Now},

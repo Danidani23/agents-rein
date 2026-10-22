@@ -296,8 +296,10 @@ func newRootCommand(environment *commandEnvironment) *cobra.Command {
 			"organisation, at four levels: organisation, team, project and user. rein checks them,\n" +
 			"works out which apply to a project, and writes them into each clone in the form your\n" +
 			"agent reads. It is a compiler and a linter, never a service.\n\n" +
-			"Your identity is your GitHub account, read from the gh CLI, which must be installed and\n" +
-			"logged in. Start with rein org connect. rein status shows what has been set up. Every\n" +
+			"Your identity is your GitHub account: rein login signs you in through the Agents Rein app and\n" +
+			"keeps the token in your keychain. Start with rein org create, or rein org connect for an\n" +
+			"organisation that exists. rein status shows what has been set up, rein update keeps rein\n" +
+			"current. Every\n" +
 			"command explains itself with --help.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -305,6 +307,6 @@ func newRootCommand(environment *commandEnvironment) *cobra.Command {
 	root.SetOut(environment.out)
 	root.SetErr(environment.errOut)
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newStatusCommand(environment), newLoginCommand(environment), newLogoutCommand(environment), newGitCredentialCommand(environment), newOrgCommand(environment), newTeamCommand(environment), newProjectCommand(environment), newLabelCommand(environment), newDeclarationCommand(environment), newInitCommand(environment), newSyncCommand(environment), newDistillCommand(environment), newProposeCommand(environment), newResolveCommand(environment), newRestoreCommand(environment), newLintCommand(environment), newResetCommand(environment), newVersionCommand(environment))
+	root.AddCommand(newStatusCommand(environment), newLoginCommand(environment), newLogoutCommand(environment), newGitCredentialCommand(environment), newOrgCommand(environment), newTeamCommand(environment), newProjectCommand(environment), newLabelCommand(environment), newDeclarationCommand(environment), newUpdateCommand(environment), newInitCommand(environment), newSyncCommand(environment), newDistillCommand(environment), newProposeCommand(environment), newResolveCommand(environment), newRestoreCommand(environment), newLintCommand(environment), newResetCommand(environment), newVersionCommand(environment))
 	return root
 }

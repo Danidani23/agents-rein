@@ -15,7 +15,7 @@ import (
 func newTeamCommand(environment *commandEnvironment) *cobra.Command {
 	team := &cobra.Command{
 		Use:   "team",
-		Short: "Create teams in an organisation",
+		Short: "Create, list and edit the teams of an organisation",
 		Long: "A team is a record in the org repository, declarations/organizations/<org>/teams/<slug>/team.yaml,\n" +
 			"with an id, a slug, a name and a description. Projects name the teams they belong to, and a\n" +
 			"team's own declarations later live next to its record. The organisation's owner writes team\n" +

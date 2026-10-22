@@ -32,6 +32,7 @@ func newStatusCommand(environment *commandEnvironment) *cobra.Command {
 				return err
 			}
 			printStatus(environment, report)
+			printNudge(environment, orchestrator)
 			return nil
 		},
 	}

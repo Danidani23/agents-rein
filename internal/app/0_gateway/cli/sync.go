@@ -64,7 +64,18 @@ func runSync(environment *commandEnvironment, request orchestration.SyncRequest,
 	for _, synced := range result.Clones {
 		printSynced(environment, synced, hook)
 	}
+	if err == nil && !hook {
+		printNudge(environment, orchestrator)
+	}
 	return hookOrError(environment, hook, err)
+}
+
+// printNudge prints the one line about a newer rein, when there is one and
+// at most once a day; it never fails a command.
+func printNudge(environment *commandEnvironment, orchestrator orchestration.Orchestrator) {
+	if nudge := orchestrator.Updates.Nudge(); nudge != "" {
+		fmt.Fprintf(environment.out, "%s\n", environment.style().Yellow(nudge))
+	}
 }
 
 // hookOrError keeps a session alive: as the hook, an error is a line on

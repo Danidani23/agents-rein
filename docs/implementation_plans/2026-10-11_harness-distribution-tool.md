@@ -1447,7 +1447,7 @@ from that project's snapshot.
   API with the two checks required and a CODEOWNERS review required; commits, pushes, and
   registers the organisation in local state. `org destroy` removes all of it with the
   repository (P2.9).
-- 🟢 **P2.8 — Release and install on macOS, Linux and Windows.** [PENDING] Approved 2026-10-12,
+- ✅ **P2.8 — Release and install on macOS, Linux and Windows.** [EXECUTED] 2026-10-22, as approved 2026-10-12,
   made concrete 2026-10-15, placed right after P2.7 because the workflow `org create` deploys
   installs a release. One GoReleaser workflow on a version tag builds every platform and
   architecture and attaches the archives and a checksum file to a GitHub Release. Doors, all
@@ -1463,6 +1463,28 @@ from that project's snapshot.
   nudge, one line, cached in state. An organisation's `minimum_rein_version` makes the
   update mandatory through `sync`. The hook `sync` writes calls the binary by absolute path.
   No signing yet: package and `curl` installs carry no quarantine flag, and certificates cost.
+  Executed as planned with three changes from the day. Everything happens on the machine, as
+  in the sibling repository's `dmbizctl release`, and nothing on the host: `reinctl release`,
+  the operator CLI under `cmd/reinctl`, reads the conventional commits since the last tag,
+  refuses off `main`, on a dirty tree, behind or ahead of `origin` and on an existing tag,
+  runs the gate, writes `CHANGELOG.md`, commits, tags, pushes, then builds every platform
+  here and publishes the GitHub Release with the token `gh` holds, handed to GoReleaser for
+  the run; the cask and the manifest are written when their repositories exist. A GitHub
+  workflow on the tag was written first and taken out again on the user's question: a host
+  adds a clean build environment and nothing else while nothing is signed, and it would have
+  put a secret on GitHub. `reinctl publish` repeats the publish for a release that failed
+  there. GoReleaser retired Homebrew formulas for casks, so the tap holds a cask that removes
+  the quarantine flag at install. And the daily
+  nudge prints after `sync` and `status` rather than after every command, so no command waits
+  on the network that did not already use it. `rein update --check` only reports; `update`
+  prints the manager's command or replaces a script install after the checksum passed; the
+  release tag reaches the binary through `-X internal/version.tagged`, and a developer's build
+  keeps its pseudo-version, which counts as older than any release. The `semver` library and
+  the `updates` service carry the comparison and the check, the `release` adapter reads GitHub
+  Releases without a login. Prerequisites for the first release: the public repository
+  `Danidani23/agents-rein` as `origin` with `main` as the branch, `gh` logged in on the
+  machine, and, for the two doors, the empty repositories `Danidani23/homebrew-tap` and
+  `Danidani23/scoop-bucket`; without them the release still happens and the doors stay shut.
 - ✅ **P2.9 — Everything the tool does can be undone (part of B2).** Required 2026-10-12 so
   the whole experience can be rerun from scratch. [EXECUTED] 2026-10-21, in the shape D26
   gave it: `org destroy <slug>` disconnects the organisation on this machine, the same steps
@@ -1794,3 +1816,8 @@ writes is read from the next session on, not in the same one.
   branch pushed and dropped on both sides, a reset to the remote; the records, proposals,
   clones, hosting and placements services have tests over the fakes. The README opens with the
   thesis: code and agent settings are two different things and do not share a repository.
+- (2026-10-22) P2.8 executed: `reinctl release` cuts the version, builds every platform and
+  publishes the GitHub Release from this machine; `install.sh` and `install.ps1`, the cask and
+  the bucket, `rein update`, the daily nudge and the organisation's minimum version at `sync`.
+  release-please and a release workflow on the host were considered and declined: everything
+  from the machine, as in the sibling repository.

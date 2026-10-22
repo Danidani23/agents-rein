@@ -104,6 +104,22 @@ type Host interface {
 	RepositorySettingsURL(owner string, name string) string
 }
 
+// Release is one published build of rein: its tag and its downloadable
+// files by name.
+type Release struct {
+	Version string
+	Assets  map[string]string
+}
+
+// Releases is where rein's own releases are published, GitHub Releases of
+// this repository, for the update check and the self-update.
+type Releases interface {
+	// Latest is the newest release.
+	Latest() (Release, error)
+	// Download fetches one asset by its URL.
+	Download(url string) ([]byte, error)
+}
+
 // Keychain keeps the tokens, one per login, in the operating system's own
 // store; rein's files never hold one (D22, D25).
 type Keychain interface {

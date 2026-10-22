@@ -13,9 +13,11 @@ import (
 	"github.com/Danidani23/agents-rein/internal/adapters/github"
 	"github.com/Danidani23/agents-rein/internal/adapters/keychain"
 	"github.com/Danidani23/agents-rein/internal/adapters/localstate"
+	"github.com/Danidani23/agents-rein/internal/adapters/release"
 	"github.com/Danidani23/agents-rein/internal/app/0_gateway/cli"
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/ports"
+	"github.com/Danidani23/agents-rein/internal/version"
 )
 
 // The addresses of GitHub; REIN_GITHUB_WEB and REIN_GITHUB_API point a test
@@ -42,7 +44,8 @@ func wire() (orchestration.Orchestrator, error) {
 		// a file in place of the keychain: for tests and machines without one, chosen on purpose
 		tokens = keychain.FileKeychain{Path: file}
 	}
-	services := orchestration.NewServices(home, host, git.Repository{}, store, []ports.Agent{claudecode.Agent{}}, claudecode.Judge{}, store, tokens)
+	executable, _ := os.Executable()
+	services := orchestration.NewServices(home, host, git.Repository{}, store, []ports.Agent{claudecode.Agent{}}, claudecode.Judge{}, store, tokens, release.NewClient(valueOr("REIN_GITHUB_API", gitHubAPI)), version.String(), executable)
 	return orchestration.New(services), nil
 }
 

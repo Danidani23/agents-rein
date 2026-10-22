@@ -26,7 +26,8 @@ func TestOutputGoesThroughTheWriters(t *testing.T) {
 			if entry.IsDir() || !strings.HasSuffix(filePath, ".go") || strings.HasSuffix(filePath, "_test.go") {
 				return nil
 			}
-			if strings.HasSuffix(filepath.ToSlash(filePath), "cmd/rein/main.go") {
+			// the two mains are where the standard streams enter, once each
+			if strings.HasSuffix(filepath.ToSlash(filePath), "cmd/rein/main.go") || strings.HasSuffix(filepath.ToSlash(filePath), "cmd/reinctl/main.go") {
 				return nil
 			}
 			content, err := os.ReadFile(filePath)
@@ -59,6 +60,7 @@ type harness struct {
 	state      *fake.State
 	agent      *fake.Agent
 	judge      *fake.Judge
+	releases   *fake.Releases
 	lock       *fake.Lock
 	keychain   *fake.Keychain
 }
@@ -72,6 +74,7 @@ func newHarness(t *testing.T) *harness {
 		state:      fake.NewState(),
 		agent:      &fake.Agent{Present: true, HomePath: t.TempDir()},
 		judge:      &fake.Judge{Unavailable: "no judge in this test"},
+		releases:   &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}},
 		lock:       &fake.Lock{},
 		keychain:   &fake.Keychain{Tokens: map[string]ports.Token{"Danidani23": {Login: "Danidani23", AccessToken: "token-of-Danidani23", ExpiresAt: time.Now().Add(time.Hour)}}},
 	}
@@ -80,7 +83,7 @@ func newHarness(t *testing.T) *harness {
 }
 
 func (fixture *harness) orchestrate() (orchestration.Orchestrator, error) {
-	return orchestration.New(orchestration.NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock, fixture.keychain)), nil
+	return orchestration.New(orchestration.NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock, fixture.keychain, fixture.releases, "v0.1.0", filepath.Join(fixture.home, "bin", "rein"))), nil
 }
 
 // seedConnectedOrganization leaves the state as a connect of acme would, with a clone folder

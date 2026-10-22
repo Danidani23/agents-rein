@@ -12,6 +12,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/resolve"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/semver"
 )
 
 // SyncRequest names what to sync: the clone around Directory, or every
@@ -125,6 +126,9 @@ func syncOne(orchestrator Orchestrator, clone machine.ProjectClone, request Sync
 	tree, err := services.Records.Tree(orgClonePath)
 	if err != nil {
 		return synced, err
+	}
+	if minimum := tree.Organization.MinimumReinVersion; minimum != "" && semver.IsRelease(services.ReinVersion) && semver.Compare(services.ReinVersion, minimum) < 0 {
+		return synced, refusal.New(fmt.Sprintf("this rein is %s and %s requires at least %s; run rein update", services.ReinVersion, organization.Slug, minimum))
 	}
 	projectSlug := path.Base(strings.ReplaceAll(clone.Address, ".", "/"))
 	context, found := resolve.ContextOf(tree, projectSlug, userSlugOf(organization), services.Clock())
