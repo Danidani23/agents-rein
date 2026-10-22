@@ -18,11 +18,11 @@ type Team struct {
 	ID          string    `yaml:"id"`
 	Slug        string    `yaml:"slug"`
 	Name        string    `yaml:"name"`
-	Description string    `yaml:"description,omitempty"`
+	Description string    `yaml:"description"`
 	CreatedAt   time.Time `yaml:"created_at,omitempty"`
 	// Skip lists the addresses of default declarations above this level
 	// that do not apply to it; a required one needs an exception.
-	Skip []string `yaml:"skip,omitempty"`
+	Skip []string `yaml:"skip"`
 }
 
 // Project is the record of a project, project.yaml under projects/<slug>/.
@@ -35,16 +35,16 @@ type Project struct {
 	ID          string    `yaml:"id"`
 	Slug        string    `yaml:"slug"`
 	Name        string    `yaml:"name"`
-	Description string    `yaml:"description,omitempty"`
+	Description string    `yaml:"description"`
 	Teams       []string  `yaml:"teams"`
-	Labels      []string  `yaml:"labels,omitempty"`
-	Path        string    `yaml:"path,omitempty"`
-	Fingerprint []string  `yaml:"fingerprint,omitempty"`
+	Labels      []string  `yaml:"labels"`
+	Path        string    `yaml:"path"`
+	Fingerprint []string  `yaml:"fingerprint"`
 	CreatedAt   time.Time `yaml:"created_at,omitempty"`
 	UpdatedAt   time.Time `yaml:"updated_at,omitempty"`
 	// Skip lists the addresses of default declarations above this level
 	// that do not apply to it; a required one needs an exception.
-	Skip []string `yaml:"skip,omitempty"`
+	Skip []string `yaml:"skip"`
 }
 
 // User is the record of a person, user.yaml under users/<slug>/. GitHub is
@@ -53,7 +53,7 @@ type Project struct {
 type User struct {
 	Slug      string    `yaml:"slug"`
 	GitHub    string    `yaml:"github"`
-	Name      string    `yaml:"name,omitempty"`
+	Name      string    `yaml:"name"`
 	CreatedAt time.Time `yaml:"created_at,omitempty"`
 }
 
@@ -64,10 +64,10 @@ type LabelCategory struct {
 	Category string `yaml:"category"`
 	// Required means every project carries at least one value of it; the
 	// creators insist, the lint warns.
-	Required bool `yaml:"required,omitempty"`
+	Required bool `yaml:"required"`
 	// Multiple lets a project carry several values of it; without it one
 	// value is the most, and two are a contradiction.
-	Multiple bool              `yaml:"multiple,omitempty"`
+	Multiple bool              `yaml:"multiple"`
 	Labels   map[string]string `yaml:"labels"`
 }
 

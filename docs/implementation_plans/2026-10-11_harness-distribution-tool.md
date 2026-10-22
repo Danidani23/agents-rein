@@ -1711,3 +1711,13 @@ writes is read from the next session on, not in the same one.
   category and `label set` (R35); the README cut to an overview with a quick start, the model
   moved to `docs/concepts.md`, the commands to `docs/commands.md`, the six questions to the top
   of the findings (R34).
+- (2026-10-22) From the first `rein distill` of the pilot: the judge call failed with "exit
+  status 1" and nothing else, since claude's words were in its JSON envelope on stdout, which
+  the adapter did not read on failure. Now the adapter reports them, runs claude in an empty
+  folder with `--bare`, `--tools ""` and `--no-session-persistence`, so no project's
+  instructions, hooks or tools colour the verdict, and gives it the network time limit, since
+  fifteen candidates take a minute. `distill` reports every step with its duration, the judge's
+  wait included, since a silent minute reads as a hang. Records write every field, `required:
+  false` and `labels: []` included, on the user's preference for transparency (R36); only a
+  time that has not happened yet is left out. `sync` opens no pull request on purpose: it
+  delivers what main holds, and `propose` is the one way into the org repository.

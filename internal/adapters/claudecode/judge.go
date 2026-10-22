@@ -3,6 +3,7 @@ package claudecode
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -32,22 +33,55 @@ func (Judge) Available() (string, bool) {
 	return "", true
 }
 
-// Ask runs claude -p with JSON output and returns the result text.
+// envelope is the JSON claude -p prints around its answer, on success and
+// on failure alike.
+type envelope struct {
+	Result  string `json:"result"`
+	IsError bool   `json:"is_error"`
+	Subtype string `json:"subtype"`
+}
+
+// Ask runs claude -p with JSON output and returns the result text. It runs
+// in an empty folder with --bare, so no project's instructions, hooks or
+// tools colour the verdict and no session is kept; a brief of many
+// candidates takes a minute or more, so the limit is the network one.
 func (Judge) Ask(brief string) (string, error) {
-	result, err := execute.RunWithInput("", brief, "claude", "-p", "--output-format", "json", "--max-turns", "1")
+	scratch, err := os.MkdirTemp("", "rein-judge-*")
 	if err != nil {
 		return "", err
 	}
-	var output struct {
-		Result  string `json:"result"`
-		IsError bool   `json:"is_error"`
-	}
-	err = json.Unmarshal([]byte(result.Stdout), &output)
+	defer os.RemoveAll(scratch)
+	result, err := execute.RunWith(execute.Options{Directory: scratch, Input: brief, Timeout: execute.NetworkTimeout}, "claude", "-p", "--output-format", "json", "--max-turns", "1", "--tools", "", "--bare", "--no-session-persistence")
+	var output envelope
+	parsed := json.Unmarshal([]byte(result.Stdout), &output) == nil
 	if err != nil {
-		return "", fmt.Errorf("claude answered with something other than its JSON envelope: %v", err)
+		if parsed && strings.TrimSpace(output.Result) != "" {
+			return "", fmt.Errorf("claude reported: %s (%s)", strings.TrimSpace(output.Result), output.Subtype)
+		}
+		if tail := lastLines(result.Stdout, 3); tail != "" {
+			return "", fmt.Errorf("%w; it printed: %s", err, tail)
+		}
+		return "", err
+	}
+	if !parsed {
+		return "", fmt.Errorf("claude answered with something other than its JSON envelope: %s", lastLines(result.Stdout, 3))
 	}
 	if output.IsError {
 		return "", fmt.Errorf("claude reported an error: %s", strings.TrimSpace(output.Result))
 	}
 	return output.Result, nil
+}
+
+// lastLines is the last few non-empty lines of a text, joined by " | ".
+func lastLines(text string, count int) string {
+	var lines []string
+	for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, strings.TrimSpace(line))
+		}
+	}
+	if len(lines) > count {
+		lines = lines[len(lines)-count:]
+	}
+	return strings.Join(lines, " | ")
 }

@@ -55,61 +55,88 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 	if err != nil {
 		return DistillResult{}, err
 	}
-	catalogue, err := distill.LoadCatalogue(orgClonePath)
-	if err != nil {
-		return DistillResult{}, err
-	}
 	report := distill.Report{Version: 1, Level: level}
+	result := DistillResult{Level: level}
 	var candidates []distill.Candidate
-	for _, snapshot := range stored {
-		report.Snapshots = append(report.Snapshots, snapshot.Path)
-		if snapshot.Agent != "claude-code" {
-			report.Skipped = append(report.Skipped, fmt.Sprintf("%s: distill knows no harness of %s yet", snapshot.Path, snapshot.Agent))
-			continue
-		}
-		converted, skipped, err := distill.ConvertClaudeCode(snapshot.Files)
-		if err != nil {
-			return DistillResult{}, err
-		}
-		candidates = append(candidates, converted...)
-		report.Skipped = append(report.Skipped, skipped...)
-	}
-	distill.Compare(candidates, catalogue, level)
-	result := DistillResult{Level: level, Candidates: candidates}
-	if request.Judge != "none" && len(candidates) > 0 {
-		corpus, err := distill.LoadCorpus(orgClonePath, level, teamsOfLevel(services, orgClonePath, level), userSlugOf(organization), candidates)
-		if err == nil {
-			corpus.Labels = registryLabels(services, orgClonePath)
-		}
-		if err != nil {
-			return DistillResult{}, err
-		}
-		result.Brief = distill.Brief(level, candidates, corpus)
-		if request.DryRun {
-			report.Candidates = distill.Summarise(level, candidates)
-			result.Report = report
-			return result, nil
-		}
-		reason, available := services.Judge.Available()
-		if available {
-			run := services.Judge.JudgeCandidates(level, candidates, corpus)
-			report.Judge = &run
-		} else {
-			report.Judge = &distill.JudgeRun{Backend: services.Judge.Name(), Status: distill.JudgeSkipped, Problems: []string{reason}}
-		}
-	}
-	report.Candidates = distill.Summarise(level, candidates)
-	result.Report = report
-	err = runSteps(services.Progress, []Step{
+	var corpus distill.Corpus
+	judging := request.Judge != "none"
+	steps := []Step{
 		{
+			Name: "reading the snapshot",
+			Do: func() error {
+				for _, snapshot := range stored {
+					report.Snapshots = append(report.Snapshots, snapshot.Path)
+					if snapshot.Agent != "claude-code" {
+						report.Skipped = append(report.Skipped, fmt.Sprintf("%s: distill knows no harness of %s yet", snapshot.Path, snapshot.Agent))
+						continue
+					}
+					converted, skipped, err := distill.ConvertClaudeCode(snapshot.Files)
+					if err != nil {
+						return err
+					}
+					candidates = append(candidates, converted...)
+					report.Skipped = append(report.Skipped, skipped...)
+				}
+				result.Candidates = candidates
+				return nil
+			},
+		},
+		{
+			Name: "comparing with the organisation's declarations",
+			Do: func() error {
+				catalogue, err := distill.LoadCatalogue(orgClonePath)
+				if err != nil {
+					return err
+				}
+				distill.Compare(candidates, catalogue, level)
+				if !judging || len(candidates) == 0 {
+					return nil
+				}
+				corpus, err = distill.LoadCorpus(orgClonePath, level, teamsOfLevel(services, orgClonePath, level), userSlugOf(organization), candidates)
+				if err != nil {
+					return err
+				}
+				corpus.Labels = registryLabels(services, orgClonePath)
+				result.Brief = distill.Brief(level, candidates, corpus)
+				return nil
+			},
+		},
+	}
+	if judging && !request.DryRun {
+		steps = append(steps, Step{
+			Name: "asking the judge " + services.Judge.Name() + ", which takes a minute or more",
+			Do: func() error {
+				if len(candidates) == 0 {
+					return nil
+				}
+				reason, available := services.Judge.Available()
+				if !available {
+					report.Judge = &distill.JudgeRun{Backend: services.Judge.Name(), Status: distill.JudgeSkipped, Problems: []string{reason}}
+					return nil
+				}
+				run := services.Judge.JudgeCandidates(level, candidates, corpus)
+				report.Judge = &run
+				return nil
+			},
+		})
+	}
+	if !request.DryRun {
+		steps = append(steps, Step{
 			Name: "writing the distillation",
 			Do: func() error {
+				report.Candidates = distill.Summarise(level, candidates)
+				result.Report = report
 				var err error
 				result.Folder, err = services.Distillations.Write(path.Base(strings.ReplaceAll(level, ".", "/")), candidates, report)
 				return err
 			},
-		},
-	})
+		})
+	}
+	err = runSteps(services.Progress, steps)
+	if request.DryRun {
+		report.Candidates = distill.Summarise(level, candidates)
+		result.Report = report
+	}
 	if err != nil {
 		return DistillResult{}, err
 	}
