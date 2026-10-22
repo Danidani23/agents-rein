@@ -51,15 +51,46 @@ func newDeclarationListCommand(environment *commandEnvironment) *cobra.Command {
 				fmt.Fprintf(environment.out, "no declarations yet; rein distill and rein propose add them\n")
 				return nil
 			}
+			rows := [][]string{{"ADDRESS", "APPLY IF", "DO NOT APPLY IF", "ENFORCEMENT"}}
 			for _, described := range listed {
-				fmt.Fprintf(environment.out, "%s  %s\n", described.Address, describeSelectors(described.Selectors))
+				rows = append(rows, []string{described.Address, strings.Join(described.Selectors.ApplyIf, " "), strings.Join(described.Selectors.DoNotApplyIf, " "), firstOf(described.Selectors.Enforcement, "default")})
 			}
+			printTable(environment, rows)
 			return nil
 		},
 	}
 	command.Flags().StringVar(&organizationSlug, "org", "", "the organisation's slug (default: the active one)")
 	command.Flags().StringVar(&level, "level", "", "only the declarations at or under this level")
 	return command
+}
+
+// printTable prints rows with aligned columns, the first row as the
+// header, bold on a terminal.
+func printTable(environment *commandEnvironment, rows [][]string) {
+	widths := make([]int, len(rows[0]))
+	for _, row := range rows {
+		for column, cell := range row {
+			if len([]rune(cell)) > widths[column] {
+				widths[column] = len([]rune(cell))
+			}
+		}
+	}
+	style := environment.style()
+	for index, row := range rows {
+		var cells []string
+		for column, cell := range row {
+			padded := cell + strings.Repeat(" ", widths[column]-len([]rune(cell)))
+			if column == len(row)-1 {
+				padded = cell
+			}
+			cells = append(cells, padded)
+		}
+		line := strings.TrimRight(strings.Join(cells, "  "), " ")
+		if index == 0 {
+			line = style.Bold(line)
+		}
+		fmt.Fprintln(environment.out, line)
+	}
 }
 
 // describeSelectors renders selectors on one line.
@@ -195,18 +226,27 @@ func runDeclarationEdit(environment *commandEnvironment, declarationAddress stri
 // the current values as the defaults.
 func askDeclarationEdit(prompter ports.Prompter, organization orchestration.OrganizationDescription, request orchestration.EditDeclarationRequest) (orchestration.EditDeclarationRequest, error) {
 	var err error
-	request.Level, err = prompter.Ask(ports.Text{
+	levels := []ports.Choice{{Name: address.Organizations + "." + organization.Slug, Description: "the whole organisation"}}
+	for _, team := range organization.Teams {
+		levels = append(levels, ports.Choice{Name: address.Organizations + "." + organization.Slug + "." + address.Teams + "." + team.Slug, Description: "the team " + team.Name})
+	}
+	for _, project := range organization.Projects {
+		levels = append(levels, ports.Choice{Name: address.Organizations + "." + organization.Slug + "." + address.Projects + "." + project.Slug, Description: "the project " + project.Name})
+	}
+	levels = append(levels, ports.Choice{Name: organization.UserLevel, Description: "your own user level"})
+	known := false
+	for _, level := range levels {
+		known = known || level.Name == request.Level
+	}
+	if !known {
+		levels = append(levels, ports.Choice{Name: request.Level, Description: "where it is now"})
+	}
+	request.Level, err = prompter.Choose(ports.Select{
 		Title:       "Level",
-		Description: "Where the declaration lives: organizations.<org>, organizations.<org>.teams.<team>, organizations.<org>.projects.<project> or users.<user>.",
+		Description: "Where the declaration lives, and so how far it reaches.",
 		Explanation: "A higher level reaches more projects: the organisation everyone, a team its projects, a project itself, a user that person everywhere. The content stays the same; only the reach changes.",
+		Choices:     levels,
 		Default:     request.Level,
-		Validate: func(answer string) string {
-			parsed, err := address.Parse(answer)
-			if err != nil || parsed.IsDeclaration() {
-				return "not a level"
-			}
-			return ""
-		},
 	})
 	if err != nil {
 		return request, err

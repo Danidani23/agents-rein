@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/proposalfiles"
@@ -185,9 +186,11 @@ type ProjectSummary struct {
 // OrganizationDescription is an organisation as the gateway needs it to ask
 // its questions: its teams and its label registry, sorted.
 type OrganizationDescription struct {
-	Slug            string
-	Name            string
-	OrgClonePath    string
+	Slug         string
+	Name         string
+	OrgClonePath string
+	// UserLevel is the acting user's own level in this organisation.
+	UserLevel       string
 	Teams           []TeamSummary
 	Projects        []ProjectSummary
 	LabelCategories []LabelCategorySummary
@@ -205,7 +208,7 @@ func (orchestrator Orchestrator) DescribeOrganization(slug string) (Organization
 	if err != nil {
 		return OrganizationDescription{}, err
 	}
-	description := OrganizationDescription{Slug: organization.Slug, Name: tree.Organization.Name, OrgClonePath: orgClonePath}
+	description := OrganizationDescription{Slug: organization.Slug, Name: tree.Organization.Name, OrgClonePath: orgClonePath, UserLevel: address.Users + "." + userSlugOf(organization)}
 	for _, teamSlug := range sortedKeys(tree.Teams) {
 		description.Teams = append(description.Teams, TeamSummary{Slug: teamSlug, Name: tree.Teams[teamSlug].Name})
 	}

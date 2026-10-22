@@ -3,6 +3,7 @@ package localstate
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -105,8 +106,15 @@ func TestStore(t *testing.T) {
 			t.Fatalf("a stale lock was not taken over: %v", err)
 		}
 		release()
+		// a holder that is gone, such as a rein killed at a prompt, is taken over at once
+		_ = os.WriteFile(lock, []byte("999999"), 0o644)
+		release, err = store.Acquire(0)
+		if err != nil {
+			t.Fatalf("a dead holder was not taken over: %v", err)
+		}
+		release()
 		// a holder that releases within the wait is waited for
-		_ = os.WriteFile(lock, []byte("4243"), 0o644)
+		_ = os.WriteFile(lock, []byte(strconv.Itoa(os.Getpid())), 0o644)
 		go func() {
 			time.Sleep(300 * time.Millisecond)
 			os.Remove(lock)

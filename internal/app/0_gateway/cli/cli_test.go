@@ -994,7 +994,7 @@ func TestDeclarationCommands(t *testing.T) {
 	}
 	_ = fixture.repository.Push(ports.RemoteAccess{}, filepath.Dir(root))
 	code, out, errOut := fixture.run("declaration", "list")
-	if code != ExitWorked || !strings.Contains(out, "organizations.acme.rules.style  applyIf language:go, default\n") || !strings.Contains(out, "users.danidani23.skills.commit  default\n") {
+	if code != ExitWorked || !strings.Contains(out, "ADDRESS                         APPLY IF     DO NOT APPLY IF  ENFORCEMENT\n") || !strings.Contains(out, "organizations.acme.rules.style  language:go                   default\n") || !strings.Contains(out, "users.danidani23.skills.commit                                default\n") {
 		t.Fatalf("list: code %d out %q err %q", code, out, errOut)
 	}
 	code, _, errOut = fixture.run("declaration", "edit", "users.danidani23.skills.commit")
@@ -1009,7 +1009,7 @@ func TestDeclarationCommands(t *testing.T) {
 	}
 	// level kept, applyIf cleared with Enter? no: Enter keeps the default; the answer "" on a multi-select means none only without a default, so type the new labels
 	code, out, errOut = fixture.runInteractive("\nlanguage:go,language:rust\n\n2\n\n", "declaration", "edit", "organizations.acme.rules.style")
-	if code != ExitWorked || !strings.Contains(out, "Level\x1b[0m [organizations.acme]") || !strings.Contains(out, "Choose any, or none\x1b[0m [language:go]") || !strings.Contains(out, "1) default") || !strings.Contains(out, "puts organizations.acme.rules.style at organizations.acme with applyIf language:go language:rust, required") || !strings.Contains(out, "changed organizations.acme.rules.style: applyIf, enforcement") {
+	if code != ExitWorked || !strings.Contains(out, "1) organizations.acme  \x1b[2;3mthe whole organisation\x1b[0m  \x1b[2;3m(default)") || !strings.Contains(out, "2) organizations.acme.teams.web  \x1b[2;3mthe team Web") || !strings.Contains(out, "3) users.danidani23  \x1b[2;3myour own user level") || !strings.Contains(out, "Choose any, or none\x1b[0m [language:go]") || !strings.Contains(out, "1) default") || !strings.Contains(out, "puts organizations.acme.rules.style at organizations.acme with applyIf language:go language:rust, required") || !strings.Contains(out, "changed organizations.acme.rules.style: applyIf, enforcement") {
 		t.Fatalf("interactive edit: code %d out %q err %q", code, out, errOut)
 	}
 	code, _, errOut = fixture.run("declaration", "edit", "organizations.acme.rules.style", "--apply-if", "", "--yes")
@@ -1027,5 +1027,22 @@ func TestDeclarationCommands(t *testing.T) {
 	code, _, errOut = fixture.run("declaration", "remove", "organizations.acme.rules.nope", "--yes")
 	if code != ExitRefused || !strings.Contains(errOut, "no declaration at organizations.acme.rules.nope") {
 		t.Fatalf("missing: code %d err %q", code, errOut)
+	}
+}
+
+func TestInterruptReleasesTheLock(t *testing.T) {
+	fixture := newHarness(t)
+	environment := &commandEnvironment{in: strings.NewReader(""), out: &bytes.Buffer{}, errOut: &bytes.Buffer{}, orchestrate: fixture.orchestrate}
+	_, release, err := environment.orchestrateLocked()
+	if err != nil || environment.releaseLock == nil || fixture.lock.Acquired != 1 || fixture.lock.Released != 0 {
+		t.Fatalf("lock: err %v acquired %d released %d", err, fixture.lock.Acquired, fixture.lock.Released)
+	}
+	environment.releaseLockNow()
+	if fixture.lock.Released != 1 || environment.releaseLock != nil {
+		t.Fatalf("the interrupt did not release the lock: released %d", fixture.lock.Released)
+	}
+	release()
+	if fixture.lock.Released != 1 {
+		t.Fatalf("released twice: %d", fixture.lock.Released)
 	}
 }

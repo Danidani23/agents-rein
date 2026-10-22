@@ -1760,3 +1760,8 @@ writes is read from the next session on, not in the same one.
   moved to the history on propose; the judge's conversation titled and recorded; the spinner.
 - (2026-10-22) P2.30 executed: `rein declaration list`, `edit` and `remove`, every change a pull
   request; the first use moves the commit skill from the user level to the organisation.
+- (2026-10-22) From the first `declaration edit`: the level is a selector of the organisation,
+  its teams, its projects and the user's own level, never free text; `declaration list` is a
+  table with a header, so "default" reads as the enforcement; Ctrl-C at a prompt releases the
+  machine lock before quitting, and a lock whose holder is gone is taken over at once instead
+  of after ten minutes.

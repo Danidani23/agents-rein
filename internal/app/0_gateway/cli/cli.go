@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -53,6 +54,27 @@ type commandEnvironment struct {
 	// spinner redraws the open line with the time elapsed while a step
 	// runs; nil off a terminal.
 	spinner *spinner
+	// releaseLock gives the machine lock back; set while a command holds
+	// it, so an interrupt at a prompt leaves no lock behind.
+	releaseLock func()
+	locking     sync.Mutex
+}
+
+// setReleaseLock remembers, or forgets, the release of the machine lock.
+func (environment *commandEnvironment) setReleaseLock(release func()) {
+	environment.locking.Lock()
+	defer environment.locking.Unlock()
+	environment.releaseLock = release
+}
+
+// releaseLockNow gives the machine lock back if a command holds it.
+func (environment *commandEnvironment) releaseLockNow() {
+	environment.locking.Lock()
+	defer environment.locking.Unlock()
+	if environment.releaseLock != nil {
+		environment.releaseLock()
+		environment.releaseLock = nil
+	}
 }
 
 // spinner redraws a step's open line a few times a second with a glyph
@@ -124,9 +146,13 @@ func (environment *commandEnvironment) orchestrateLocked() (orchestrator orchest
 	if orchestrator.Lock == nil {
 		return orchestrator, func() {}, nil
 	}
-	release, err = orchestrator.Lock.Acquire(lockWait)
+	acquired, err := orchestrator.Lock.Acquire(lockWait)
 	if err != nil {
 		return orchestration.Orchestrator{}, nil, refusal.New(err.Error())
+	}
+	environment.setReleaseLock(acquired)
+	release = func() {
+		environment.releaseLockNow()
 	}
 	orchestrator.Progress = environment.printProgress
 	return orchestrator, release, nil
@@ -204,6 +230,7 @@ func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer, orch
 		first := true
 		for range signals {
 			if !first || !execute.Running() {
+				environment.releaseLockNow()
 				os.Exit(ExitInterrupted)
 			}
 			first = false

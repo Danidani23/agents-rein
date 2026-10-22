@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -197,10 +198,30 @@ func (store Store) Acquire(wait time.Duration) (release func(), err error) {
 			os.Remove(path)
 			continue
 		}
+		holder, _ := os.ReadFile(path)
+		if pid, parseErr := strconv.Atoi(strings.TrimSpace(string(holder))); parseErr == nil && !processAlive(pid) {
+			os.Remove(path)
+			continue
+		}
 		if time.Now().After(deadline) {
 			holder, _ := os.ReadFile(path)
 			return nil, fmt.Errorf("another rein is running (pid %s holds %s); wait for it, or remove the lock if that rein is gone", strings.TrimSpace(string(holder)), path)
 		}
 		time.Sleep(lockRetry)
 	}
+}
+
+// processAlive says whether a process with the pid is running: a signal of
+// zero reaches a live one, and a live one of another user answers that the
+// permission is missing, which is still alive.
+func processAlive(pid int) bool {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = process.Signal(syscall.Signal(0))
+	if err == nil {
+		return true
+	}
+	return errors.Is(err, syscall.EPERM)
 }
