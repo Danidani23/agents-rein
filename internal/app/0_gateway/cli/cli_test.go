@@ -630,9 +630,13 @@ func TestPropose(t *testing.T) {
 		}
 	}
 	code, out, errOut = fixture.runInteractive("\n", "propose", folder, "--level", "organizations.acme.teams.nowhere")
-	if code != ExitWorked || !strings.Contains(out, "Continue?") {
+	if code != ExitWorked || !strings.Contains(out, "This will write 1 declarations from "+folder+" on a branch of the org clone of acme") || !strings.Contains(out, "  new        rules/brief  at organizations.acme.teams.nowhere\n") || !strings.Contains(out, "Continue?") {
 		// the level's team need not exist for the proposal; the review decides
 		t.Fatalf("code %d out %q err %q", code, out, errOut)
+	}
+	code, _, errOut = fixture.run("propose", folder, "--level", "organizations.acme", "--as-distilled", "--team", "web", "--yes")
+	if code != ExitWorked {
+		t.Fatalf("flags: code %d err %q", code, errOut)
 	}
 }
 
@@ -725,11 +729,11 @@ func TestSync(t *testing.T) {
 		}
 	}
 	code, out, _ = fixture.run("sync", "--path", folder, "--hook")
-	if code != ExitWorked || !strings.Contains(out, "rein: organizations.acme.projects.shop synced for fake-agent, 0 files written, 3 unchanged") || strings.Contains(out, "just written") {
+	if code != ExitWorked || !strings.Contains(out, "rein: organizations.acme.projects.shop synced for fake-agent, 0 files written, 4 unchanged") || strings.Contains(out, "just written") {
 		t.Fatalf("hook: code %d out %q", code, out)
 	}
 	code, out, _ = fixture.run("status")
-	if code != ExitWorked || !strings.Contains(out, "project clones  1") || !strings.Contains(out, "3 files from sync") {
+	if code != ExitWorked || !strings.Contains(out, "project clones  1") || !strings.Contains(out, "4 files from sync") {
 		t.Fatalf("status: code %d out %q", code, out)
 	}
 	_ = os.WriteFile(filepath.Join(folder, "CLAUDE.md"), []byte("mine"), 0o644)

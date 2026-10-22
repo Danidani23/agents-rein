@@ -315,3 +315,14 @@ func (orchestrator Orchestrator) ResolveProject(organizationSlug string, project
 	}
 	return Resolution{Organization: organization.Slug, Project: projectSlug, Address: projectAddress(organization.Slug, projectSlug), Labels: context.Labels, Teams: context.Teams, User: userSlug, Result: resolve.Resolve(declarations, context)}, nil
 }
+
+// PlanProposal says what ProposeDeclarations would do with the request:
+// each candidate at its level, the judge's lifts and drops applied, the
+// identical ones left out. It pulls the org clone and changes nothing else.
+func (orchestrator Orchestrator) PlanProposal(request ProposeRequest) (ProposalPlan, error) {
+	plan, err := planProposal(orchestrator.Services, request)
+	if err != nil {
+		return ProposalPlan{}, err
+	}
+	return plan.ProposalPlan, nil
+}

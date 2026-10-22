@@ -73,6 +73,9 @@ func Brief(level string, candidates []Candidate, corpus Corpus) string {
 	fmt.Fprintf(&brief, "- related: the addresses of the existing declarations the verdict rests on, from the headings below, none for `new`.\n")
 	fmt.Fprintf(&brief, "- quotes: for `duplicate`, `overlaps` and `contradicts`, the passage of the related declaration that shows it, copied verbatim from below, with its address.\n")
 	fmt.Fprintf(&brief, "- suggestion: `keep` the candidate at this level; `drop` it because an existing declaration already covers it; `merge` it into a related declaration, giving the merged text as `rewrite`; `lift` it to a higher level because it is general, giving `level` (organization, team, project or user) and `applyIf` labels when it should apply to some projects only.\n")
+	if len(corpus.Labels) > 0 {
+		fmt.Fprintf(&brief, "- applyIf labels come from the organisation's registry and nowhere else: %s. A stack-specific declaration, such as one for a language or a kind of project, is lifted with the label that names that stack.\n", strings.Join(corpus.Labels, ", "))
+	}
 	fmt.Fprintf(&brief, "- reason: one sentence.\n\n")
 	fmt.Fprintf(&brief, "Judge meaning, not wording. Declarations that apply to this level are marked `applies`; the others belong to other teams and are here because they look related, which matters for `lift`. Answer with JSON only, no prose around it, in this exact shape:\n\n")
 	fmt.Fprintf(&brief, "```json\n{\"version\": %d, \"candidates\": [{\"candidate\": \"rules/example\", \"verdict\": \"overlaps\", \"related\": [\"organizations.acme.rules.style\"], \"quotes\": [{\"address\": \"organizations.acme.rules.style\", \"text\": \"verbatim passage\"}], \"suggestion\": \"merge\", \"level\": \"\", \"applyIf\": [], \"rewrite\": \"the merged text\", \"reason\": \"one sentence\"}]}\n```\n\n", AnswerVersion)

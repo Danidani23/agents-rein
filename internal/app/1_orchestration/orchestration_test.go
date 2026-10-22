@@ -789,7 +789,7 @@ func TestProposeDeclarations(t *testing.T) {
 			t.Fatalf("left out %+v", result.LeftOut)
 		}
 		pullRequest := fixture.host.PullRequests[0]
-		if pullRequest.Branch != result.Branch || !strings.Contains(pullRequest.Title, "Propose 2 declarations to organizations.acme.projects.shop") || !strings.Contains(pullRequest.Body, "| rules | instructions | new |") || !strings.Contains(pullRequest.Body, "Left out, identical") {
+		if pullRequest.Branch != result.Branch || !strings.Contains(pullRequest.Title, "Propose 2 declarations to organizations.acme.projects.shop") || !strings.Contains(pullRequest.Body, "| rules | instructions | organizations.acme.projects.shop | new |") || !strings.Contains(pullRequest.Body, "Left out, identical") {
 			t.Fatalf("pull request %+v", pullRequest)
 		}
 		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
@@ -805,6 +805,81 @@ func TestProposeDeclarations(t *testing.T) {
 		}
 		if fixture.repository.Current != "main" || strings.Join(fixture.repository.Deleted, ",") != result.Branch {
 			t.Fatalf("clone on %q deleted %v", fixture.repository.Current, fixture.repository.Deleted)
+		}
+	})
+	t.Run("the judge's lifts and drops are applied: each candidate at its level with its labels, unless asked for as distilled", func(t *testing.T) {
+		fixture, created := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop")
+		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "mcpservers", "docs.yaml")
+		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
+		_ = os.WriteFile(existing, []byte("description: the docs server\ntransport: http\nurl: https://docs.example/other\n"), 0o644)
+		fixture.judge = &fake.Judge{Answers: []string{`{"version":1,"candidates":[` +
+			`{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"organization","applyIf":["language:go","not a label"],"reason":"general"},` +
+			`{"candidate":"rules/go","verdict":"new","suggestion":"lift","level":"team","reason":"the team's style"},` +
+			`{"candidate":"mcpservers/docs","verdict":"duplicate","related":["organizations.acme.mcpservers.docs"],"suggestion":"drop","reason":"already declared"}]}`}}
+		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		if err != nil {
+			t.Fatalf("distill: %v", err)
+		}
+		if !strings.Contains(fixture.judge.Briefs[0], "applyIf labels come from the organisation's registry and nowhere else: data:internal") || !strings.Contains(fixture.judge.Briefs[0], "language:go") {
+			t.Fatalf("brief without the registry: %q", fixture.judge.Briefs[0])
+		}
+		plan, err := fixture.orchestrator().PlanProposal(ProposeRequest{Source: distilled.Folder})
+		if err != nil || len(plan.Included) != 2 || len(plan.Lifted) != 2 || len(plan.Dropped) != 1 || len(plan.LeftOut) != 0 || len(fixture.repository.Branches) != 0 {
+			t.Fatalf("plan %+v err %v branches %v", plan, err, fixture.repository.Branches)
+		}
+		if plan.Included[0].Address != "organizations.acme.rules.instructions" || plan.Included[1].Address != "organizations.acme.teams.web.rules.go" || LevelOf(plan.Included[0]) != "organizations.acme" {
+			t.Fatalf("placed %+v", plan.Included)
+		}
+		if plan.Lifted[1].To != "organizations.acme" || strings.Join(plan.Lifted[1].ApplyIf, ",") != "language:go" || plan.Lifted[0].To != "organizations.acme.teams.web" || plan.Dropped[0].ID != "docs" || !strings.Contains(plan.Dropped[0].Reason, "covered by organizations.acme.mcpservers.docs: already declared") {
+			t.Fatalf("lifted %+v dropped %+v", plan.Lifted, plan.Dropped)
+		}
+		result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.Folder})
+		if err != nil || len(result.Included) != 2 || !strings.Contains(fixture.host.PullRequests[0].Title, "Propose 2 declarations to organizations.acme.projects.shop, 2 lifted") {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
+		instructions, err := os.ReadFile(filepath.Join(published, "declarations", "organizations", "acme", "rules", "instructions.md"))
+		if err != nil || !strings.HasPrefix(string(instructions), "---\napplyIf:\n    - language:go\n---\n") || !strings.Contains(string(instructions), "Be brief.") {
+			t.Fatalf("instructions %q err %v", instructions, err)
+		}
+		_, err = os.Stat(filepath.Join(published, "declarations", "organizations", "acme", "teams", "web", "rules", "go.md"))
+		if err != nil {
+			t.Fatalf("the team rule is not on the branch: %v", err)
+		}
+		for _, absent := range []string{"organizations/acme/projects/shop/rules/instructions.md", "organizations/acme/projects/shop/mcpservers/docs.yaml"} {
+			_, err = os.Stat(filepath.Join(published, "declarations", filepath.FromSlash(absent)))
+			if err == nil {
+				t.Fatalf("%s was written although lifted or dropped", absent)
+			}
+		}
+		body := fixture.host.PullRequests[0].Body
+		if !strings.Contains(body, "| rules | instructions | organizations.acme (lifted from organizations.acme.projects.shop, applyIf language:go) | new |") || !strings.Contains(body, "Dropped on the judge's advice") || !strings.Contains(body, "- mcpservers/docs: covered by") {
+			t.Fatalf("body %q", body)
+		}
+		asDistilled, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.Folder, AsDistilled: true})
+		if err != nil || len(asDistilled.Included) != 3 || len(asDistilled.Lifted) != 0 || len(asDistilled.Dropped) != 0 || asDistilled.Included[0].Address != "organizations.acme.projects.shop.mcpservers.docs" || !strings.Contains(fixture.host.PullRequests[1].Body, "Placed as distilled") {
+			t.Fatalf("as distilled %+v err %v", asDistilled, err)
+		}
+	})
+	t.Run("a lift to the team level needs one team, or --team", func(t *testing.T) {
+		fixture, _ := withTeam(t)
+		_, _ = fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "Ops"})
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web", "ops"}})
+		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop")
+		fixture.judge = &fake.Judge{Answers: []string{`{"version":1,"candidates":[{"candidate":"rules/go","verdict":"new","suggestion":"lift","level":"team","reason":"style"},{"candidate":"rules/instructions","verdict":"new","suggestion":"keep","reason":"fine"},{"candidate":"mcpservers/docs","verdict":"new","suggestion":"keep","reason":"fine"}]}`}}
+		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		if err != nil {
+			t.Fatalf("distill: %v", err)
+		}
+		_, err = fixture.orchestrator().PlanProposal(ProposeRequest{Source: distilled.Folder})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "belongs to the teams web, ops; pass --team") {
+			t.Fatalf("err %v", err)
+		}
+		plan, err := fixture.orchestrator().PlanProposal(ProposeRequest{Source: distilled.Folder, Team: "ops"})
+		if err != nil || len(plan.Lifted) != 1 || plan.Lifted[0].To != "organizations.acme.teams.ops" {
+			t.Fatalf("plan %+v err %v", plan, err)
 		}
 	})
 	t.Run("a plain folder goes to the user's level with the user record, and a zip is read too", func(t *testing.T) {
@@ -1029,7 +1104,7 @@ func TestSyncClone(t *testing.T) {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		synced := result.Clones[0]
-		if !synced.Created || synced.Agent != "fake-agent" || len(synced.Written) != 6 || len(synced.Unchanged) != 0 || strings.Join(synced.UnsetVariables, ",") != "REIN_TEST_GITHUB_TOKEN" || !strings.Contains(synced.AlwaysOn, "House style.") {
+		if !synced.Created || synced.Agent != "fake-agent" || len(synced.Written) != 7 || len(synced.Unchanged) != 0 || strings.Join(synced.UnsetVariables, ",") != "REIN_TEST_GITHUB_TOKEN" || !strings.Contains(synced.AlwaysOn, "House style.") {
 			t.Fatalf("synced %+v", synced)
 		}
 		for _, relative := range []string{"CLAUDE.md", ".claude/rein/organization.md", ".claude/rules/go.md", ".claude/skills/commit/SKILL.md", ".claude/settings.local.json", ".mcp.json"} {
@@ -1043,7 +1118,7 @@ func TestSyncClone(t *testing.T) {
 			t.Fatalf("CLAUDE.md %q", claude)
 		}
 		inserts, _ := fixture.orchestrator().Ledger.InsertsOf(created.Connected.OrgClonePath[:0]+fixture.state.Current.Organizations[0].ID, folder)
-		if len(inserts) != 6 || inserts[0].SHA256 == "" {
+		if len(inserts) != 7 || inserts[0].SHA256 == "" {
 			t.Fatalf("inserts %+v", inserts)
 		}
 		clones, _ := fixture.orchestrator().Organizations.ProjectClones()
@@ -1051,11 +1126,11 @@ func TestSyncClone(t *testing.T) {
 			t.Fatalf("last sync not stamped: %+v", clones[0])
 		}
 		result, err = fixture.orchestrator().SyncClone(SyncRequest{Directory: folder, ReinExecutable: "/bin/rein"})
-		if err != nil || result.Clones[0].Created || len(result.Clones[0].Written) != 0 || len(result.Clones[0].Unchanged) != 6 {
+		if err != nil || result.Clones[0].Created || len(result.Clones[0].Written) != 0 || len(result.Clones[0].Unchanged) != 7 {
 			t.Fatalf("second sync %+v err %v", result.Clones[0], err)
 		}
 		report, _ := fixture.orchestrator().Status()
-		if len(report.Clones) != 1 || report.Clones[0].Inserts != 6 || report.Clones[0].Modified != 0 {
+		if len(report.Clones) != 1 || report.Clones[0].Inserts != 7 || report.Clones[0].Modified != 0 {
 			t.Fatalf("status %+v", report.Clones)
 		}
 	})
@@ -1114,7 +1189,7 @@ func TestSyncClone(t *testing.T) {
 		_, _ = fixture.orchestrator().SyncClone(SyncRequest{Directory: folder})
 		_ = os.WriteFile(filepath.Join(folder, ".mcp.json"), []byte("{}"), 0o644)
 		result, err := fixture.orchestrator().RestoreProject(RestoreRequest{Directory: folder})
-		if err != nil || len(result.InsertsRemoved) != 5 || strings.Join(result.InsertsKept, ",") != ".mcp.json" || strings.Join(result.Restored, ",") != "CLAUDE.md" {
+		if err != nil || len(result.InsertsRemoved) != 6 || strings.Join(result.InsertsKept, ",") != ".mcp.json" || strings.Join(result.Restored, ",") != "CLAUDE.md" {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		claude, _ := os.ReadFile(filepath.Join(folder, "CLAUDE.md"))

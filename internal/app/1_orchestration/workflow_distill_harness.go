@@ -78,6 +78,9 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 	result := DistillResult{Level: level, Candidates: candidates}
 	if request.Judge != "none" && len(candidates) > 0 {
 		corpus, err := distill.LoadCorpus(orgClonePath, level, teamsOfLevel(services, orgClonePath, level), userSlugOf(organization), candidates)
+		if err == nil {
+			corpus.Labels = registryLabels(services, orgClonePath)
+		}
 		if err != nil {
 			return DistillResult{}, err
 		}
@@ -205,4 +208,20 @@ func teamsOfLevel(services Services, orgClonePath string, level string) []string
 		return tree.Projects[segments[3]].Teams
 	}
 	return nil
+}
+
+// registryLabels lists the organisation's label registry as category:value,
+// for the judge; an unreadable registry gives none.
+func registryLabels(services Services, orgClonePath string) []string {
+	tree, err := services.Records.Tree(orgClonePath)
+	if err != nil {
+		return nil
+	}
+	var labels []string
+	for _, category := range sortedKeys(tree.Labels) {
+		for _, value := range tree.Labels[category].LabelValues() {
+			labels = append(labels, category+":"+value)
+		}
+	}
+	return labels
 }

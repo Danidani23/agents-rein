@@ -33,6 +33,9 @@ type Corpus struct {
 	Passages []Passage
 	// Dropped names the passages left out to stay within the budget.
 	Dropped []string
+	// Labels is the organisation's registry, category:value, the only
+	// labels a lift may apply to.
+	Labels []string
 }
 
 // corpusBudget is the most characters of passages one brief carries.

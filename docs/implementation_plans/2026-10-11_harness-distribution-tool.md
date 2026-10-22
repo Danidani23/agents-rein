@@ -1189,6 +1189,23 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- ✅ **P2.27 — `propose` applies the judge's placement; the `rein` skill in every clone.**
+  [EXECUTED] 2026-10-21 on the user's two questions: a user level proposed as a plain folder
+  cannot know which labels apply, and the toolkit should go through `init` and `distill` so
+  the judge proposes the level of each piece. `propose` of a distillation now places each
+  candidate where the judge said: a lift goes to the organisation, the project's team
+  (several teams need `--team`) or the user level, with the `applyIf` labels written into
+  the rule's frontmatter, the skill's `rein-apply-if` metadata or the YAML of a hook,
+  permission set or tool server; a drop stays out, named in the pull request; a merge stays
+  advice. The judge's brief lists the label registry, so a label is never invented. The
+  placement is printed before the confirmation through the `PlanProposal` query, and
+  `--as-distilled` keeps everything at the distilled level. Every synced clone also gets the
+  skill `rein`, written by the Claude Code compiler with the generated files, which tells the
+  agent what the generated files are, never to edit them, how a setting is proposed, where
+  secrets come from, and which commands it may run itself; a declared skill with the same
+  id is not written and is noted. Known limits: a merge is applied by hand on the branch; a
+  lift to a team of another project is not offered; a later snapshot that holds the `rein`
+  skill distils it like any other, to be skipped.
 - ✅ **P2.18 — `distill`, the minimal `propose`, and the judge.** [EXECUTED] 2026-10-19, in
   four steps, the last the judge: the `Judge` port with the `agent-cli` backend in the Claude
   Code adapter (`claude -p --output-format json --max-turns 1`, the brief on its standard
@@ -1388,7 +1405,10 @@ from that project's snapshot.
   2026-10-12. The run is the whole user experience: install the tool (P2.8), `org create` with
   slug `dani` (P2.7), `init` in `w2going`, `sync`, a session there, then `restore` in
   `w2going`, `org destroy`, the deletion of the repository by hand, and `reset` (P2.9) back
-  to nothing. Your user slug is `danielmolnar`. The
+  to nothing. Amended 2026-10-21: the project repository is this one, whose harness is the
+  richer test, with a rule with paths, a skill, permissions and, since the move of the toolkit
+  into it, the global instructions and ten skills for the judge to place; `w2going` follows.
+  Your user slug is `danidani23`, the lowercase login, as the code derives it. The
   personal level moves from [toolkit/](../../toolkit/) into
   `declarations/users/danielmolnar/` in the org repository and reaches `~/.claude/` by symlinks
   into the org repository's local clone, which replaces `install.sh` (D1). `w2going`'s eight
@@ -1659,3 +1679,7 @@ writes is read from the next session on, not in the same one.
   never deleting (D26).
 - (2026-10-21) `org use`, `org disconnect` and `org destroy` offer the connected organisations
   when the slug is left out, the only one as the default; off a terminal the slug is required.
+- (2026-10-21) P2.27 executed: `propose` places each candidate where the judge said, with its
+  labels; the judge's brief lists the registry; the skill `rein` goes into every synced clone.
+  The toolkit moved from `toolkit/` into this repository's harness under `.claude/`, for
+  `init`, `distill` and `propose` to carry it into the org repository (R25).

@@ -330,7 +330,7 @@ func TestWiring(t *testing.T) {
 		}
 		// restore puts the project back and commits; the untracked local file returns untracked
 		code, out, errOut = run("restore", "--path", project, "--yes")
-		if code != cli.ExitWorked || !strings.Contains(out, "removed sync's files: .claude/settings.local.json, CLAUDE.md") || !strings.Contains(out, "put back: .claude/rules/go.md, CLAUDE.md") || !strings.Contains(out, ".gitignore: rein block removed") || !strings.Contains(out, "committed ") {
+		if code != cli.ExitWorked || !strings.Contains(out, "removed sync's files: .claude/settings.local.json, .claude/skills/rein/SKILL.md, CLAUDE.md") || !strings.Contains(out, "put back: .claude/rules/go.md, CLAUDE.md") || !strings.Contains(out, ".gitignore: rein block removed") || !strings.Contains(out, "committed ") {
 			t.Fatalf("restore: code %d out %q err %q", code, out, errOut)
 		}
 		_, err = os.Stat(filepath.Join(project, ".claude", "rein"))

@@ -112,6 +112,10 @@ func ClaudeCode(input Input, result resolve.Result) (Output, error) {
 			}
 			levelRules[chosen.Level] = append(levelRules[chosen.Level], chosen)
 		case address.Skills:
+			if chosen.ID == ReinSkillID {
+				output.Notes = append(output.Notes, fmt.Sprintf("the skill %s is rein's own, written by sync; %s is not written", ReinSkillID, chosen.Address))
+				continue
+			}
 			for name, content := range chosen.Files {
 				output.Files = append(output.Files, File{Path: path.Join(".claude", "skills", chosen.ID, name), Address: chosen.Address, Content: content})
 			}
@@ -183,6 +187,8 @@ func ClaudeCode(input Input, result resolve.Result) (Output, error) {
 		fmt.Fprintf(&claude, "%s\n", line)
 	}
 	output.Files = append(output.Files, File{Path: "CLAUDE.md", Address: "generated", Content: claude.String()})
+	// rein's own skill, so the agent knows how these files are managed
+	output.Files = append(output.Files, File{Path: path.Join(".claude", "skills", ReinSkillID, "SKILL.md"), Address: "generated", Content: ReinSkill})
 	// settings: hooks, permissions, the session-start hook
 	settings, notes, err := mergeSettings(input, permissionSets, hooks)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/resolve"
 )
@@ -73,8 +74,26 @@ func TestClaudeCode(t *testing.T) {
 		t.Fatalf("mcp %+v variables %v", mcp, output.Variables)
 	}
 	empty, _ := ClaudeCode(Input{OrganizationSlug: "acme", ProjectName: "Bare", ProjectSlug: "bare"}, resolve.Result{})
-	if len(empty.Files) != 2 || !strings.Contains(empty.Files[0].Content+empty.Files[1].Content, "No always-on instructions apply") {
+	if len(empty.Files) != 3 || !strings.Contains(empty.Files[2].Content, "No always-on instructions apply") || empty.Files[1].Path != ".claude/skills/rein/SKILL.md" || !strings.HasPrefix(empty.Files[1].Content, "---\nname: rein\n") || !strings.Contains(empty.Files[1].Content, "Do not edit a generated file") {
 		t.Fatalf("empty %+v", empty.Files)
+	}
+	skill, problems, _ := declaration.ParseSkill("SKILL.md", "rein", []byte(ReinSkill))
+	if len(problems) != 0 || skill.Name != "rein" {
+		t.Fatalf("rein skill %+v problems %v", skill, problems)
+	}
+	declared := resolve.Result{Chosen: []resolve.Chosen{{Kind: address.Skills, ID: "rein", Address: "organizations.acme.skills.rein", Level: "organizations.acme", Files: map[string]string{"SKILL.md": "---\nname: rein\ndescription: theirs\n---\n"}}}}
+	clash, _ := ClaudeCode(Input{OrganizationSlug: "acme", ProjectName: "Bare", ProjectSlug: "bare"}, declared)
+	written := 0
+	for _, file := range clash.Files {
+		if file.Path == ".claude/skills/rein/SKILL.md" {
+			written++
+			if file.Address != "generated" {
+				t.Fatalf("the declared rein skill was written: %+v", file)
+			}
+		}
+	}
+	if written != 1 || len(clash.Notes) != 1 || !strings.Contains(clash.Notes[0], "rein's own") {
+		t.Fatalf("clash: written %d notes %v", written, clash.Notes)
 	}
 }
 

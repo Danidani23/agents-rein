@@ -122,9 +122,9 @@ GitHub account, and the agents on your machine are detected.
 | `rein team create`, `rein project create` | Write a team or a project record into the active organisation's clone and push it to `main`, the owner's way: name, description, and for a project its teams, labels from the registry and path, asked or given as flags. |
 | `rein init` | In a project clone: binds it to its project record by the repository's root commits, picking or creating the record when none carries them; moves `CLAUDE.md`, `.claude/` and `.mcp.json` into a snapshot under `~/.rein/snapshots/`, records the removal, adds a marked block to `.gitignore`, registers the clone and commits the move-out. |
 | `rein distill` | Turns the snapshot of an initialised project's harness, or of your agent's home with `--home`, into candidate declarations at that level, compares each with what the organisation already declares by content and id, asks the judge, your agent's CLI until the organisation declares a provider, to compare the prose and suggest keep, drop, merge or lift, and writes it all with a report under `~/.rein/distill/` for `rein propose`. `--dry-run` shows the brief, `--judge none` skips the model. |
-| `rein propose <folder or zip>` | The one way declarations enter an org repository: lints the candidates, leaves out what the organisation already has, writes the rest on a branch of its clone, pushes it and opens the pull request with the comparison as its body. A distillation knows its level; anything else goes to your user level unless `--level` says otherwise. |
+| `rein propose <folder or zip>` | The one way declarations enter an org repository: lints the candidates, leaves out what the organisation already has, writes the rest on a branch of its clone, pushes it and opens the pull request with the comparison as its body. A distillation knows its level and carries the judge's view, which propose applies: a lifted candidate goes to the organisation, the project's team or your user level with its `applyIf` labels, a dropped one stays out, and the placement is printed before the confirmation; `--as-distilled` keeps everything at the distilled level. Anything else goes to your user level unless `--level` says otherwise. |
 | `rein resolve --project <slug>` | Shows which declarations apply to a project, in level order with what each replaced, what the skip lists took out and through which exception, and the problems that would make `sync` refuse. |
-| `rein sync` | Writes the harness this clone's project resolves: `CLAUDE.md` with one imported file per level, rules, skills, hook scripts, permissions and hooks in `.claude/settings.local.json` merged with your own allow list, and `.mcp.json`; every file recorded with its hash, a hand edit stopping the next sync unless `--force`. `--all` for every clone; `--hook` is what the session-start hook runs. |
+| `rein sync` | Writes the harness this clone's project resolves: `CLAUDE.md` with one imported file per level, rules, skills, hook scripts, permissions and hooks in `.claude/settings.local.json` merged with your own allow list, and `.mcp.json`; every file recorded with its hash, a hand edit stopping the next sync unless `--force`. Every clone also gets the skill `rein`, which tells the agent how these files are managed and how a change is proposed. `--all` for every clone; `--hook` is what the session-start hook runs. |
 | `rein lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, skills that share a name, and in an org repository every record: organisation, teams, projects, users and the label registry, with their references. Needs no identity, so CI runs it on an org repository. |
 | `rein restore` | Reverses `init` for one clone: the files it moved out come back from their snapshots, the rein block leaves `.gitignore`, the clone is forgotten on this machine, and the put-back is committed as the move-out was. |
 | `rein reset` | Restores every initialised project first, then removes everything rein placed into an agent's home, forgets the organisations and deletes their clones, and removes the ledger, the snapshots and the distillations: the machine as before rein. A restore that fails stops it before anything is wiped. |
@@ -174,14 +174,14 @@ AI-assisted development across many teams? Six questions, answered with sources 
   the user calls, the orchestration with the workflows and queries, and the services, each
   owning one piece of state, with the pure libraries beside them; then the ports and the
   adapters for GitHub, git, Claude Code, local state and the terminal.
-- [toolkit/](toolkit/) — the personal agent toolkit: global instructions and ten skills in open
-  formats, the content of the pilot. It becomes the user level of the pilot's org repository,
-  delivered per project by `rein sync`
-  ([ADR](docs/decisions/2026-10-10_personal-toolkit-open-formats.md),
-  [board](docs/implementation_plans/2026-10-10_agent-toolkit.md)).
 - `CLAUDE.md` and `.claude/` — the harness this repository runs with, on each machine and not
   committed, since agent settings are not repository settings. From the pilot on, `rein sync`
-  writes it; until then it is this machine's copy, and a fresh clone has none.
+  writes it; until then it is this machine's copy, and a fresh clone has none. The personal
+  agent toolkit, global instructions and ten skills in open formats, lived under `toolkit/`
+  until 2026-10-21 and moved into this harness for `rein init` to carry it, through `distill`
+  and `propose`, into the pilot's org repository, where the judge places each piece at its
+  level ([ADR](docs/decisions/2026-10-10_personal-toolkit-open-formats.md),
+  [board](docs/implementation_plans/2026-10-10_agent-toolkit.md)).
 
 ## Licence
 
