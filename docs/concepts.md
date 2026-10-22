@@ -99,6 +99,21 @@ levels, and a declaration adds its kind and id, `organizations.dani.users.danida
 A user level is a level of the organisation: a person with two organisations has one in each
 repository, and they may differ.
 
+## When the harness is brought up to date
+
+`rein sync` writes a session-start hook into the clone's `.claude/settings.local.json`. Claude
+Code runs it whenever a session opens in the folder, and the hook runs `rein sync --hook`: it
+pulls the org repository, resolves the project's levels again and rewrites the files whose
+content changed, leaving the rest as they are. It never blocks a session: offline, it prints one
+line and the session opens with the harness it has, and a file edited by hand stops it with a
+message instead of being overwritten. The hook is Claude Code's mechanism; another agent gets
+the same files and needs its own trigger, or a `rein sync` by hand, until its adapter exists.
+
+A session that is already open does not start over when `sync` runs. Claude Code reads the
+instructions at the start of a session, picks up a new skill while a session runs, and keeps the
+hooks it started with until it is restarted; a new session, or `/clear`, loads everything that
+changed.
+
 ## Labels and the registry
 
 A project carries labels, `category:value`, chosen from the organisation's registry when the
