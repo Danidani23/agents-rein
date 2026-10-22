@@ -97,7 +97,7 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 		fmt.Fprintf(environment.out, "  skipped    %s\n", skipped)
 	}
 	fmt.Fprintf(environment.out, "%d new, %d identical to an existing declaration, %d sharing an id with another level\n", counts[distill.VerdictNew], counts[distill.VerdictIdentical], counts[distill.VerdictSameID])
-	fmt.Fprintf(environment.out, "written to %s\nnext: rein propose %s, once it exists, opens the pull request\n", result.Folder, result.Folder)
+	fmt.Fprintf(environment.out, "written to %s\nnext: rein propose %s opens the pull request\n", result.Folder, result.Folder)
 	return nil
 }
 

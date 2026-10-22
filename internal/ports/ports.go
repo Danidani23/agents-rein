@@ -136,6 +136,8 @@ type Repository interface {
 	ResetToRemote(directory string) error
 	// Root is the top folder of the repository that holds directory.
 	Root(directory string) (string, error)
+	// RemoteURL is the URL of the repository's origin, "" without one.
+	RemoteURL(directory string) (string, error)
 	// RootCommits are the hashes of the commits without parents: the
 	// fingerprint of a repository, which survives renames and forks.
 	RootCommits(directory string) ([]string, error)
@@ -217,6 +219,8 @@ type Text struct {
 	Description string
 	Explanation string
 	Default     string
+	// Optional lets Enter answer with nothing when there is no default.
+	Optional bool
 	// Validate returns the reason an answer is refused, or "".
 	Validate func(answer string) string
 }

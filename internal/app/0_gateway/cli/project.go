@@ -32,11 +32,14 @@ func newProjectCommand(environment *commandEnvironment) *cobra.Command {
 type projectCreateAnswers struct {
 	organization string
 	name         string
-	description  string
-	teams        []string
-	labels       []string
-	path         string
-	yes          bool
+	// nameDefault is offered when no name was given: the repository's name
+	// when init creates the project on the spot.
+	nameDefault string
+	description string
+	teams       []string
+	labels      []string
+	path        string
+	yes         bool
 }
 
 func newProjectCreateCommand(environment *commandEnvironment) *cobra.Command {
@@ -142,7 +145,7 @@ func askProjectCreate(prompter ports.Prompter, organization orchestration.Organi
 			Title:       "Project name",
 			Description: "The name people see; the slug is derived from it, lowercase with hyphens.",
 			Explanation: "The slug becomes part of every address under the project, such as organizations.acme.projects.shop.rules.checkout, and never changes afterwards.",
-			Default:     answers.name,
+			Default:     firstOf(answers.name, answers.nameDefault),
 			Validate: func(answer string) string {
 				if scaffold.SlugOf(answer) == "" {
 					return "The name must contain at least one letter or digit."
@@ -157,8 +160,9 @@ func askProjectCreate(prompter ports.Prompter, organization orchestration.Organi
 	if again || answers.description == "" {
 		answers.description, err = prompter.Ask(ports.Text{
 			Title:       "Description",
-			Description: "One line about what the project is.",
-			Default:     firstOf(answers.description, "The "+answers.name+" project"),
+			Description: "One line about what the project is; Enter for none.",
+			Default:     answers.description,
+			Optional:    true,
 		})
 		if err != nil {
 			return answers, err

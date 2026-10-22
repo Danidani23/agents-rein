@@ -333,3 +333,19 @@ func (service Service) Commit(root string, removedPaths []string, extraPaths []s
 	}
 	return hash, true, nil
 }
+
+// RepositoryName is what the repository is called: the last segment of its
+// origin URL without .git, or the root folder's name without a remote.
+func (service Service) RepositoryName(root string) string {
+	remote, err := service.Repository.RemoteURL(root)
+	if err == nil && remote != "" {
+		name := strings.TrimSuffix(strings.TrimRight(remote, "/"), ".git")
+		if cut := strings.LastIndexAny(name, "/:"); cut >= 0 {
+			name = name[cut+1:]
+		}
+		if name != "" {
+			return name
+		}
+	}
+	return filepath.Base(root)
+}

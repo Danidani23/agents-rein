@@ -139,8 +139,9 @@ func askTeamCreate(prompter ports.Prompter, answers teamCreateAnswers, again boo
 	if again || answers.description == "" {
 		answers.description, err = prompter.Ask(ports.Text{
 			Title:       "Description",
-			Description: "One line about what the team does.",
-			Default:     firstOf(answers.description, "The "+answers.name+" team"),
+			Description: "One line about what the team does; Enter for none.",
+			Default:     answers.description,
+			Optional:    true,
 		})
 		if err != nil {
 			return answers, err

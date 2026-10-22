@@ -34,7 +34,7 @@ func newInitCommand(environment *commandEnvironment) *cobra.Command {
 			"CLAUDE.md, .claude/ and .mcp.json, into a snapshot under ~/.rein/snapshots/, records the\n" +
 			"removal in ~/.rein/removals.yaml, adds a marked block to .gitignore so rein sync can write\n" +
 			"them back as generated files, registers the clone on this machine, and commits exactly the\n" +
-			"paths it touched; --no-commit leaves them staged. The first sync is rein sync, once it exists.",
+			"paths it touched; --no-commit leaves them staged. Then rein sync writes the settings it resolves.",
 		Example: "  rein init\n  rein init --project shop --yes\n  rein init --path services/shop",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
@@ -149,7 +149,7 @@ func askInitBinding(prompter ports.Prompter, organization orchestration.Organiza
 	if len(organization.Teams) == 0 {
 		return request, "", fmt.Errorf("%s has no teams yet; run rein team create first, since a project belongs to at least one team", organization.Slug)
 	}
-	answers, err := askProjectCreate(prompter, organization, projectCreateAnswers{name: "", path: location.Path}, false)
+	answers, err := askProjectCreate(prompter, organization, projectCreateAnswers{nameDefault: location.RepositoryName, path: location.Path}, false)
 	if err != nil {
 		return request, "", err
 	}
@@ -180,7 +180,7 @@ func printInitialized(environment *commandEnvironment, result orchestration.Init
 	default:
 		fmt.Fprintf(environment.out, "the move-out is staged, not committed\n")
 	}
-	fmt.Fprintf(environment.out, "next: rein sync, once it exists, writes the settings this project resolves\n")
+	fmt.Fprintf(environment.out, "next: rein sync writes the settings this project resolves\n")
 }
 
 const moveOutCommitMessageShown = "move agent settings out to rein (rein init)"

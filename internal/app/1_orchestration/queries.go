@@ -206,13 +206,16 @@ type ProjectMatch struct {
 // records of the active organisation that are not bound yet, and whether
 // this machine already initialised the folder.
 type ProjectLocation struct {
-	Root        string
-	Path        string
-	Folder      string
-	Fingerprint []string
-	Matches     []ProjectMatch
-	Unbound     []ProjectMatch
-	Initialized string
+	Root string
+	// RepositoryName is the repository's name from its origin, or the
+	// folder's; the default name of a project created on the spot.
+	RepositoryName string
+	Path           string
+	Folder         string
+	Fingerprint    []string
+	Matches        []ProjectMatch
+	Unbound        []ProjectMatch
+	Initialized    string
 }
 
 // LocateProject reads the repository around directory and the connected
@@ -224,7 +227,7 @@ func (orchestrator Orchestrator) LocateProject(directory string) (ProjectLocatio
 	if err != nil {
 		return ProjectLocation{}, err
 	}
-	result := ProjectLocation{Root: location.Root, Path: location.Path, Folder: location.Folder, Fingerprint: location.Fingerprint}
+	result := ProjectLocation{Root: location.Root, RepositoryName: services.WorkingCopy.RepositoryName(location.Root), Path: location.Path, Folder: location.Folder, Fingerprint: location.Fingerprint}
 	registered, err := services.Organizations.ProjectClones()
 	if err != nil {
 		return ProjectLocation{}, err

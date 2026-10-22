@@ -256,3 +256,16 @@ func TestConfirmOrEdit(t *testing.T) {
 		t.Fatalf("styles %q %q", painted.Green("ok"), plain.Red("x"))
 	}
 }
+
+func TestAskOptional(t *testing.T) {
+	prompt, out := session("\n")
+	answer, err := prompt.Ask(ports.Text{Title: "Description", Description: "Enter for none.", Optional: true})
+	if err != nil || answer != "" || strings.Contains(out.String(), "An answer is required") {
+		t.Fatalf("answer %q err %v out %q", answer, err, out.String())
+	}
+	prompt, out = session("\nsomething\n")
+	answer, err = prompt.Ask(ports.Text{Title: "Name"})
+	if err != nil || answer != "something" || !strings.Contains(out.String(), "An answer is required") {
+		t.Fatalf("answer %q err %v out %q", answer, err, out.String())
+	}
+}

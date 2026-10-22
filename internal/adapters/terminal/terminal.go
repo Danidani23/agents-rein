@@ -100,6 +100,10 @@ func (session *Session) Ask(question ports.Text) (string, error) {
 			continue
 		}
 		if answer == "" {
+			if question.Default == "" && question.Optional {
+				fmt.Fprintln(session.out)
+				return "", nil
+			}
 			if question.Default == "" {
 				fmt.Fprintf(session.out, "%s\n\n", session.dim("An answer is required."))
 				continue

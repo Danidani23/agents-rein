@@ -305,6 +305,15 @@ func (repository *Repository) ResetToRemote(directory string) error {
 }
 
 // Root walks up from directory to the folder with the git marker.
+// RemoteURL is the origin a clone or a publish remembered, "" otherwise.
+func (*Repository) RemoteURL(directory string) (string, error) {
+	content, err := os.ReadFile(filepath.Join(directory, originMarker))
+	if err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(string(content)), nil
+}
+
 func (*Repository) Root(directory string) (string, error) {
 	for folder := directory; ; folder = filepath.Dir(folder) {
 		_, err := os.Stat(filepath.Join(folder, gitMarker))

@@ -502,7 +502,7 @@ func TestTeamAndProjectCreate(t *testing.T) {
 		fixture := newHarness(t)
 		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
 		code, out, errOut := fixture.runInteractive("Web\n\n\n", "team", "create")
-		if code != ExitWorked || !strings.Contains(out, "[The Web team]") || !strings.Contains(out, "created team web (Web)") {
+		if code != ExitWorked || !strings.Contains(out, "One line about what the team does; Enter for none.") || strings.Contains(out, "[The Web team]") || !strings.Contains(out, "created team web (Web)") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
 		// name, description, teams (the one team is the default), then the categories in order: data none, kind none, language go; path, confirm
@@ -581,7 +581,7 @@ func TestInit(t *testing.T) {
 		folder := projectClone(t)
 		// project choice (create, the default), name, description, teams, data, kind, language, confirm
 		code, out, errOut := fixture.runInteractive("\nShop\n\n\n\n\n2\n\n", "init", "--path", folder)
-		for _, expected := range []string{"1) create a new project", "Project name", "This will create the project \"Shop\" in acme and bind it", "created and bound " + folder + " to organizations.acme.projects.shop"} {
+		for _, expected := range []string{"1) create a new project", "Project name\x1b[0m [" + filepath.Base(folder) + "]", "This will create the project \"Shop\" in acme and bind it", "created and bound " + folder + " to organizations.acme.projects.shop"} {
 			if code != ExitWorked || !strings.Contains(out, expected) {
 				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 			}

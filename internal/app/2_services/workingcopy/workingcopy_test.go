@@ -125,3 +125,17 @@ func TestVerifyAndWriteFiles(t *testing.T) {
 		t.Fatalf("unset %v", unset)
 	}
 }
+
+func TestRepositoryName(t *testing.T) {
+	for remote, expected := range map[string]string{"https://github.com/Danidani23/agents-rein.git": "agents-rein", "git@github.com:acme/shop.git": "shop", "/tmp/remotes/web-shop.git": "web-shop", "https://example.com/group/sub/tool/": "tool", "": "folder-name"} {
+		service := Service{Repository: &fake.Repository{}}
+		root := filepath.Join(t.TempDir(), "folder-name")
+		_ = os.MkdirAll(root, 0o755)
+		if remote != "" {
+			_ = os.WriteFile(filepath.Join(root, ".fake-origin"), []byte(remote+"\n"), 0o644)
+		}
+		if name := service.RepositoryName(root); name != expected {
+			t.Fatalf("%q: %q", remote, name)
+		}
+	}
+}

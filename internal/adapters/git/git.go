@@ -109,6 +109,19 @@ func (Repository) Root(directory string) (string, error) {
 	return strings.TrimSpace(result.Stdout), nil
 }
 
+// RemoteURL is the URL of origin; a repository without one gives "".
+func (Repository) RemoteURL(directory string) (string, error) {
+	result, err := execute.Run(directory, "git", "remote", "get-url", "origin")
+	if err != nil {
+		var failure *execute.Failure
+		if errors.As(err, &failure) {
+			return "", nil
+		}
+		return "", err
+	}
+	return strings.TrimSpace(result.Stdout), nil
+}
+
 // RootCommits lists the parentless commits reachable from HEAD.
 func (Repository) RootCommits(directory string) ([]string, error) {
 	result, err := execute.Run(directory, "git", "rev-list", "--max-parents=0", "HEAD")
