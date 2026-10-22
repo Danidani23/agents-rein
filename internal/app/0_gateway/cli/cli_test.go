@@ -507,7 +507,7 @@ func TestTeamAndProjectCreate(t *testing.T) {
 		}
 		// name, description, teams (the one team is the default), the required kind, the other labels in one list, path, confirm
 		code, out, errOut = fixture.runInteractive("Shop\n\n\n1\nlanguage:go\n\n\n", "project", "create")
-		for _, expected := range []string{"1) web  ", "[web]", "Labels say what the project is, so declarations can apply to projects like it. Label kind, required: at least one; several separated by commas.", "1) cli  ", "Other labels, any that apply, several separated by commas; Enter for none.", "language:go  ", "data:public  ", "[.]", "with labels kind:cli, language:go", "created project shop (Shop) in acme for the team(s) web"} {
+		for _, expected := range []string{"1) web  ", "[web]", "Labels say what the project is, so declarations can apply to projects like it. Label kind, required: one value.", "1) cli  ", "Other labels, any that apply, several separated by commas; Enter for none.", "language:go  ", "data:public  ", "[.]", "with labels kind:cli, language:go", "created project shop (Shop) in acme for the team(s) web"} {
 			if code != ExitWorked || !strings.Contains(out, expected) {
 				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 			}
@@ -786,7 +786,7 @@ func TestEditAtTheConfirmation(t *testing.T) {
 	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
 	// name, description, teams, kind, other labels, path, e; then name, description, teams, kind (previous kept), other labels, path, confirm
 	code, out, errOut = fixture.runInteractive("Shop\n\n\n1\n\n\ne\n\n\n\n\nlanguage:go\n\n\n", "project", "create")
-	if code != ExitWorked || !strings.Contains(out, "Project name\x1b[0m [Shop]") || !strings.Contains(out, "Choose one or more\x1b[0m [cli]") || !strings.Contains(out, "with labels kind:cli, language:go") || !strings.Contains(out, "created project shop (Shop)") {
+	if code != ExitWorked || !strings.Contains(out, "Project name\x1b[0m [Shop]") || !strings.Contains(out, "1) cli  \x1b[2;3ma command-line tool\x1b[0m  \x1b[2;3m(default)") || !strings.Contains(out, "with labels kind:cli, language:go") || !strings.Contains(out, "created project shop (Shop)") {
 		t.Fatalf("code %d out %q err %q", code, out, errOut)
 	}
 }
@@ -837,11 +837,11 @@ func TestProjectEditAndLabelRegistry(t *testing.T) {
 	}
 	// the one project is the default; description typed, teams, kind and other labels kept by Enter, path kept, confirm
 	code, out, errOut = fixture.runInteractive("\nA web shop\n\n\n\n\n\n", "project", "edit")
-	if code != ExitWorked || strings.Contains(out, "Project name") || !strings.Contains(out, "1) shop  \x1b[2;3mShop, teams web") || !strings.Contains(out, "Choose one or more\x1b[0m [cli]") || !strings.Contains(out, "Choose any, or none\x1b[0m [language:go]") || !strings.Contains(out, "changed project shop (Shop) in acme: description") {
+	if code != ExitWorked || strings.Contains(out, "Project name") || !strings.Contains(out, "1) shop  \x1b[2;3mShop, teams web") || !strings.Contains(out, "\x1b[1mChoose\x1b[0m [1]: ") || !strings.Contains(out, "Choose any, or none\x1b[0m [language:go]") || !strings.Contains(out, "changed project shop (Shop) in acme: description") {
 		t.Fatalf("interactive edit: code %d out %q err %q", code, out, errOut)
 	}
 	code, out, errOut = fixture.run("label", "list")
-	if code != ExitWorked || !strings.Contains(out, "label registry of acme") || !strings.Contains(out, "kind  required: every project carries one\n  cli              a command-line tool\n") || !strings.Contains(out, "\nlanguage\n  dart") {
+	if code != ExitWorked || !strings.Contains(out, "label registry of acme") || !strings.Contains(out, "kind  required: every project carries one\n  cli              a command-line tool\n") || !strings.Contains(out, "\nlanguage  several values allowed\n  dart") {
 		t.Fatalf("list: code %d out %q err %q", code, out, errOut)
 	}
 	code, out, errOut = fixture.run("label", "add", "kind:worker", "--description", "a background worker", "--yes")
@@ -852,9 +852,9 @@ func TestProjectEditAndLabelRegistry(t *testing.T) {
 	if code != ExitRefused || !strings.Contains(errOut, "kind:worker is already in the registry") {
 		t.Fatalf("add twice: code %d err %q", code, errOut)
 	}
-	// category: 4 is the new one after data, kind, language; then its name, the value, the description, required yes, confirm
-	code, out, errOut = fixture.runInteractive("4\nstack\naws\nruns on AWS\ny\n\n", "label", "add")
-	if code != ExitWorked || !strings.Contains(out, "4) a new category") || !strings.Contains(out, "Must every project carry one value of stack?") || !strings.Contains(out, "This will create the category stack in the registry of acme, required: every project carries one of its values, with its first value aws (runs on AWS)") || !strings.Contains(out, "created the category stack with stack:aws in acme") {
+	// category: 4 is the new one after data, kind, language; then its name, the value, the description, required yes, several no, confirm
+	code, out, errOut = fixture.runInteractive("4\nstack\naws\nruns on AWS\ny\nn\n\n", "label", "add")
+	if code != ExitWorked || !strings.Contains(out, "4) a new category") || !strings.Contains(out, "Must every project carry one value of stack?") || !strings.Contains(out, "May a project carry several values of stack?") || !strings.Contains(out, "This will create the category stack in the registry of acme, required: every project carries one of its values, one value per project, with its first value aws (runs on AWS)") || !strings.Contains(out, "created the category stack with stack:aws in acme") {
 		t.Fatalf("interactive add: code %d out %q err %q", code, out, errOut)
 	}
 	code, out, _ = fixture.run("label", "list")
@@ -873,23 +873,40 @@ func TestProjectEditAndLabelRegistry(t *testing.T) {
 	if code != ExitWorked || !strings.Contains(out, "removed kind:worker from the registry of acme") {
 		t.Fatalf("remove: code %d out %q err %q", code, out, errOut)
 	}
-	code, out, errOut = fixture.run("label", "require", "language", "--yes")
-	if code != ExitWorked || !strings.Contains(out, "This will make the category language required, so every project created or edited from now on carries one of its values in acme") || !strings.Contains(out, "the category language is required in acme") {
-		t.Fatalf("require: code %d out %q err %q", code, out, errOut)
+	code, out, errOut = fixture.run("label", "set", "language", "--required", "--yes")
+	if code != ExitWorked || !strings.Contains(out, "This will make the category language required, so every project created or edited from now on carries one of its values in acme") || !strings.Contains(out, "the category language in acme is required, several values per project") {
+		t.Fatalf("set required: code %d out %q err %q", code, out, errOut)
 	}
 	code, _, errOut = fixture.run("project", "create", "--name", "Blog", "--team", "web", "--label", "kind:web-app", "--label", "stack:aws", "--yes")
 	if code != ExitRefused || !strings.Contains(errOut, "the label category language is required") {
 		t.Fatalf("create after require: code %d err %q", code, errOut)
 	}
-	code, out, errOut = fixture.run("label", "require", "language", "--off", "--yes")
-	if code != ExitWorked || !strings.Contains(out, "the category language is optional in acme") {
-		t.Fatalf("optional: code %d out %q err %q", code, out, errOut)
+	code, out, errOut = fixture.run("label", "set", "language", "--optional", "--single", "--yes")
+	if code != ExitWorked || !strings.Contains(out, "This will make the category language optional and limited to one value per project in acme") || !strings.Contains(out, "the category language in acme is optional, one value per project") {
+		t.Fatalf("set optional single: code %d out %q err %q", code, out, errOut)
+	}
+	code, _, errOut = fixture.run("label", "set", "language", "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "say what to set") {
+		t.Fatalf("set nothing: code %d err %q", code, errOut)
+	}
+	code, _, errOut = fixture.run("label", "set", "language", "--required", "--optional", "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "exclude each other") {
+		t.Fatalf("set both ways: code %d err %q", code, errOut)
+	}
+	code, _, errOut = fixture.run("project", "create", "--name", "Two", "--team", "web", "--label", "kind:cli", "--label", "data:internal", "--label", "data:public", "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "data takes one value; given internal, public") {
+		t.Fatalf("two values with flags: code %d err %q", code, errOut)
+	}
+	// name, description, teams, kind and stack (single choices, both required by now), other labels twice: two data values refused, then one; path, confirm
+	code, out, errOut = fixture.runInteractive("Three\n\n\n1\n1\ndata:internal,data:public\ndata:public\n\n\n", "project", "create")
+	if code != ExitWorked || !strings.Contains(out, "Label kind, required: one value.") || !strings.Contains(out, "\x1b[1mChoose\x1b[0m: ") || !strings.Contains(out, "data takes one value; given internal, public. Other labels") || !strings.Contains(out, "with labels kind:cli, stack:aws, data:public") {
+		t.Fatalf("two values asked again: code %d out %q err %q", code, out, errOut)
 	}
 	code, _, errOut = fixture.run("label", "remove", "nope")
 	if code != ExitRefused || !strings.Contains(errOut, "is not category:value") {
 		t.Fatalf("bad label: code %d err %q", code, errOut)
 	}
-	code, _, errOut = fixture.run("label", "require", "nope", "--yes")
+	code, _, errOut = fixture.run("label", "set", "nope", "--required", "--yes")
 	if code != ExitRefused || !strings.Contains(errOut, `category "nope" is not in the registry; categories are data, kind, language, stack`) {
 		t.Fatalf("unknown category: code %d err %q", code, errOut)
 	}

@@ -149,6 +149,7 @@ type LabelValueSummary struct {
 type LabelCategorySummary struct {
 	Category string
 	Required bool
+	Multiple bool
 	Values   []LabelValueSummary
 }
 
@@ -194,7 +195,7 @@ func (orchestrator Orchestrator) DescribeOrganization(slug string) (Organization
 		description.Projects = append(description.Projects, ProjectSummary{Slug: projectSlug, Name: project.Name, Description: project.Description, Teams: project.Teams, Labels: project.Labels, Path: project.Path})
 	}
 	for _, category := range sortedKeys(tree.Labels) {
-		summary := LabelCategorySummary{Category: category, Required: tree.Labels[category].Required}
+		summary := LabelCategorySummary{Category: category, Required: tree.Labels[category].Required, Multiple: tree.Labels[category].Multiple}
 		registered := tree.Labels[category]
 		for _, value := range registered.LabelValues() {
 			summary.Values = append(summary.Values, LabelValueSummary{Value: value, Description: registered.Labels[value]})

@@ -120,6 +120,10 @@ func checkProjectReferences(tree declaration.Tree, organizationSlug string, proj
 			return refusal.New(fmt.Sprintf("label %q is not in the registry; %s has %s", label, category, strings.Join(registered.LabelValues(), ", ")))
 		}
 	}
+	conflicts := declaration.SingleValueConflicts(tree.Labels, project.Labels)
+	if len(conflicts) > 0 {
+		return refusal.New(strings.Join(conflicts, "; "))
+	}
 	return nil
 }
 

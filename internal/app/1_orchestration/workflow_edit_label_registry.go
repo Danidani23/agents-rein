@@ -21,21 +21,22 @@ const (
 	// LabelRemove takes a value out of a category; a value a project
 	// carries, or the last value of a category, stays.
 	LabelRemove LabelOperation = "remove"
-	// LabelRequire marks a category required: every project carries one.
-	LabelRequire LabelOperation = "require"
-	// LabelOptional marks a category optional again.
-	LabelOptional LabelOperation = "optional"
+	// LabelSet changes whether a category is required and whether a project
+	// may carry several of its values.
+	LabelSet LabelOperation = "set"
 )
 
-// LabelRegistryRequest is one change to the label registry. Required
-// applies when LabelAdd creates the category.
+// LabelRegistryRequest is one change to the label registry. Required and
+// Multiple are the properties of a category LabelAdd creates, and the
+// changes LabelSet makes; nil leaves a property as it is.
 type LabelRegistryRequest struct {
 	Organization string
 	Operation    LabelOperation
 	Category     string
 	Value        string
 	Description  string
-	Required     bool
+	Required     *bool
+	Multiple     *bool
 }
 
 // LabelRegistryResult is what EditLabelRegistry did.
@@ -45,7 +46,13 @@ type LabelRegistryResult struct {
 	Value           string
 	CreatedCategory bool
 	Required        bool
+	Multiple        bool
 	RelativePath    string
+}
+
+// boolOf reads an optional bool, false when nil.
+func boolOf(value *bool) bool {
+	return value != nil && *value
 }
 
 // EditLabelRegistry changes one category of the organisation's label
@@ -81,7 +88,7 @@ func (orchestrator Orchestrator) EditLabelRegistry(request LabelRegistryRequest)
 				switch request.Operation {
 				case LabelAdd:
 					if !exists {
-						category = declaration.LabelCategory{Category: request.Category, Required: request.Required, Labels: map[string]string{}}
+						category = declaration.LabelCategory{Category: request.Category, Required: boolOf(request.Required), Multiple: boolOf(request.Multiple), Labels: map[string]string{}}
 						result.CreatedCategory = true
 					}
 					if _, taken := category.Labels[request.Value]; taken {
@@ -112,16 +119,33 @@ func (orchestrator Orchestrator) EditLabelRegistry(request LabelRegistryRequest)
 					}
 					delete(category.Labels, request.Value)
 					message = fmt.Sprintf("label %s:%s removed", request.Category, request.Value)
-				case LabelRequire, LabelOptional:
+				case LabelSet:
 					if !exists {
 						return refusal.New(fmt.Sprintf("category %q is not in the registry; categories are %s", request.Category, strings.Join(sortedKeys(tree.Labels), ", ")))
 					}
-					category.Required = request.Operation == LabelRequire
-					message = fmt.Sprintf("label category %s %s", request.Category, request.Operation)
+					if request.Required == nil && request.Multiple == nil {
+						return refusal.New("nothing to set: say whether the category is required or optional, and whether a project may carry several of its values")
+					}
+					if request.Required != nil {
+						category.Required = *request.Required
+					}
+					if request.Multiple != nil {
+						category.Multiple = *request.Multiple
+					}
+					if !category.Multiple {
+						for _, slug := range sortedKeys(tree.Projects) {
+							conflicts := declaration.SingleValueConflicts(map[string]declaration.LabelCategory{category.Category: category}, tree.Projects[slug].Labels)
+							if len(conflicts) > 0 {
+								return refusal.New(fmt.Sprintf("the project %s carries several values of %s; change it first with rein project edit", slug, category.Category))
+							}
+						}
+					}
+					message = fmt.Sprintf("label category %s: %s, %s", request.Category, requiredWord(category.Required), multipleWord(category.Multiple))
 				default:
 					return refusal.New(fmt.Sprintf("%q is not a registry operation", request.Operation))
 				}
 				result.Required = category.Required
+				result.Multiple = category.Multiple
 				relativePath, content, err = scaffold.LabelCategoryRecord(organization.Slug, category)
 				if err != nil {
 					return err
@@ -159,4 +183,20 @@ func (orchestrator Orchestrator) EditLabelRegistry(request LabelRegistryRequest)
 		return LabelRegistryResult{}, err
 	}
 	return result, nil
+}
+
+// requiredWord names the required property for people.
+func requiredWord(required bool) string {
+	if required {
+		return "required"
+	}
+	return "optional"
+}
+
+// multipleWord names the multiple property for people.
+func multipleWord(multiple bool) string {
+	if multiple {
+		return "several values allowed"
+	}
+	return "one value"
 }

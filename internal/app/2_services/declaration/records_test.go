@@ -210,4 +210,9 @@ func TestRequiredLabelCategories(t *testing.T) {
 	if missing := MissingRequiredCategories(registry, []string{"kind:cli", "data:public", "broken"}); len(missing) != 0 {
 		t.Fatalf("missing %v", missing)
 	}
+	registry["language"] = LabelCategory{Category: "language", Multiple: true}
+	conflicts := SingleValueConflicts(registry, []string{"data:internal", "data:public", "language:go", "language:rust", "kind:cli", "unknown:a", "unknown:b"})
+	if strings.Join(conflicts, "|") != "data takes one value; given internal, public" {
+		t.Fatalf("conflicts %v", conflicts)
+	}
 }

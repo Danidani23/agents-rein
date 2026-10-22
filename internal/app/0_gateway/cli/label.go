@@ -20,12 +20,12 @@ func newLabelCommand(environment *commandEnvironment) *cobra.Command {
 		Use:   "label",
 		Short: "List and change the label registry of an organisation",
 		Long: "The label registry says what a project can be: categories such as kind or language, each\n" +
-			"with its values, and whether every project must carry one of them. Declarations apply to\n" +
-			"projects by these labels. label list shows the registry; label add, remove and require\n" +
-			"change one category in the organisation's clone and push it to main, as the record\n" +
-			"creators do.",
+			"with its values, whether every project must carry one of them, and whether a project may\n" +
+			"carry several. Declarations apply to projects by these labels. label list shows the\n" +
+			"registry; label add, remove and set change one category in the organisation's clone and\n" +
+			"push it to main, as the record creators do.",
 	}
-	label.AddCommand(newLabelListCommand(environment), newLabelAddCommand(environment), newLabelRemoveCommand(environment), newLabelRequireCommand(environment))
+	label.AddCommand(newLabelListCommand(environment), newLabelAddCommand(environment), newLabelRemoveCommand(environment), newLabelSetCommand(environment))
 	return label
 }
 
@@ -55,6 +55,9 @@ func newLabelListCommand(environment *commandEnvironment) *cobra.Command {
 				if category.Required {
 					line += "  required: every project carries one"
 				}
+				if category.Multiple {
+					line += "  several values allowed"
+				}
 				fmt.Fprintln(environment.out, line)
 				for _, value := range category.Values {
 					fmt.Fprintf(environment.out, "  %-16s %s\n", value.Value, value.Description)
@@ -69,23 +72,25 @@ func newLabelListCommand(environment *commandEnvironment) *cobra.Command {
 
 func newLabelAddCommand(environment *commandEnvironment) *cobra.Command {
 	var request orchestration.LabelRegistryRequest
-	var yes bool
+	var yes, required, multiple bool
 	command := &cobra.Command{
 		Use:   "add [category:value]",
 		Short: "Add a value to a category, or a new category with its first value",
 		Long: "add puts category:value into the registry with its description. A category that does not\n" +
 			"exist yet is created; --required makes every project carry one of its values from then\n" +
-			"on. Without the argument it asks on a terminal.",
-		Example: "  rein label add\n  rein label add kind:worker --description \"a background worker\" --yes\n  rein label add stack:aws --description \"runs on AWS\" --required --yes",
+			"on, --multiple lets a project carry several. Without the argument it asks on a terminal.",
+		Example: "  rein label add\n  rein label add kind:worker --description \"a background worker\" --yes\n  rein label add stack:aws --description \"runs on AWS\" --required --multiple --yes",
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
 			request.Operation = orchestration.LabelAdd
+			request.Required, request.Multiple = &required, &multiple
 			return runLabelAdd(environment, arguments, request, yes)
 		},
 	}
 	command.Flags().StringVar(&request.Organization, "org", "", "the organisation's slug (default: the active one)")
 	command.Flags().StringVar(&request.Description, "description", "", "what the value means, one line")
-	command.Flags().BoolVar(&request.Required, "required", false, "when the category is new: every project must carry one of its values")
+	command.Flags().BoolVar(&required, "required", false, "when the category is new: every project must carry one of its values")
+	command.Flags().BoolVar(&multiple, "multiple", false, "when the category is new: a project may carry several of its values")
 	command.Flags().BoolVar(&yes, "yes", false, "do not ask for confirmation")
 	return command
 }
@@ -135,10 +140,14 @@ func runLabelAdd(environment *commandEnvironment, arguments []string, request or
 		fmt.Fprintf(environment.out, "This will add %s:%s%s to the registry of %s and push it to main.\n", request.Category, request.Value, description, organization.Slug)
 	} else {
 		required := "optional"
-		if request.Required {
+		if request.Required != nil && *request.Required {
 			required = "required: every project carries one of its values"
 		}
-		fmt.Fprintf(environment.out, "This will create the category %s in the registry of %s, %s, with its first value %s%s, and push it to main.\n", request.Category, organization.Slug, required, request.Value, description)
+		multiple := "one value per project"
+		if request.Multiple != nil && *request.Multiple {
+			multiple = "several values per project"
+		}
+		fmt.Fprintf(environment.out, "This will create the category %s in the registry of %s, %s, %s, with its first value %s%s, and push it to main.\n", request.Category, organization.Slug, required, multiple, request.Value, description)
 	}
 	if !yes {
 		if !prompter.CanAsk() {
@@ -166,7 +175,8 @@ func runLabelAdd(environment *commandEnvironment, arguments []string, request or
 }
 
 // askLabelAdd asks the category, the value, its description and, for a new
-// category, whether every project must carry one.
+// category, whether every project must carry one and whether several are
+// allowed.
 func askLabelAdd(prompter ports.Prompter, organization orchestration.OrganizationDescription, request orchestration.LabelRegistryRequest) (orchestration.LabelRegistryRequest, error) {
 	var choices []ports.Choice
 	for _, category := range organization.LabelCategories {
@@ -215,10 +225,15 @@ func askLabelAdd(prompter ports.Prompter, organization orchestration.Organizatio
 		return request, err
 	}
 	if created {
-		request.Required, err = prompter.Confirm("Must every project carry one value of "+request.Category+"?", "A required category is asked first when a project is created or edited, and at least one value must be picked; the lint warns about a project that has none. An optional category is offered with the other labels, Enter for none.")
+		required, err := prompter.Confirm("Must every project carry one value of "+request.Category+"?", "A required category is asked first when a project is created or edited, and at least one value must be picked; the lint warns about a project that has none. An optional category is offered with the other labels, Enter for none.")
 		if err != nil {
 			return request, err
 		}
+		multiple, err := prompter.Confirm("May a project carry several values of "+request.Category+"?", "Several values suit a category such as language, where a project mixes them. One value suits a classification such as data, where two would contradict each other; the lint refuses two.")
+		if err != nil {
+			return request, err
+		}
+		request.Required, request.Multiple = &required, &multiple
 	}
 	return request, nil
 }
@@ -253,26 +268,40 @@ func newLabelRemoveCommand(environment *commandEnvironment) *cobra.Command {
 	return command
 }
 
-func newLabelRequireCommand(environment *commandEnvironment) *cobra.Command {
+func newLabelSetCommand(environment *commandEnvironment) *cobra.Command {
 	var request orchestration.LabelRegistryRequest
-	var yes, off bool
+	var yes, required, optional, multiple, single bool
 	command := &cobra.Command{
-		Use:   "require <category>",
-		Short: "Make every project carry one value of the category, or with --off make it optional again",
-		Args:  cobra.ExactArgs(1),
+		Use:     "set <category> [--required|--optional] [--multiple|--single]",
+		Short:   "Change whether a category is required and whether a project may carry several of its values",
+		Example: "  rein label set language --required\n  rein label set data --single --yes",
+		Args:    cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
 			request.Category = arguments[0]
-			request.Operation = orchestration.LabelRequire
-			summary := fmt.Sprintf("This will make the category %s required, so every project created or edited from now on carries one of its values,", arguments[0])
-			if off {
-				request.Operation = orchestration.LabelOptional
-				summary = fmt.Sprintf("This will make the category %s optional,", arguments[0])
+			request.Operation = orchestration.LabelSet
+			if (required && optional) || (multiple && single) {
+				return refusal.New("--required and --optional, and --multiple and --single, exclude each other")
 			}
-			return runLabelChange(environment, request, yes, summary)
+			var changes []string
+			if required || optional {
+				request.Required = &required
+				changes = append(changes, map[bool]string{true: "required, so every project created or edited from now on carries one of its values", false: "optional"}[required])
+			}
+			if multiple || single {
+				request.Multiple = &multiple
+				changes = append(changes, map[bool]string{true: "open to several values per project", false: "limited to one value per project"}[multiple])
+			}
+			if len(changes) == 0 {
+				return refusal.New("say what to set: --required or --optional, --multiple or --single")
+			}
+			return runLabelChange(environment, request, yes, fmt.Sprintf("This will make the category %s %s", arguments[0], strings.Join(changes, " and ")))
 		},
 	}
 	command.Flags().StringVar(&request.Organization, "org", "", "the organisation's slug (default: the active one)")
-	command.Flags().BoolVar(&off, "off", false, "make the category optional instead")
+	command.Flags().BoolVar(&required, "required", false, "every project must carry one of its values")
+	command.Flags().BoolVar(&optional, "optional", false, "a project may carry none")
+	command.Flags().BoolVar(&multiple, "multiple", false, "a project may carry several of its values")
+	command.Flags().BoolVar(&single, "single", false, "a project carries one value at most")
 	command.Flags().BoolVar(&yes, "yes", false, "do not ask for confirmation")
 	return command
 }
@@ -311,13 +340,17 @@ func runLabelChange(environment *commandEnvironment, request orchestration.Label
 	if err != nil {
 		return err
 	}
-	switch request.Operation {
-	case orchestration.LabelRemove:
+	if request.Operation == orchestration.LabelRemove {
 		fmt.Fprintf(environment.out, "removed %s:%s from the registry of %s\n", result.Category, result.Value, result.Organization)
-	case orchestration.LabelRequire:
-		fmt.Fprintf(environment.out, "the category %s is required in %s\n", result.Category, result.Organization)
-	default:
-		fmt.Fprintf(environment.out, "the category %s is optional in %s\n", result.Category, result.Organization)
+	} else {
+		required, multiple := "optional", "one value per project"
+		if result.Required {
+			required = "required"
+		}
+		if result.Multiple {
+			multiple = "several values per project"
+		}
+		fmt.Fprintf(environment.out, "the category %s in %s is %s, %s\n", result.Category, result.Organization, required, multiple)
 	}
 	fmt.Fprintf(environment.out, "registry: %s, pushed to main\n", result.RelativePath)
 	return nil

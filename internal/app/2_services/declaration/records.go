@@ -64,7 +64,10 @@ type LabelCategory struct {
 	Category string `yaml:"category"`
 	// Required means every project carries at least one value of it; the
 	// creators insist, the lint warns.
-	Required bool              `yaml:"required,omitempty"`
+	Required bool `yaml:"required,omitempty"`
+	// Multiple lets a project carry several values of it; without it one
+	// value is the most, and two are a contradiction.
+	Multiple bool              `yaml:"multiple,omitempty"`
 	Labels   map[string]string `yaml:"labels"`
 }
 
@@ -221,7 +224,7 @@ func SplitLabel(label string) (category string, value string, ok bool) {
 // project to say what it is, edited freely afterwards.
 func SeededLabels() []LabelCategory {
 	return []LabelCategory{
-		{Category: "language", Labels: map[string]string{
+		{Category: "language", Multiple: true, Labels: map[string]string{
 			"go": "Go", "typescript": "TypeScript", "python": "Python", "dart": "Dart", "java": "Java", "rust": "Rust",
 		}},
 		{Category: "kind", Required: true, Labels: map[string]string{
@@ -261,4 +264,24 @@ func MissingRequiredCategories(registry map[string]LabelCategory, labels []strin
 		}
 	}
 	return missing
+}
+
+// SingleValueConflicts says, one sentence per category, where the labels
+// carry several values of a category that allows one.
+func SingleValueConflicts(registry map[string]LabelCategory, labels []string) []string {
+	valuesByCategory := map[string][]string{}
+	for _, label := range labels {
+		category, value, ok := SplitLabel(label)
+		if ok {
+			valuesByCategory[category] = append(valuesByCategory[category], value)
+		}
+	}
+	var conflicts []string
+	for _, name := range sortedKeys(valuesByCategory) {
+		registered, found := registry[name]
+		if found && !registered.Multiple && len(valuesByCategory[name]) > 1 {
+			conflicts = append(conflicts, fmt.Sprintf("%s takes one value; given %s", name, strings.Join(valuesByCategory[name], ", ")))
+		}
+	}
+	return conflicts
 }

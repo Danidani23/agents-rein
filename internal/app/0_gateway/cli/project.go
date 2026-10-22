@@ -111,7 +111,7 @@ func runProjectCreate(environment *commandEnvironment, answers projectCreateAnsw
 		if slug == "" {
 			return refusal.New("the name must contain at least one letter or digit")
 		}
-		if reason := missingRequiredLabels(organization, answers.labels); reason != "" {
+		if reason := labelProblems(organization, answers.labels); reason != "" {
 			return refusal.New(reason)
 		}
 		fmt.Fprintf(environment.out, "This will add the project %q, slug %s, to %s for the team(s) %s, with %s, and push its record to main.\n", answers.name, slug, organization.Slug, strings.Join(answers.teams, ", "), labelsPhrase(answers.labels))
@@ -209,9 +209,10 @@ func askProjectCreate(prompter ports.Prompter, organization orchestration.Organi
 	return answers, nil
 }
 
-// askProjectLabels asks the required categories one by one, at least one
-// value each, then every optional value in one list; previous answers are
-// the defaults.
+// askProjectLabels asks the required categories one by one, one value or
+// several as the category allows, then every optional value in one list;
+// previous answers are the defaults. Two values of a category that takes
+// one are refused on the spot and asked again.
 func askProjectLabels(prompter ports.Prompter, organization orchestration.OrganizationDescription, previous []string) ([]string, error) {
 	previousByCategory := map[string][]string{}
 	previousOptional := map[string]bool{}
@@ -242,13 +243,27 @@ func askProjectLabels(prompter ports.Prompter, organization orchestration.Organi
 		for _, value := range category.Values {
 			choices = append(choices, ports.Choice{Name: value.Value, Description: value.Description})
 		}
-		picked, err := prompter.ChooseMany(ports.Select{
-			Title:       "Label " + category.Category,
-			Description: introduction + "Label " + category.Category + ", required: at least one; several separated by commas.",
-			Explanation: explanation,
-			Choices:     choices,
-			Default:     strings.Join(previousByCategory[category.Category], ","),
-		})
+		var picked []string
+		var err error
+		if category.Multiple {
+			picked, err = prompter.ChooseMany(ports.Select{
+				Title:       "Label " + category.Category,
+				Description: introduction + "Label " + category.Category + ", required: at least one; several separated by commas.",
+				Explanation: explanation,
+				Choices:     choices,
+				Default:     strings.Join(previousByCategory[category.Category], ","),
+			})
+		} else {
+			var one string
+			one, err = prompter.Choose(ports.Select{
+				Title:       "Label " + category.Category,
+				Description: introduction + "Label " + category.Category + ", required: one value.",
+				Explanation: explanation,
+				Choices:     choices,
+				Default:     firstOf(strings.Join(previousByCategory[category.Category], ""), ""),
+			})
+			picked = []string{one}
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -260,41 +275,54 @@ func askProjectLabels(prompter ports.Prompter, organization orchestration.Organi
 	if len(optional) == 0 {
 		return labels, nil
 	}
-	picked, err := prompter.ChooseMany(ports.Select{
-		Title:       "Other labels",
-		Description: introduction + "Other labels, any that apply, several separated by commas; Enter for none.",
-		Explanation: explanation,
-		Choices:     optional,
-		Default:     strings.Join(optionalDefaults, ","),
-		Optional:    true,
-	})
-	if err != nil {
-		return nil, err
+	registry := registryOf(organization)
+	problem := ""
+	for {
+		picked, err := prompter.ChooseMany(ports.Select{
+			Title:       "Other labels",
+			Description: problem + introduction + "Other labels, any that apply, several separated by commas; Enter for none.",
+			Explanation: explanation,
+			Choices:     optional,
+			Default:     strings.Join(optionalDefaults, ","),
+			Optional:    true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		conflicts := declaration.SingleValueConflicts(registry, picked)
+		if len(conflicts) == 0 {
+			return append(labels, picked...), nil
+		}
+		problem = strings.Join(conflicts, "; ") + ". "
+		optionalDefaults = picked
 	}
-	return append(labels, picked...), nil
 }
 
-// missingRequiredLabels says which required categories the labels miss,
-// as a refusal that names the values to pass; "" when none is missing.
-func missingRequiredLabels(organization orchestration.OrganizationDescription, labels []string) string {
-	present := map[string]bool{}
-	for _, label := range labels {
-		category, _, ok := declaration.SplitLabel(label)
-		if ok {
-			present[category] = true
-		}
-	}
-	var missing []string
+// registryOf is the organisation's label registry as the declaration
+// library checks it, built from the description.
+func registryOf(organization orchestration.OrganizationDescription) map[string]declaration.LabelCategory {
+	registry := map[string]declaration.LabelCategory{}
 	for _, category := range organization.LabelCategories {
-		if category.Required && !present[category.Category] {
-			var values []string
-			for _, value := range category.Values {
-				values = append(values, value.Value)
-			}
-			missing = append(missing, fmt.Sprintf("the label category %s is required; pass --label %s:<value>, one of %s", category.Category, category.Category, strings.Join(values, ", ")))
+		values := map[string]string{}
+		for _, value := range category.Values {
+			values[value.Value] = value.Description
 		}
+		registry[category.Category] = declaration.LabelCategory{Category: category.Category, Required: category.Required, Multiple: category.Multiple, Labels: values}
 	}
-	return strings.Join(missing, "; ")
+	return registry
+}
+
+// labelProblems says what is wrong with the labels against the registry: a
+// required category missing, with the values to pass, or two values of a
+// category that takes one; "" when nothing is.
+func labelProblems(organization orchestration.OrganizationDescription, labels []string) string {
+	registry := registryOf(organization)
+	var problems []string
+	for _, missing := range declaration.MissingRequiredCategories(registry, labels) {
+		problems = append(problems, fmt.Sprintf("the label category %s is required; pass --label %s:<value>, one of %s", missing, missing, strings.Join(registry[missing].LabelValues(), ", ")))
+	}
+	problems = append(problems, declaration.SingleValueConflicts(registry, labels)...)
+	return strings.Join(problems, "; ")
 }
 
 // labelsPhrase names labels for a summary line.
@@ -391,7 +419,7 @@ func runProjectEdit(environment *commandEnvironment, arguments []string, given p
 				return refusal.New(err.Error())
 			}
 		}
-		if reason := missingRequiredLabels(organization, answers.labels); reason != "" {
+		if reason := labelProblems(organization, answers.labels); reason != "" {
 			return refusal.New(reason)
 		}
 		if answers.description == current.Description && strings.Join(answers.teams, ",") == strings.Join(current.Teams, ",") && strings.Join(answers.labels, ",") == strings.Join(current.Labels, ",") && answers.path == firstOf(current.Path, ".") {

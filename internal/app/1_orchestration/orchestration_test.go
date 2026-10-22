@@ -1252,17 +1252,28 @@ func TestEditLabelRegistry(t *testing.T) {
 	if err != nil || result.CreatedCategory || result.Required != true || registry("kind").Labels["worker"] != "a background worker" {
 		t.Fatalf("add: result %+v err %v registry %+v", result, err, registry("kind"))
 	}
-	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelAdd, Category: "stack", Value: "aws", Description: "runs on AWS", Required: true})
-	if err != nil || !result.CreatedCategory || !result.Required || result.RelativePath != "declarations/organizations/acme/labels/stack.yaml" || !registry("stack").Required || registry("stack").Labels["aws"] != "runs on AWS" {
+	yes, no := true, false
+	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelAdd, Category: "stack", Value: "aws", Description: "runs on AWS", Required: &yes, Multiple: &yes})
+	if err != nil || !result.CreatedCategory || !result.Required || !result.Multiple || result.RelativePath != "declarations/organizations/acme/labels/stack.yaml" || !registry("stack").Required || !registry("stack").Multiple || registry("stack").Labels["aws"] != "runs on AWS" {
 		t.Fatalf("create: result %+v err %v", result, err)
 	}
-	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelOptional, Category: "stack"})
-	if err != nil || result.Required || registry("stack").Required {
-		t.Fatalf("optional: result %+v err %v", result, err)
+	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelSet, Category: "stack", Required: &no})
+	if err != nil || result.Required || !result.Multiple || registry("stack").Required || !registry("stack").Multiple {
+		t.Fatalf("optional keeps multiple: result %+v err %v", result, err)
 	}
-	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelRequire, Category: "language"})
-	if err != nil || !result.Required || !registry("language").Required {
-		t.Fatalf("require: result %+v err %v", result, err)
+	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelSet, Category: "language", Required: &yes, Multiple: &no})
+	if err != nil || !result.Required || result.Multiple || !registry("language").Required || registry("language").Multiple {
+		t.Fatalf("set both: result %+v err %v", result, err)
+	}
+	_, _ = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelSet, Category: "language", Multiple: &yes})
+	_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Poly", Teams: []string{"web"}, Labels: []string{"kind:service", "language:go", "language:rust"}})
+	_, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelSet, Category: "language", Multiple: &no})
+	if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "the project poly carries several values of language; change it first") {
+		t.Fatalf("single with a carrier: err %v", err)
+	}
+	_, err = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Two", Teams: []string{"web"}, Labels: []string{"kind:service", "data:internal", "data:public"}})
+	if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "data takes one value; given internal, public") {
+		t.Fatalf("two values of data: err %v", err)
 	}
 	_, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelRemove, Category: "kind", Value: "worker"})
 	if err != nil || registry("kind").Labels["worker"] != "" {
@@ -1270,9 +1281,10 @@ func TestEditLabelRegistry(t *testing.T) {
 	}
 	for expected, request := range map[string]LabelRegistryRequest{
 		"is already in the registry":             {Operation: LabelAdd, Category: "kind", Value: "service"},
-		"is carried by the projects shop":        {Operation: LabelRemove, Category: "kind", Value: "service"},
+		"is carried by the projects poly, shop":  {Operation: LabelRemove, Category: "kind", Value: "service"},
 		"is the last value of its category":      {Operation: LabelRemove, Category: "stack", Value: "aws"},
-		`category "nope" is not in the registry`: {Operation: LabelRequire, Category: "nope"},
+		`category "nope" is not in the registry`: {Operation: LabelSet, Category: "nope", Required: &yes},
+		"nothing to set":                         {Operation: LabelSet, Category: "kind"},
 		`category "Not Slug" is not a slug`:      {Operation: LabelAdd, Category: "Not Slug", Value: "x"},
 		`label value "X" is not a slug`:          {Operation: LabelAdd, Category: "kind", Value: "X"},
 		"is not a registry operation":            {Operation: "explode", Category: "kind"},
