@@ -14,6 +14,7 @@
 /.claude/
 
 # >>> rein: agent settings are not repository settings; rein sync writes these, keep this block
+.rein/
 CLAUDE.md
 .claude
 .mcp.json
