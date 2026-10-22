@@ -977,3 +977,55 @@ func TestSpinner(t *testing.T) {
 		t.Fatalf("off a terminal: %q", out.String())
 	}
 }
+
+func TestDeclarationCommands(t *testing.T) {
+	fixture := newHarness(t)
+	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+	code, out, _ := fixture.run("declaration", "list")
+	if code != ExitWorked || !strings.Contains(out, "no declarations yet") {
+		t.Fatalf("empty list: code %d out %q", code, out)
+	}
+	root := filepath.Join(fixture.state.Current.OrgClonePaths[fixture.state.Current.Organizations[0].ID], "declarations")
+	for relative, content := range map[string]string{"users/danidani23/user.yaml": "slug: danidani23\ngithub: Danidani23\nname: Dani\n", "users/danidani23/skills/commit/SKILL.md": "---\nname: commit\ndescription: Draft commits.\n---\n\n# Commit\n", "organizations/acme/rules/style.md": "---\napplyIf:\n  - language:go\n---\n\nHouse style.\n"} {
+		target := filepath.Join(root, filepath.FromSlash(relative))
+		_ = os.MkdirAll(filepath.Dir(target), 0o755)
+		_ = os.WriteFile(target, []byte(content), 0o644)
+	}
+	_ = fixture.repository.Push(ports.RemoteAccess{}, filepath.Dir(root))
+	code, out, errOut := fixture.run("declaration", "list")
+	if code != ExitWorked || !strings.Contains(out, "organizations.acme.rules.style  applyIf language:go, default\n") || !strings.Contains(out, "users.danidani23.skills.commit  default\n") {
+		t.Fatalf("list: code %d out %q err %q", code, out, errOut)
+	}
+	code, _, errOut = fixture.run("declaration", "edit", "users.danidani23.skills.commit")
+	if code != ExitRefused || !strings.Contains(errOut, "nothing to change; pass --level") {
+		t.Fatalf("edit without flags: code %d err %q", code, errOut)
+	}
+	code, out, errOut = fixture.run("declaration", "edit", "users.danidani23.skills.commit", "--level", "organizations.acme", "--apply-if", "language:go", "--yes")
+	for _, expected := range []string{"This will open a pull request on the org repository of acme that puts users.danidani23.skills.commit at organizations.acme with applyIf language:go, default.", "changed users.danidani23.skills.commit: level, applyIf", "its address after the merge: organizations.acme.skills.commit", "pull request: https://github.com/Danidani23/acme-agent-settings/pull/1", "next: review and merge it"} {
+		if code != ExitWorked || !strings.Contains(out, expected) {
+			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
+		}
+	}
+	// level kept, applyIf cleared with Enter? no: Enter keeps the default; the answer "" on a multi-select means none only without a default, so type the new labels
+	code, out, errOut = fixture.runInteractive("\nlanguage:go,language:rust\n\n2\n\n", "declaration", "edit", "organizations.acme.rules.style")
+	if code != ExitWorked || !strings.Contains(out, "Level\x1b[0m [organizations.acme]") || !strings.Contains(out, "Choose any, or none\x1b[0m [language:go]") || !strings.Contains(out, "1) default") || !strings.Contains(out, "puts organizations.acme.rules.style at organizations.acme with applyIf language:go language:rust, required") || !strings.Contains(out, "changed organizations.acme.rules.style: applyIf, enforcement") {
+		t.Fatalf("interactive edit: code %d out %q err %q", code, out, errOut)
+	}
+	code, _, errOut = fixture.run("declaration", "edit", "organizations.acme.rules.style", "--apply-if", "", "--yes")
+	if code != ExitWorked {
+		t.Fatalf("clearing: code %d err %q", code, errOut)
+	}
+	code, _, errOut = fixture.run("declaration", "remove", "organizations.acme.rules.style")
+	if code != ExitRefused || !strings.Contains(errOut, "pass --yes") {
+		t.Fatalf("remove without a terminal: code %d err %q", code, errOut)
+	}
+	code, out, errOut = fixture.run("declaration", "remove", "organizations.acme.rules.style", "--yes")
+	if code != ExitWorked || !strings.Contains(out, "This will open a pull request on the org repository of acme that removes organizations.acme.rules.style: rules/style.md.") || !strings.Contains(out, "removed organizations.acme.rules.style on branch rein/remove-style-") || !strings.Contains(out, "pull request: https://github.com/Danidani23/acme-agent-settings/pull/") {
+		t.Fatalf("remove: code %d out %q err %q", code, out, errOut)
+	}
+	code, _, errOut = fixture.run("declaration", "remove", "organizations.acme.rules.nope", "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "no declaration at organizations.acme.rules.nope") {
+		t.Fatalf("missing: code %d err %q", code, errOut)
+	}
+}

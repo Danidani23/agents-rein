@@ -7,6 +7,7 @@
 package proposals
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -157,6 +158,26 @@ func (service Service) Abandon(access ports.RemoteAccess, orgClonePath string, b
 	}
 	if len(failures) > 0 {
 		return fmt.Errorf("abandoning %s: %s", branch, strings.Join(failures, "; "))
+	}
+	return nil
+}
+
+// Remove deletes files from the clone by their paths relative to its root,
+// and the folders they leave empty, so a declaration can move or go.
+func (Service) Remove(orgClonePath string, relativePaths []string) error {
+	for _, relativePath := range relativePaths {
+		target := filepath.Join(orgClonePath, filepath.FromSlash(relativePath))
+		err := os.Remove(target)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		for folder := filepath.Dir(target); folder != orgClonePath; folder = filepath.Dir(folder) {
+			entries, err := os.ReadDir(folder)
+			if err != nil || len(entries) > 0 {
+				break
+			}
+			_ = os.Remove(folder)
+		}
 	}
 	return nil
 }

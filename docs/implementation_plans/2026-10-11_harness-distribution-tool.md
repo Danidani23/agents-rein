@@ -1189,6 +1189,19 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- ✅ **P2.30 — `rein declaration`: what is around a declaration changes by a pull request.**
+  [EXECUTED] 2026-10-22 on the user's question how the commit skill moves from the user to
+  the organisation (R39, R40). The content of a declaration enters and changes through
+  `propose`; everything around it has one command group now: `declaration list` shows every
+  declaration with its level, labels and enforcement; `declaration edit <address>` moves it
+  to another level, carrying the files and removing the old ones in the same pull request,
+  or changes `applyIf`, `doNotApplyIf` and `enforcement`, asked with the current values as
+  defaults or given as flags, with the registry, the single-valued categories and the
+  target level checked first; `declaration remove <address>` deletes it, unless a skip list
+  or an exception names it. The declaration library reads selectors back and sets them
+  exactly, dropping an empty frontmatter. Known limits: a rename has no command; a move
+  of a required declaration does not check the levels below for a redeclaration that the
+  move would turn into a problem, which the lint reports after the merge.
 - ✅ **P2.29 — The proposal is one file a person reviews; the judge's conversation is named;
   long steps spin.** [EXECUTED] 2026-10-22 on the user's design (R37, R38). `distill` writes
   one YAML document, the proposal: every candidate with its content inline, whether it goes,
@@ -1745,3 +1758,5 @@ writes is read from the next session on, not in the same one.
   delivers what main holds, and `propose` is the one way into the org repository.
 - (2026-10-22) P2.29 executed: the proposal as one reviewable file in the project folder,
   moved to the history on propose; the judge's conversation titled and recorded; the spinner.
+- (2026-10-22) P2.30 executed: `rein declaration list`, `edit` and `remove`, every change a pull
+  request; the first use moves the commit skill from the user level to the organisation.

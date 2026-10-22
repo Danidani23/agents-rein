@@ -1359,3 +1359,149 @@ func TestEditLabelRegistry(t *testing.T) {
 		t.Fatalf("branches %v", fixture.repository.Branches)
 	}
 }
+
+func TestDeclarationEditAndRemove(t *testing.T) {
+	seed := func(t *testing.T) (*harness, CreateResult, string) {
+		t.Helper()
+		fixture, created := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}, Labels: []string{"kind:service"}})
+		root := filepath.Join(created.Connected.OrgClonePath, "declarations")
+		write := func(relative string, content string) {
+			target := filepath.Join(root, filepath.FromSlash(relative))
+			_ = os.MkdirAll(filepath.Dir(target), 0o755)
+			_ = os.WriteFile(target, []byte(content), 0o644)
+		}
+		write("users/danidani23/user.yaml", "slug: danidani23\ngithub: Danidani23\nname: Dani\n")
+		write("users/danidani23/skills/commit/SKILL.md", "---\nname: commit\ndescription: Draft commits.\n---\n\n# Commit\n")
+		write("users/danidani23/skills/commit/references/format.md", "subject, body\n")
+		write("organizations/acme/rules/style.md", "---\napplyIf:\n  - language:go\n---\n\nHouse style.\n")
+		write("organizations/acme/rules/brief.md", "Be brief.\n")
+		write("organizations/acme/exceptions/shop-style.yaml", "declaration: organizations.acme.rules.style\ngrantee: organizations.acme.projects.shop\nreason: legacy\n")
+		// main holds the seeded files, as a merge would have left it
+		_ = fixture.repository.Push(ports.RemoteAccess{}, created.Connected.OrgClonePath)
+		return fixture, created, root
+	}
+	t.Run("a move carries the files with the selectors set, removes the old folder, and opens the pull request", func(t *testing.T) {
+		fixture, created, root := seed(t)
+		described, err := fixture.orchestrator().DescribeDeclaration("", "users.danidani23.skills.commit")
+		if err != nil || described.Level != "users.danidani23" || described.Kind != "skills" || strings.Join(described.Files, ",") != "skills/commit/SKILL.md,skills/commit/references/format.md" || len(described.Selectors.ApplyIf) != 0 {
+			t.Fatalf("described %+v err %v", described, err)
+		}
+		listed, err := fixture.orchestrator().ListDeclarations("", "")
+		if err != nil || len(listed) != 3 || listed[0].Address != "organizations.acme.rules.brief" || listed[1].Address != "organizations.acme.rules.style" || strings.Join(listed[1].Selectors.ApplyIf, ",") != "language:go" || listed[2].Address != "users.danidani23.skills.commit" {
+			t.Fatalf("listed %+v err %v", listed, err)
+		}
+		under, _ := fixture.orchestrator().ListDeclarations("", "organizations.acme")
+		if len(under) != 2 {
+			t.Fatalf("under %+v", under)
+		}
+		result, err := fixture.orchestrator().EditDeclaration(EditDeclarationRequest{Address: "users.danidani23.skills.commit", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"language:go"}}})
+		if err != nil || result.NewAddress != "organizations.acme.skills.commit" || strings.Join(result.Changed, ",") != "level,applyIf" || !strings.HasPrefix(result.Branch, "rein/edit-commit-") || result.PullRequestURL != "https://github.com/Danidani23/acme-agent-settings/pull/1" {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		pullRequest := fixture.host.PullRequests[0]
+		if pullRequest.Title != "users.danidani23.skills.commit: moved to organizations.acme, applyIf language:go" || !strings.Contains(pullRequest.Body, "- declarations/users/danidani23/skills/commit/SKILL.md") {
+			t.Fatalf("pull request %+v", pullRequest)
+		}
+		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
+		moved, err := os.ReadFile(filepath.Join(published, "declarations", "organizations", "acme", "skills", "commit", "SKILL.md"))
+		if err != nil || !strings.Contains(string(moved), "rein-apply-if: language:go") || !strings.Contains(string(moved), "# Commit") {
+			t.Fatalf("moved %q err %v", moved, err)
+		}
+		_, err = os.Stat(filepath.Join(published, "declarations", "organizations", "acme", "skills", "commit", "references", "format.md"))
+		if err != nil {
+			t.Fatalf("the reference did not move: %v", err)
+		}
+		_, err = os.Stat(filepath.Join(published, "declarations", "users", "danidani23", "skills"))
+		if err == nil {
+			t.Fatalf("the old folder stayed")
+		}
+		if fixture.repository.Current != "main" {
+			t.Fatalf("clone on %q", fixture.repository.Current)
+		}
+		_, err = os.Stat(filepath.Join(root, "users", "danidani23", "skills", "commit", "SKILL.md"))
+		if err != nil {
+			t.Fatalf("the clone did not go back to main: %v", err)
+		}
+	})
+	t.Run("a selector change stays at the level; a move to a user level adds the user record", func(t *testing.T) {
+		fixture, created, _ := seed(t)
+		result, err := fixture.orchestrator().EditDeclaration(EditDeclarationRequest{Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{DoNotApplyIf: []string{"data:regulated"}, Enforcement: "required"}})
+		if err != nil || strings.Join(result.Changed, ",") != "applyIf,doNotApplyIf,enforcement" || result.NewAddress != "organizations.acme.rules.style" {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
+		style, _ := os.ReadFile(filepath.Join(published, "declarations", "organizations", "acme", "rules", "style.md"))
+		if strings.Contains(string(style), "applyIf") || !strings.Contains(string(style), "doNotApplyIf:\n    - data:regulated\n") || !strings.Contains(string(style), "enforcement: required\n") || !strings.Contains(string(style), "House style.") {
+			t.Fatalf("style %q", style)
+		}
+		fixture.host.PullRequests = nil
+		_ = os.RemoveAll(filepath.Join(created.Connected.OrgClonePath, "declarations", "users"))
+		result, err = fixture.orchestrator().EditDeclaration(EditDeclarationRequest{Address: "organizations.acme.rules.brief", Level: "users.danidani23"})
+		if err != nil || result.NewAddress != "users.danidani23.rules.brief" {
+			t.Fatalf("to the user: result %+v err %v", result, err)
+		}
+		published = fixture.repository.Published[created.Remote+"#"+result.Branch]
+		for _, relative := range []string{"users/danidani23/user.yaml", "users/danidani23/rules/brief.md"} {
+			_, err = os.Stat(filepath.Join(published, "declarations", filepath.FromSlash(relative)))
+			if err != nil {
+				t.Fatalf("%s missing: %v", relative, err)
+			}
+		}
+	})
+	t.Run("refusals: nothing changed, no such declaration, a bad address, a bad level, a level outside, a missing team, a bad label, a taken address", func(t *testing.T) {
+		fixture, created, root := seed(t)
+		taken := filepath.Join(root, "users", "danidani23", "rules", "style.md")
+		_ = os.MkdirAll(filepath.Dir(taken), 0o755)
+		_ = os.WriteFile(taken, []byte("mine\n"), 0o644)
+		_ = fixture.repository.Push(ports.RemoteAccess{}, created.Connected.OrgClonePath)
+		for expected, request := range map[string]EditDeclarationRequest{
+			"nothing changed on organizations.acme.rules.style":            {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"language:go"}}},
+			"no declaration at organizations.acme.rules.nope":              {Address: "organizations.acme.rules.nope", Level: "organizations.acme"},
+			"is not a declaration's address":                               {Address: "organizations.acme", Level: "organizations.acme"},
+			`"organizations.acme.rules.x" is not a level`:                  {Address: "organizations.acme.rules.style", Level: "organizations.acme.rules.x"},
+			"the level organizations.other is not in acme":                 {Address: "organizations.acme.rules.style", Level: "organizations.other"},
+			`team "ops" does not exist in acme`:                            {Address: "organizations.acme.rules.style", Level: "organizations.acme.teams.ops"},
+			`label "stack:aws" names no category`:                          {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"stack:aws"}}},
+			"applyIf data takes one value":                                 {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"data:public", "data:internal"}}},
+			`enforcement "maybe" is neither`:                               {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{Enforcement: "maybe"}},
+			"users.danidani23.rules.style already exists; remove it first": {Address: "organizations.acme.rules.style", Level: "users.danidani23", Selectors: declaration.Selectors{ApplyIf: []string{"language:go"}}},
+		} {
+			_, err := fixture.orchestrator().EditDeclaration(request)
+			if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), expected) {
+				t.Fatalf("%s: err %v", expected, err)
+			}
+		}
+		if len(fixture.repository.Branches) != 0 {
+			t.Fatalf("branches %v", fixture.repository.Branches)
+		}
+	})
+	t.Run("a removal deletes the files on a branch, unless a skip list or an exception names the declaration", func(t *testing.T) {
+		fixture, created, root := seed(t)
+		_, err := fixture.orchestrator().RemoveDeclaration(RemoveDeclarationRequest{Address: "organizations.acme.rules.style"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "is named by the exception organizations.acme.exceptions.shop-style; take those out first") {
+			t.Fatalf("named by an exception: %v", err)
+		}
+		project := filepath.Join(root, "organizations", "acme", "projects", "shop", "project.yaml")
+		content, _ := os.ReadFile(project)
+		_ = os.WriteFile(project, []byte(strings.Replace(string(content), "skip: []", "skip:\n    - organizations.acme.rules.brief", 1)), 0o644)
+		_ = fixture.repository.Push(ports.RemoteAccess{}, created.Connected.OrgClonePath)
+		_, err = fixture.orchestrator().RemoveDeclaration(RemoveDeclarationRequest{Address: "organizations.acme.rules.brief"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "is named by the skip list of project shop") {
+			t.Fatalf("named by a skip list: %v", err)
+		}
+		result, err := fixture.orchestrator().RemoveDeclaration(RemoveDeclarationRequest{Address: "users.danidani23.skills.commit"})
+		if err != nil || strings.Join(result.Removed, ",") != "declarations/users/danidani23/skills/commit/SKILL.md,declarations/users/danidani23/skills/commit/references/format.md" || !strings.HasPrefix(result.Branch, "rein/remove-commit-") || fixture.host.PullRequests[0].Title != "users.danidani23.skills.commit: removed" {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
+		_, err = os.Stat(filepath.Join(published, "declarations", "users", "danidani23", "skills"))
+		if err == nil {
+			t.Fatalf("the files stayed on the branch")
+		}
+		_, err = fixture.orchestrator().RemoveDeclaration(RemoveDeclarationRequest{Address: "organizations.acme.hooks.nope"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "no declaration at") {
+			t.Fatalf("missing: %v", err)
+		}
+	})
+}

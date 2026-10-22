@@ -1,6 +1,7 @@
 package orchestration
 
 import (
+	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 	"sort"
 	"strings"
 	"time"
@@ -392,5 +393,60 @@ func (orchestrator Orchestrator) PendingProposals(directory string) ([]PendingPr
 	for _, entry := range pending {
 		listed = append(listed, PendingProposal{Path: entry.Path, ID: entry.Proposal.ID, Level: entry.Proposal.DistilledFrom, Candidates: len(entry.Proposal.Candidates), DistilledAt: entry.Proposal.DistilledAt})
 	}
+	return listed, nil
+}
+
+// DeclarationDescription is a declaration as the gateway shows and edits
+// it: its place and its selectors.
+type DeclarationDescription struct {
+	Organization string
+	Address      string
+	Level        string
+	Kind         string
+	ID           string
+	Selectors    declaration.Selectors
+	Files        []string
+}
+
+// DescribeDeclaration reads one declaration from the org clone and changes
+// nothing.
+func (orchestrator Orchestrator) DescribeDeclaration(organizationSlug string, declarationAddress string) (DeclarationDescription, error) {
+	located, err := locateDeclaration(orchestrator.Services, organizationSlug, declarationAddress)
+	if err != nil {
+		return DeclarationDescription{}, err
+	}
+	files, selectors, err := readDeclaration(located)
+	if err != nil {
+		return DeclarationDescription{}, err
+	}
+	description := DeclarationDescription{Organization: located.organization.Slug, Address: declarationAddress, Level: located.level, Kind: located.kind, ID: located.id, Selectors: selectors, Files: sortedKeys(files)}
+	return description, nil
+}
+
+// ListDeclarations reads every declaration of an organisation from its
+// clone, the ones under level when given, sorted by address.
+func (orchestrator Orchestrator) ListDeclarations(organizationSlug string, level string) ([]DeclarationDescription, error) {
+	services := orchestrator.Services
+	organization, orgClonePath, err := resolveOrganization(services, organizationSlug)
+	if err != nil {
+		return nil, err
+	}
+	catalogue, err := distill.LoadCatalogue(orgClonePath)
+	if err != nil {
+		return nil, err
+	}
+	var listed []DeclarationDescription
+	for _, entry := range catalogue.Entries {
+		if level != "" && entry.Level != level && !strings.HasPrefix(entry.Address, level+".") {
+			continue
+		}
+		located := declarationLocation{organization: organization, orgClonePath: orgClonePath, level: entry.Level, levelPath: strings.ReplaceAll(entry.Level, ".", "/"), kind: entry.Kind, id: entry.ID}
+		files, selectors, err := readDeclaration(located)
+		if err != nil {
+			return nil, err
+		}
+		listed = append(listed, DeclarationDescription{Organization: organization.Slug, Address: entry.Address, Level: entry.Level, Kind: entry.Kind, ID: entry.ID, Selectors: selectors, Files: sortedKeys(files)})
+	}
+	sort.Slice(listed, func(left, right int) bool { return listed[left].Address < listed[right].Address })
 	return listed, nil
 }

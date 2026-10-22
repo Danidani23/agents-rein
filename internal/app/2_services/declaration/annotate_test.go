@@ -33,3 +33,30 @@ func TestAnnotateApplyIf(t *testing.T) {
 		t.Fatalf("a sequence passed as a mapping")
 	}
 }
+
+func TestSelectorsOfAndSetSelectors(t *testing.T) {
+	labelled := Selectors{ApplyIf: []string{"language:go"}, DoNotApplyIf: []string{"data:regulated"}, Enforcement: EnforcementRequired}
+	rule, err := SetSelectors("rules", map[string]string{"rules/style.md": "---\npaths:\n  - \"**/*.go\"\napplyIf:\n  - old:label\n---\n\nTwo-line errors.\n"}, labelled)
+	read, problems := SelectorsOf("rules", rule)
+	if err != nil || len(problems) != 0 || strings.Join(read.ApplyIf, ",") != "language:go" || strings.Join(read.DoNotApplyIf, ",") != "data:regulated" || read.Enforcement != "required" || !strings.Contains(rule["rules/style.md"], "paths:") || strings.Contains(rule["rules/style.md"], "old:label") {
+		t.Fatalf("rule %q read %+v problems %v err %v", rule, read, problems, err)
+	}
+	bare, err := SetSelectors("rules", map[string]string{"rules/brief.md": "---\napplyIf:\n  - language:go\n---\n\nBe brief.\n"}, Selectors{})
+	if err != nil || bare["rules/brief.md"] != "Be brief.\n" {
+		t.Fatalf("bare %q err %v", bare["rules/brief.md"], err)
+	}
+	skill, err := SetSelectors("skills", map[string]string{"skills/go/SKILL.md": "---\nname: go\ndescription: Go style\nmetadata:\n  rein-apply-if: language:rust\n  owner: web\n---\n\n# Go\n"}, Selectors{ApplyIf: []string{"language:go"}})
+	read, problems = SelectorsOf("skills", skill)
+	if err != nil || len(problems) != 0 || strings.Join(read.ApplyIf, ",") != "language:go" || !strings.Contains(skill["skills/go/SKILL.md"], "owner: web") || strings.Contains(skill["skills/go/SKILL.md"], "language:rust") {
+		t.Fatalf("skill %q read %+v err %v", skill, read, err)
+	}
+	cleared, _ := SetSelectors("skills", map[string]string{"skills/go/SKILL.md": "---\nname: go\ndescription: Go style\nmetadata:\n  rein-apply-if: language:go\n---\n\n# Go\n"}, Selectors{})
+	if strings.Contains(cleared["skills/go/SKILL.md"], "metadata") {
+		t.Fatalf("cleared %q", cleared)
+	}
+	hook, err := SetSelectors("hooks", map[string]string{"hooks/fmt/hook.yaml": "event: PostToolUse\nrun: run.sh\napplyIf:\n  - old:label\n", "hooks/fmt/run.sh": "#!/bin/sh\n"}, Selectors{Enforcement: EnforcementDefault})
+	read, problems = SelectorsOf("hooks", hook)
+	if err != nil || len(problems) != 0 || len(read.ApplyIf) != 0 || read.Enforcement != "default" || !strings.Contains(hook["hooks/fmt/hook.yaml"], "event: PostToolUse") {
+		t.Fatalf("hook %q read %+v err %v", hook, read, err)
+	}
+}
