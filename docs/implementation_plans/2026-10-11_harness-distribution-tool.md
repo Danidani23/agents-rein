@@ -1714,7 +1714,7 @@ writes is read from the next session on, not in the same one.
 - (2026-10-22) From the first `rein distill` of the pilot: the judge call failed with "exit
   status 1" and nothing else, since claude's words were in its JSON envelope on stdout, which
   the adapter did not read on failure. Now the adapter reports them, runs claude in an empty
-  folder with `--bare`, `--tools ""` and `--no-session-persistence`, so no project's
+  folder with `--tools ""` and `--no-session-persistence`, never `--bare`, which skips the login with the hooks, so no project's
   instructions, hooks or tools colour the verdict, and gives it the network time limit, since
   fifteen candidates take a minute. `distill` reports every step with its duration, the judge's
   wait included, since a silent minute reads as a hang. Records write every field, `required:

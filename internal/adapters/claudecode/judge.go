@@ -42,16 +42,17 @@ type envelope struct {
 }
 
 // Ask runs claude -p with JSON output and returns the result text. It runs
-// in an empty folder with --bare, so no project's instructions, hooks or
-// tools colour the verdict and no session is kept; a brief of many
-// candidates takes a minute or more, so the limit is the network one.
+// in an empty folder without tools, so no project's instructions, hooks or
+// tools colour the verdict, and keeps no session; a brief of many
+// candidates takes a minute or more, so the limit is the network one. Never
+// --bare: it skips the login with the hooks.
 func (Judge) Ask(brief string) (string, error) {
 	scratch, err := os.MkdirTemp("", "rein-judge-*")
 	if err != nil {
 		return "", err
 	}
 	defer os.RemoveAll(scratch)
-	result, err := execute.RunWith(execute.Options{Directory: scratch, Input: brief, Timeout: execute.NetworkTimeout}, "claude", "-p", "--output-format", "json", "--max-turns", "1", "--tools", "", "--bare", "--no-session-persistence")
+	result, err := execute.RunWith(execute.Options{Directory: scratch, Input: brief, Timeout: execute.NetworkTimeout}, "claude", "-p", "--output-format", "json", "--max-turns", "1", "--tools", "", "--no-session-persistence")
 	var output envelope
 	parsed := json.Unmarshal([]byte(result.Stdout), &output) == nil
 	if err != nil {
