@@ -57,3 +57,22 @@ who may read whose history and what the vendor already stores are open.
 
 **What would make it current.** A need to carry a session across machines, or an organisation's
 duty to retain agent interactions.
+
+## F3 — Telling an open conversation that the harness changed
+
+Parked 2026-10-22 after the question whether `rein sync` can make Claude Code reload an open
+conversation ([board](implementation_plans/2026-10-11_harness-distribution-tool.md), R43).
+
+**What it is.** No outside program can make a running Claude Code session reload. Claude Code
+reads the instructions at the start of a session and after a compaction, picks up a new skill
+while a session runs, and keeps the hooks it started with. The one channel into a running
+conversation is a hook's output, which becomes context for the model. The idea: the
+session-start hook records the session's id and time; a hook on each prompt compares that with
+the ledger's last write and adds one line to the conversation, once, when the harness changed
+since the session started: "the harness changed since this session started; `/clear` loads it".
+
+**Why parked.** It costs a hook on every prompt for a line that matters rarely, and the agent
+hears about the change without receiving it; the next session receives it anyway.
+
+**What would make it current.** Organisations whose declarations change several times a day,
+or a required rule that must reach a session the moment it is merged.
