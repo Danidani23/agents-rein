@@ -15,6 +15,20 @@ Agent settings are the instructions, rules, skills, tool servers, hooks and perm
 agent reads before it does anything. Today they are scattered: copied into every repository,
 drifting apart, written in one vendor's format, and lost when the repository changes hands.
 
+## The thesis
+
+**Code and agent settings are two different things, and they do not belong in the same
+repository.** The code is what a project is; the settings are how a person, a team and an
+organisation want their agents to work, this month, with this tool. Settings change on
+their own rhythm, are owned by other people than the code, and are the same across many
+repositories. Committed into each repository they drift apart, carry one vendor's format into
+the history, and travel with a fork or a hand-over that never asked for them.
+
+So Agents Rein keeps the harness in one central repository per organisation, and configures
+it for every single project from three sources: what the organisation requires, what the
+team adds, and what you prefer. A project repository holds the code alone; the harness is
+generated into each clone, never committed, and regenerated at every session start.
+
 ## Who it is for
 
 - **One developer with several clients and kinds of projects.** Your own conventions follow you

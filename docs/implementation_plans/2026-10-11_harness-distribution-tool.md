@@ -1789,3 +1789,8 @@ writes is read from the next session on, not in the same one.
 - (2026-10-22) P2.31 executed with D27: the flat org repository, the user level under the
   organisation in every address, `team list`, `team edit`, `project list`. The bug-first-test
   skill is written into this repository's harness for the next distillation.
+- (2026-10-22) The coverage review named the gaps and they are closed: the git adapter has its
+  own test over a bare repository, publish, clone, pull, a commit that carries a deletion, a
+  branch pushed and dropped on both sides, a reset to the remote; the records, proposals,
+  clones, hosting and placements services have tests over the fakes. The README opens with the
+  thesis: code and agent settings are two different things and do not share a repository.
