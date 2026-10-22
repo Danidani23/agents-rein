@@ -6,10 +6,23 @@
 
 A *harness* is everything around the model that shapes what a coding agent does: always-on
 instructions, path-scoped rules, skills (procedures), subagents, hooks, permissions, tool servers
-(MCP), and the model/provider configuration. This document answers the six questions in the
-[README](../README.md) for an organisation with many dev teams, using Claude Code as the
-reference tool and the wider ecosystem as the comparison. Facts marked **[unverified]** come from
-secondary sources only.
+(MCP), and the model/provider configuration. This document answers six questions for an
+organisation with many dev teams, using Claude Code as the reference tool and the wider
+ecosystem as the comparison. Facts marked **[unverified]** come from secondary sources only.
+
+## The six questions
+
+- **Q1 — Receiving the harness.** How dev teams receive a shared harness with as little
+  friction as possible.
+- **Q2 — Extending without breaking.** How a team extends it for its own stack without breaking
+  the organisation-wide rules.
+- **Q3 — Using services.** How teams use shared services, tool servers, internal APIs and
+  gateways, through the harness.
+- **Q4 — Provider flexibility.** How to stay free to change model provider or move to private
+  inference.
+- **Q5 — Mixing providers.** Whether cloud and private inference can be mixed.
+- **Q6 — Adopt or build.** What exists, and what to build. The answer, adopt the vendor layers
+  and build only a compiler and a linter, is what Agents Rein is.
 
 ## Summary
 

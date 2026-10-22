@@ -19,170 +19,71 @@ drifting apart, written in one vendor's format, and lost when the repository cha
 
 - **One developer with several clients and kinds of projects.** Your own conventions follow you
   everywhere; a client's conventions apply in that client's repositories only; a static site
-  and a Go service get different skills. Labels on projects decide which settings apply where.
+  and a Go service get different skills.
 - **An organisation with many teams.** The organisation's rules hold everywhere, each team adds
-  its own, every change is reviewed as a pull request by the people who own that level, and a
-  lint runs before anything is distributed.
+  its own, every change is a reviewed pull request, and a lint runs before anything is
+  distributed.
 
 ## How it works
 
-Settings are declarations in one git repository per organisation, the org repository, at four
-levels: organisation, team, project and user. Agents Rein validates them (`rein lint`), resolves
-which apply to a project, and writes them into each clone in the form the agent tool reads.
+- Settings are declarations in one git repository per organisation, the org repository, at
+  four levels: organisation, team, project and user. Every change is a pull request there.
+- Labels on a project, such as `language:go` or `kind:service`, decide which declarations
+  apply to it.
+- `rein` lints the declarations, resolves the levels for a project and writes the result into
+  each clone in the form the agent reads. Nothing it writes is committed: agent settings are
+  not repository settings.
+- A harness that already exists in a repository is distilled into declarations, and a judge
+  suggests the level each one belongs to.
+- It is a compiler and a linter, never a service, and never deletes a repository.
 
-### What is what
+## Quick start
 
-Engineers write the levels into the org repository; rein turns them into the harness of each
-project clone; the agent reads the harness and works on the software.
+Install the binary, then sign in to GitHub through the Agents Rein app:
 
-```mermaid
-graph TD
-  E["👩‍💻 Engineers<br/>work with the agent, own their user level"]
-  subgraph ORG["📦 Org repository, one per organisation, every change a reviewed pull request"]
-    O["🏢 Organisation level<br/>the rules that hold everywhere"]
-    T["👥 Team levels<br/>each team's own conventions"]
-    P["📁 Project levels<br/>one per repository, labels decide what applies"]
-    U["👤 User levels<br/>personal preferences, kept here too"]
-  end
-  R["rein<br/>lints the declarations, resolves the levels for a project, writes the harness"]
-  subgraph CLONE["💻 Project repository clone, on each engineer's machine"]
-    H["🧰 Harness, generated and never committed<br/>instructions, rules, skills, tool servers, hooks, permissions"]
-    S["📄 The software, the only thing committed"]
-  end
-  A["🤖 Agent<br/>Claude Code today, other agents next"]
-  G["🌐 Model provider or gateway<br/>chosen by a providers setting, overridable per team and project"]
-  E -->|propose changes| ORG
-  O --> R
-  T --> R
-  P --> R
-  U --> R
-  R -->|rein sync, at every session start| H
-  H -->|is read by| A
-  E -->|work with| A
-  A -->|reads and edits| S
-  A -->|talks to| G
+```sh
+task rein:install
+rein login
 ```
 
-The principle: **agent settings are not repository settings.** A project repository contains
-the software alone. What rein writes into a clone is never committed; the only trace is a
-marked block in `.gitignore`. A fresh clone gets back on track with one `rein sync`. To hand
-your settings to someone, `rein export` writes a level as a zip in rein's own format, and
-`rein import` adds it to the receiver's organisation, for whatever agent they use.
+Create the organisation's repository, a team, and put a project clone under rein:
 
-Declarations are written in open formats, AGENTS.md, Agent Skills and MCP, so another agent
-is another output of the compiler, not a rewrite of your settings. Which model provider or
-gateway a project talks to is one of the settings rein carries, set at the organisation level
-and overridable by a team or a project; the switch itself happens at the gateway, which rein
-never replaces.
-
-### The four levels
-
-Every level is a folder of declarations in the org repository with its own owners and
-reviewers. Levels cascade from the organisation down to the engineer: a rule marked `required`
-holds at every level below, a rule marked `default` may be overridden there.
-
-```mermaid
-graph TD
-  O["🏢 Organisation level<br/>owned and reviewed by the organisation<br/>the policies that hold for everyone, the label registry, the exceptions"]
-  T["👥 Team level<br/>owned and reviewed by each team<br/>the team's stack conventions and skills, Go style, testing, deployment"]
-  P["📁 Project level<br/>one per repository, owned by the teams on it<br/>what only this repository needs, its API conventions, its tool servers, plus its labels"]
-  U["👤 User level<br/>owned by each engineer<br/>personal preferences, how the agent writes to you, your own skills"]
-  H["🧰 Harness of one clone<br/>the four levels resolved for that project and that engineer, written by rein sync"]
-  O -->|"cascades, required holds below, default may be overridden"| T
-  T -->|"cascades the same way"| P
-  P -->|"cascades the same way"| U
-  U -->|"resolved per project and per engineer"| H
-  X["📝 Exception<br/>granted at the owner's level, with a reason and an end date, it lets one team or project skip a required rule"] -.-> O
-  L["🏷️ Labels<br/>language go, kind service, client acme, chosen from the registry when a project is created, they pick which team and organisation declarations apply"] -.-> P
+```sh
+rein org create
+rein team create
+cd <a project clone> && rein init
 ```
+
+Deliver the settings, and turn the harness `init` moved out into proposals:
+
+```sh
+rein sync
+rein distill
+rein propose <the folder distill printed>
+```
+
+Every command asks what it needs and explains itself with `?`; `rein restore`, `rein org
+destroy` and `rein reset` take everything back. The full list is in
+[docs/commands.md](docs/commands.md).
 
 ## Supported agents
 
-The agent is the program that reads your settings and acts; the harness is everything it reads
-before acting, which is what Agents Rein manages. Agents Rein is agent-agnostic by design, and
-the first agent is only the first.
+Claude Code today: instructions, rules, skills, tool servers, hooks and permissions. Codex,
+Cursor, GitHub Copilot, Gemini CLI and OpenCode are planned; each reads the same open formats,
+so each is another output of the same compiler ([findings, Q4](docs/harness-management.md#harness-portability-across-tools)).
 
-| Agent | State |
-|---|---|
-| Claude Code | supported: instructions, rules, skills, tool servers, hooks, permissions |
-| Codex, Cursor, GitHub Copilot, Gemini CLI, OpenCode | planned: each reads AGENTS.md and Agent Skills natively ([findings, Q4](docs/harness-management.md#harness-portability-across-tools)), so each is another output of the same compiler |
+## Read more
 
-## Commands
-
-What exists today. There is no setup step beyond `rein login`: your identity is your
-GitHub account, and the agents on your machine are detected.
-
-| Command | What it does |
-|---|---|
-| `rein login`, `rein logout <login>` | Logs a GitHub account in through the Agents Rein app's device flow, a code typed on github.com; the token goes into the operating system's keychain and is renewed by itself. Several accounts live side by side; each organisation remembers the one that connected it. |
-| `rein status` | Shows who you are to rein, the GitHub accounts logged in, the supported agents found on this machine, every placed file and whether its target still exists, organisations, projects and imports. |
-| `rein org create` | Creates an organisation on the version control host (GitHub today): the repository, or an empty one of that name adopted, a first commit with the organisation record, the seeded label registry and CODEOWNERS, protection of `main` with a code-owner review, and the connection of this machine to it. Asks for the host, the account, the name, the repository, the owner and the visibility. Rein never deletes a repository. |
-| `rein org connect <remote>`, `list`, `use [slug]`, `disconnect [slug]` | Clones an org repository and remembers it, snapshotting your agents' homes into `~/.rein/snapshots/` as the record of what was there before rein; lists the connected ones with the active one marked; switches; forgets one and removes its clone without touching the remote. A slug left out is asked from the connected ones. |
-| `rein org destroy [slug]` | The way back to nothing for an organisation: disconnects it as above, then prints the steps to delete its repository on the host by hand. Rein never deletes a repository. |
-| `rein team create`, `rein project create`, `rein project edit [slug]` | Write a team or a project record into the active organisation's clone and push it to `main`, the owner's way: name, description, and for a project its teams, labels and path, asked or given as flags. The required label categories are asked first, at least one value each; the optional ones come in one list. `project edit` asks the same again with the current values as defaults, or changes only the flags given. |
-| `rein label list`, `add [category:value]`, `remove <category:value>`, `require <category> [--off]` | The label registry: what a project can be. `add` puts a value into a category or creates the category, `--required` making every project carry one of its values; `remove` refuses a value a project carries; `require` toggles a category. Each change is pushed to `main` the owner's way. |
-| `rein init` | In a project clone: binds it to its project record by the repository's root commits, picking or creating the record when none carries them; moves `CLAUDE.md`, `.claude/` and `.mcp.json` into a snapshot under `~/.rein/snapshots/`, records the removal, adds a marked block to `.gitignore`, registers the clone and commits the move-out. |
-| `rein distill` | Turns the snapshot of an initialised project's harness, or of your agent's home with `--home`, into candidate declarations at that level, compares each with what the organisation already declares by content and id, asks the judge, your agent's CLI until the organisation declares a provider, to compare the prose and suggest keep, drop, merge or lift, and writes it all with a report under `~/.rein/distill/` for `rein propose`. `--dry-run` shows the brief, `--judge none` skips the model. |
-| `rein propose <folder or zip>` | The one way declarations enter an org repository: lints the candidates, leaves out what the organisation already has, writes the rest on a branch of its clone, pushes it and opens the pull request with the comparison as its body. A distillation knows its level and carries the judge's view, which propose applies: a lifted candidate goes to the organisation, the project's team or your user level with its `applyIf` labels, a dropped one stays out, and the placement is printed before the confirmation; `--as-distilled` keeps everything at the distilled level. Anything else goes to your user level unless `--level` says otherwise. |
-| `rein resolve --project <slug>` | Shows which declarations apply to a project, in level order with what each replaced, what the skip lists took out and through which exception, and the problems that would make `sync` refuse. |
-| `rein sync` | Writes the harness this clone's project resolves: `CLAUDE.md` with one imported file per level, rules, skills, hook scripts, permissions and hooks in `.claude/settings.local.json` merged with your own allow list, and `.mcp.json`; every file recorded with its hash, a hand edit stopping the next sync unless `--force`. Every clone also gets the skill `rein`, which tells the agent how these files are managed and how a change is proposed. `--all` for every clone; `--hook` is what the session-start hook runs. |
-| `rein lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, skills that share a name, and in an org repository every record: organisation, teams, projects, users and the label registry, with their references. Needs no identity, so CI runs it on an org repository. |
-| `rein restore` | Reverses `init` for one clone: the files it moved out come back from their snapshots, the rein block leaves `.gitignore`, the clone is forgotten on this machine, and the put-back is committed as the move-out was. |
-| `rein reset` | Restores every initialised project first, then removes everything rein placed into an agent's home, forgets the organisations and deletes their clones, and removes the ledger, the snapshots and the distillations: the machine as before rein. A restore that fails stops it before anything is wiped. |
-| `rein version` | Prints the version. |
-
-Planned, in the board's order: `rein org destroy`; `rein import` and `rein export`, which move a
-level into and out of an org repository; `rein review`; `rein label`; `rein migrate`;
-`rein update`.
-
-The reasoning is the [ADR](docs/decisions/2026-10-11_harness-tool-compiler-and-linter.md); the
-design, the decisions and what is next are on the
-[board](docs/implementation_plans/2026-10-11_harness-distribution-tool.md). The code is Go,
-with cobra and yaml.v3 as the only dependencies. Every repeatable command is a task in
-[Taskfile.yml](Taskfile.yml): `task rein:install` installs the binary, `task rein:check` is the
-gate, format check, vet, tests and lint; `task --list` shows the rest.
-
-## The research behind it
-
-This repository began as research: how does a large engineering organisation manage
-AI-assisted development across many teams? Six questions, answered with sources in
-[docs/harness-management.md](docs/harness-management.md):
-
-- **Q1 — Receiving the harness.** How dev teams receive a shared harness with as little
-  friction as possible.
-- **Q2 — Extending without breaking.** How a team extends it for its own stack without breaking
-  the organisation-wide rules.
-- **Q3 — Using services.** How teams use shared services, tool servers, internal APIs and
-  gateways, through the harness.
-- **Q4 — Provider flexibility.** How to stay free to change model provider or move to private
-  inference.
-- **Q5 — Mixing providers.** Whether cloud and private inference can be mixed.
-- **Q6 — Adopt or build.** What exists, and what to build. The answer, adopt the vendor layers
-  and build only a compiler and a linter, is what Agents Rein is.
-
-## Where things are
-
-- [docs/harness-management.md](docs/harness-management.md) — the findings, one section per
-  question.
-- [docs/decisions/](docs/decisions/) — Architecture Decision Records, the immutable "why".
-- [docs/architecture.md](docs/architecture.md) — how the tool's code is organised: the layers,
-  the rules the architecture test enforces, and where a new piece goes.
-- [docs/implementation_plans/](docs/implementation_plans/) — the live boards: one for Agents Rein,
-  one for the personal toolkit.
-- [docs/future-ideas.md](docs/future-ideas.md) — ideas parked on purpose, with what would make
-  them current.
-- [cmd/rein/](cmd/rein/) and [internal/](internal/) — the tool: under `app/`, the gateway
-  the user calls, the orchestration with the workflows and queries, and the services, each
-  owning one piece of state, with the pure libraries beside them; then the ports and the
-  adapters for GitHub, git, Claude Code, local state and the terminal.
-- `CLAUDE.md` and `.claude/` — the harness this repository runs with, on each machine and not
-  committed, since agent settings are not repository settings. From the pilot on, `rein sync`
-  writes it; until then it is this machine's copy, and a fresh clone has none. The personal
-  agent toolkit, global instructions and ten skills in open formats, lived under `toolkit/`
-  until 2026-10-21 and moved into this harness for `rein init` to carry it, through `distill`
-  and `propose`, into the pilot's org repository, where the judge places each piece at its
-  level ([ADR](docs/decisions/2026-10-10_personal-toolkit-open-formats.md),
-  [board](docs/implementation_plans/2026-10-10_agent-toolkit.md)).
+- [docs/concepts.md](docs/concepts.md) — the model: the levels, the labels, what lives on your
+  machine, the supported agents.
+- [docs/commands.md](docs/commands.md) — every command and what it touches.
+- [docs/harness-management.md](docs/harness-management.md) — the research this began as: six
+  questions about AI-assisted development in a large organisation, answered with sources.
+- [docs/decisions/](docs/decisions/) — the Architecture Decision Records, the immutable "why".
+- [docs/architecture.md](docs/architecture.md) — how the code is organised and where a new
+  piece goes.
+- [docs/implementation_plans/](docs/implementation_plans/) — the live boards.
+- [docs/future-ideas.md](docs/future-ideas.md) — ideas parked on purpose.
 
 ## Licence
 

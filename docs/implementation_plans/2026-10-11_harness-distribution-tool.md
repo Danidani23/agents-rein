@@ -1200,9 +1200,15 @@ from that project's snapshot.
   so an organisation that requires one later is not blocked. `rein project edit [slug]` asks
   description, teams, labels and path again with the current values as defaults, or changes
   only the flags given, and pushes the record with `updated_at` (D20). `rein label list`,
-  `add`, `remove` and `require` change the registry the owner's way; `remove` refuses a value
-  a project carries and the last value of a category. Known limits: the name and the slug of
-  a project never change; a team record has no edit yet; the registry has no rename.
+  `add`, `remove` and `set` change the registry the owner's way; `remove` refuses a value a
+  project carries and the last value of a category. Amended 2026-10-22, from the second run:
+  a category also carries `multiple: true`, without which one value is the most a project
+  carries; `language` is seeded multiple, `kind` and `data` single. A single-valued required
+  category is one choice; two values of a single-valued category are refused on the spot in
+  the questions, with flags, in the create and edit workflows, and by the lint as an error;
+  `label set <category>` takes `--required`, `--optional`, `--multiple` and `--single`, and
+  refuses `--single` while a project carries two. Known limits: the name and the slug of a
+  project never change; a team record has no edit yet; the registry has no rename.
 - ✅ **P2.27 — `propose` applies the judge's placement; the `rein` skill in every clone.**
   [EXECUTED] 2026-10-21 on the user's two questions: a user level proposed as a plain folder
   cannot know which labels apply, and the toolkit should go through `init` and `distill` so
@@ -1701,3 +1707,7 @@ writes is read from the next session on, not in the same one.
   with `restore`, `org destroy` and the deletion by hand. P2.28 executed on what it showed: the
   plain intro, the repository's name as the default, no description default, required label
   categories with the two-step questions, `project edit` and the `label` commands.
+- (2026-10-22) The second run of the pilot reached `init` cleanly. From it: `multiple` on a label
+  category and `label set` (R35); the README cut to an overview with a quick start, the model
+  moved to `docs/concepts.md`, the commands to `docs/commands.md`, the six questions to the top
+  of the findings (R34).
