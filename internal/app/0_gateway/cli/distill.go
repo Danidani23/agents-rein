@@ -103,7 +103,8 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 		fmt.Fprintf(environment.out, "  skipped    %s\n", skipped)
 	}
 	fmt.Fprintf(environment.out, "%d new, %d identical to an existing declaration, %d sharing an id with another level\n", counts[distill.VerdictNew], counts[distill.VerdictIdentical], counts[distill.VerdictSameID])
-	fmt.Fprintf(environment.out, "written to %s\nnext: review and edit it, then rein propose opens the pull request\n", result.File)
+	style := environment.style()
+	fmt.Fprintf(environment.out, "\nwritten to %s\nnext: review and edit it, then rein propose opens the pull request\n", style.Bold(style.Green(result.File)))
 	return nil
 }
 

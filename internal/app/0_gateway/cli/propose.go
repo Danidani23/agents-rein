@@ -90,10 +90,12 @@ func runPropose(environment *commandEnvironment, request orchestration.ProposeRe
 	}
 	fmt.Fprintf(environment.out, "proposed %d declarations on branch %s\n", len(result.Included), result.Branch)
 	printPlacement(environment, result.ProposalPlan)
-	fmt.Fprintf(environment.out, "pull request: %s\n", result.PullRequestURL)
+	style := environment.style()
+	fmt.Fprintf(environment.out, "\npull request: %s\n", style.Bold(style.Green(result.PullRequestURL)))
 	if result.HistoryFile != "" {
 		fmt.Fprintf(environment.out, "the proposal moved to %s\n", result.HistoryFile)
 	}
+	fmt.Fprintf(environment.out, "next: review and merge it, then rein sync in each clone of its projects\n")
 	return nil
 }
 

@@ -232,6 +232,10 @@ func (style Style) Yellow(text string) string { return style.paint("33", text) }
 // Dim is a step still running.
 func (style Style) Dim(text string) string { return style.paint("2", text) }
 
+// Bold is for the one line a command ends on, the path or the address the
+// person needs next.
+func (style Style) Bold(text string) string { return style.paint("1", text) }
+
 // ChooseMany asks a selector that takes several choices, by numbers or names
 // separated by spaces or commas. Enter takes the default, or none when the
 // question is optional.

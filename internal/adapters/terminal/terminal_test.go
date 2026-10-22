@@ -269,3 +269,10 @@ func TestAskOptional(t *testing.T) {
 		t.Fatalf("answer %q err %v out %q", answer, err, out.String())
 	}
 }
+
+func TestBold(t *testing.T) {
+	painted := Style{Enabled: true}
+	if painted.Bold(painted.Green("x")) != "\033[1m\033[32mx\033[0m\033[0m" || (Style{}).Bold("x") != "x" {
+		t.Fatalf("bold %q", painted.Bold(painted.Green("x")))
+	}
+}
