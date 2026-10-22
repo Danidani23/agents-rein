@@ -155,3 +155,10 @@ the project-specific lines kept in its own instructions, its `CLAUDE.md` index u
   inside. Reaches every repository's next session.
 - (2026-10-20) Communication rule 9 added on the user's instruction: a reference key, such as
   a question number, is used once per conversation, so an answer by key is never ambiguous.
+- (2026-10-21) The toolkit left `toolkit/`: `global/AGENTS.md` became `.claude/rules/global.md`
+  and the ten skills `.claude/skills/<id>/` of this repository's own harness, untracked like the
+  rest of it. `rein init` snapshots them, `rein distill` makes one candidate of each and the
+  judge proposes its level and labels, `rein propose` opens the pull request, and from the
+  merge on the org repository `Danidani23/dani-agent-settings` is the source; `rein sync`
+  delivers it to every project clone. The history of this repository keeps the toolkit as it
+  was.
