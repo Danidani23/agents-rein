@@ -25,9 +25,10 @@ repositories. Committed into each repository they drift apart, carry one vendor'
 the history, and travel with a fork or a hand-over that never asked for them.
 
 So Agents Rein keeps the harness in one central repository per organisation, and configures
-it for every single project from three sources: what the organisation requires, what the
-team adds, and what you prefer. A project repository holds the code alone; the harness is
-generated into each clone, never committed, and regenerated at every session start.
+it for every single project from four sources: what the organisation requires, what the team
+adds, what the project itself needs, and what you prefer. A project repository holds the code
+alone; the harness is generated into each clone, never committed, and regenerated at every
+session start.
 
 ## Who it is for
 

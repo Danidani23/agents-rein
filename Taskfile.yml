@@ -39,6 +39,15 @@ tasks:
       - go vet ./...
       - go test ./...
 
+  rein:coverage:
+    desc: Test every package with statement coverage, print the summary, and leave the HTML report in .tmp/coverage.html
+    cmds:
+      - mkdir -p .tmp
+      - go test -coverprofile=.tmp/coverage.out ./...
+      - go tool cover -func=.tmp/coverage.out | tail -1
+      - go tool cover -html=.tmp/coverage.out -o .tmp/coverage.html
+      - 'echo "per file: go tool cover -func=.tmp/coverage.out; in the browser: open .tmp/coverage.html"'
+
   rein:lint:
     desc: Run rein lint on this repository
     deps: [rein:build]
