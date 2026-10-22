@@ -115,3 +115,13 @@ func Write(root string, files map[string]string) error {
 	}
 	return nil
 }
+
+// LabelCategoryRecord is one file of the label registry, as the registry
+// commands write it.
+func LabelCategoryRecord(organizationSlug string, category declaration.LabelCategory) (relativePath string, content string, err error) {
+	record, err := yaml.Marshal(category)
+	if err != nil {
+		return "", "", err
+	}
+	return path.Join("declarations", "organizations", organizationSlug, "labels", category.Category+".yaml"), header + string(record), nil
+}

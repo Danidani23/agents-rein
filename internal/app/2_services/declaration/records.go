@@ -41,6 +41,7 @@ type Project struct {
 	Path        string    `yaml:"path,omitempty"`
 	Fingerprint []string  `yaml:"fingerprint,omitempty"`
 	CreatedAt   time.Time `yaml:"created_at,omitempty"`
+	UpdatedAt   time.Time `yaml:"updated_at,omitempty"`
 	// Skip lists the addresses of default declarations above this level
 	// that do not apply to it; a required one needs an exception.
 	Skip []string `yaml:"skip,omitempty"`
@@ -60,7 +61,10 @@ type User struct {
 // the values a project may carry under that category, each with a short
 // description.
 type LabelCategory struct {
-	Category string            `yaml:"category"`
+	Category string `yaml:"category"`
+	// Required means every project carries at least one value of it; the
+	// creators insist, the lint warns.
+	Required bool              `yaml:"required,omitempty"`
 	Labels   map[string]string `yaml:"labels"`
 }
 
@@ -220,7 +224,7 @@ func SeededLabels() []LabelCategory {
 		{Category: "language", Labels: map[string]string{
 			"go": "Go", "typescript": "TypeScript", "python": "Python", "dart": "Dart", "java": "Java", "rust": "Rust",
 		}},
-		{Category: "kind", Labels: map[string]string{
+		{Category: "kind", Required: true, Labels: map[string]string{
 			"static-site": "a static website", "web-app": "a web application", "service": "a backend service",
 			"cli": "a command-line tool", "library": "a library", "infrastructure": "infrastructure as code",
 		}},
@@ -238,4 +242,23 @@ func (category LabelCategory) LabelValues() []string {
 	}
 	sort.Strings(values)
 	return values
+}
+
+// MissingRequiredCategories lists the required categories, in order, that
+// none of the labels belongs to.
+func MissingRequiredCategories(registry map[string]LabelCategory, labels []string) []string {
+	present := map[string]bool{}
+	for _, label := range labels {
+		category, _, ok := SplitLabel(label)
+		if ok {
+			present[category] = true
+		}
+	}
+	var missing []string
+	for _, name := range sortedKeys(registry) {
+		if registry[name].Required && !present[name] {
+			missing = append(missing, name)
+		}
+	}
+	return missing
 }

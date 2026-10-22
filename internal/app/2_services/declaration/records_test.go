@@ -197,3 +197,17 @@ func TestLoadTree(t *testing.T) {
 		}
 	})
 }
+
+func TestRequiredLabelCategories(t *testing.T) {
+	category, problems := ParseLabelCategory("kind", []byte("category: kind\nrequired: true\nlabels:\n  cli: a command-line tool\n"))
+	if len(problems) != 0 || !category.Required {
+		t.Fatalf("category %+v problems %v", category, problems)
+	}
+	registry := map[string]LabelCategory{"kind": {Category: "kind", Required: true}, "language": {Category: "language"}, "data": {Category: "data", Required: true}}
+	if missing := MissingRequiredCategories(registry, []string{"language:go", "data:public"}); strings.Join(missing, ",") != "kind" {
+		t.Fatalf("missing %v", missing)
+	}
+	if missing := MissingRequiredCategories(registry, []string{"kind:cli", "data:public", "broken"}); len(missing) != 0 {
+		t.Fatalf("missing %v", missing)
+	}
+}

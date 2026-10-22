@@ -97,6 +97,12 @@ func checkProjectAgainstTree(tree declaration.Tree, organizationSlug string, pro
 	if exists {
 		return refusal.New(fmt.Sprintf("project %q already exists in %s", project.Slug, organizationSlug))
 	}
+	return checkProjectReferences(tree, organizationSlug, project)
+}
+
+// checkProjectReferences refuses a project whose teams do not exist or
+// whose labels are not in the registry.
+func checkProjectReferences(tree declaration.Tree, organizationSlug string, project declaration.Project) error {
 	for _, team := range project.Teams {
 		_, found := tree.Teams[team]
 		if !found {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Danidani23/agents-rein/internal/adapters/fake"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
@@ -1205,4 +1206,83 @@ func TestSyncClone(t *testing.T) {
 			t.Fatalf("reset err %v inserts %v", err, insertsErr)
 		}
 	})
+}
+
+func TestEditProject(t *testing.T) {
+	fixture, created := withTeam(t)
+	_, _ = fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "Ops"})
+	_, err := fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Description: "a shop", Teams: []string{"web"}, Labels: []string{"kind:service"}, Fingerprint: []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	result, err := fixture.orchestrator().EditProject(EditProjectRequest{Slug: "shop", Description: "the shop", Teams: []string{"web", "ops"}, Labels: []string{"kind:service", "language:go"}, Path: "services/shop"})
+	if err != nil || result.Slug != "shop" || result.Name != "Shop" || strings.Join(result.Changed, ",") != "description,teams,labels,path" {
+		t.Fatalf("result %+v err %v", result, err)
+	}
+	content, _ := os.ReadFile(filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "projects", "shop", "project.yaml"))
+	record, problems := declaration.ParseProject("shop", content)
+	if len(problems) != 0 || record.Description != "the shop" || strings.Join(record.Teams, ",") != "web,ops" || strings.Join(record.Labels, ",") != "kind:service,language:go" || record.Path != "services/shop" || strings.Join(record.Fingerprint, ",") != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" || record.UpdatedAt.IsZero() || record.CreatedAt.IsZero() || record.ID == "" {
+		t.Fatalf("record %+v problems %v", record, problems)
+	}
+	if !strings.Contains(fixture.repository.Commits[len(fixture.repository.Commits)-1], "project shop: description, teams, labels, path (rein project edit)") {
+		t.Fatalf("commits %v", fixture.repository.Commits)
+	}
+	for expected, request := range map[string]EditProjectRequest{
+		"does not exist in acme; projects are shop":     {Slug: "nope", Teams: []string{"web"}},
+		`team "nowhere" does not exist`:                 {Slug: "shop", Teams: []string{"nowhere"}},
+		`label "kind:spaceship" is not in the registry`: {Slug: "shop", Teams: []string{"web"}, Labels: []string{"kind:spaceship"}},
+		"teams is required":                             {Slug: "shop"},
+	} {
+		_, err = fixture.orchestrator().EditProject(request)
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), expected) {
+			t.Fatalf("%s: err %v", expected, err)
+		}
+	}
+}
+
+func TestEditLabelRegistry(t *testing.T) {
+	fixture, created := withTeam(t)
+	_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}, Labels: []string{"kind:service"}})
+	registry := func(category string) declaration.LabelCategory {
+		content, _ := os.ReadFile(filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "labels", category+".yaml"))
+		parsed, _ := declaration.ParseLabelCategory(category, content)
+		return parsed
+	}
+	result, err := fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelAdd, Category: "kind", Value: "worker", Description: "a background worker"})
+	if err != nil || result.CreatedCategory || result.Required != true || registry("kind").Labels["worker"] != "a background worker" {
+		t.Fatalf("add: result %+v err %v registry %+v", result, err, registry("kind"))
+	}
+	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelAdd, Category: "stack", Value: "aws", Description: "runs on AWS", Required: true})
+	if err != nil || !result.CreatedCategory || !result.Required || result.RelativePath != "declarations/organizations/acme/labels/stack.yaml" || !registry("stack").Required || registry("stack").Labels["aws"] != "runs on AWS" {
+		t.Fatalf("create: result %+v err %v", result, err)
+	}
+	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelOptional, Category: "stack"})
+	if err != nil || result.Required || registry("stack").Required {
+		t.Fatalf("optional: result %+v err %v", result, err)
+	}
+	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelRequire, Category: "language"})
+	if err != nil || !result.Required || !registry("language").Required {
+		t.Fatalf("require: result %+v err %v", result, err)
+	}
+	_, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelRemove, Category: "kind", Value: "worker"})
+	if err != nil || registry("kind").Labels["worker"] != "" {
+		t.Fatalf("remove: err %v registry %+v", err, registry("kind"))
+	}
+	for expected, request := range map[string]LabelRegistryRequest{
+		"is already in the registry":             {Operation: LabelAdd, Category: "kind", Value: "service"},
+		"is carried by the projects shop":        {Operation: LabelRemove, Category: "kind", Value: "service"},
+		"is the last value of its category":      {Operation: LabelRemove, Category: "stack", Value: "aws"},
+		`category "nope" is not in the registry`: {Operation: LabelRequire, Category: "nope"},
+		`category "Not Slug" is not a slug`:      {Operation: LabelAdd, Category: "Not Slug", Value: "x"},
+		`label value "X" is not a slug`:          {Operation: LabelAdd, Category: "kind", Value: "X"},
+		"is not a registry operation":            {Operation: "explode", Category: "kind"},
+	} {
+		_, err = fixture.orchestrator().EditLabelRegistry(request)
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), expected) {
+			t.Fatalf("%s: err %v", expected, err)
+		}
+	}
+	if len(fixture.repository.Branches) != 0 {
+		t.Fatalf("branches %v", fixture.repository.Branches)
+	}
 }

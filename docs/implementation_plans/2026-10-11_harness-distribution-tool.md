@@ -1189,6 +1189,20 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- ✅ **P2.28 — The creators ask well: required labels, the registry commands, `project edit`.**
+  [EXECUTED] 2026-10-22 from the first real `init` of this repository. The intro of `init` is
+  four plain numbered lines. The project created on the spot defaults to the repository's
+  name from its origin. A description has no default; Enter leaves it empty. A label category
+  carries `required: true` in the registry; `kind` is seeded required. The creators ask the
+  required categories first, at least one value each, several separated by commas, then every
+  optional value in one list, Enter for none; with flags a missing required category is a
+  refusal that names the values. The lint warns about a project without a required category,
+  so an organisation that requires one later is not blocked. `rein project edit [slug]` asks
+  description, teams, labels and path again with the current values as defaults, or changes
+  only the flags given, and pushes the record with `updated_at` (D20). `rein label list`,
+  `add`, `remove` and `require` change the registry the owner's way; `remove` refuses a value
+  a project carries and the last value of a category. Known limits: the name and the slug of
+  a project never change; a team record has no edit yet; the registry has no rename.
 - ✅ **P2.27 — `propose` applies the judge's placement; the `rein` skill in every clone.**
   [EXECUTED] 2026-10-21 on the user's two questions: a user level proposed as a plain folder
   cannot know which labels apply, and the toolkit should go through `init` and `distill` so
@@ -1683,3 +1697,7 @@ writes is read from the next session on, not in the same one.
   labels; the judge's brief lists the registry; the skill `rein` goes into every synced clone.
   The toolkit moved from `toolkit/` into this repository's harness under `.claude/`, for
   `init`, `distill` and `propose` to carry it into the org repository (R25).
+- (2026-10-22) The first real `init` of this repository worked end to end and was taken back
+  with `restore`, `org destroy` and the deletion by hand. P2.28 executed on what it showed: the
+  plain intro, the repository's name as the default, no description default, required label
+  categories with the two-step questions, `project edit` and the `label` commands.

@@ -148,7 +148,18 @@ type LabelValueSummary struct {
 // LabelCategorySummary is one category of the registry with its values.
 type LabelCategorySummary struct {
 	Category string
+	Required bool
 	Values   []LabelValueSummary
+}
+
+// ProjectSummary is a project record as the gateway shows and edits it.
+type ProjectSummary struct {
+	Slug        string
+	Name        string
+	Description string
+	Teams       []string
+	Labels      []string
+	Path        string
 }
 
 // OrganizationDescription is an organisation as the gateway needs it to ask
@@ -158,6 +169,7 @@ type OrganizationDescription struct {
 	Name            string
 	OrgClonePath    string
 	Teams           []TeamSummary
+	Projects        []ProjectSummary
 	LabelCategories []LabelCategorySummary
 }
 
@@ -177,8 +189,12 @@ func (orchestrator Orchestrator) DescribeOrganization(slug string) (Organization
 	for _, teamSlug := range sortedKeys(tree.Teams) {
 		description.Teams = append(description.Teams, TeamSummary{Slug: teamSlug, Name: tree.Teams[teamSlug].Name})
 	}
+	for _, projectSlug := range sortedKeys(tree.Projects) {
+		project := tree.Projects[projectSlug]
+		description.Projects = append(description.Projects, ProjectSummary{Slug: projectSlug, Name: project.Name, Description: project.Description, Teams: project.Teams, Labels: project.Labels, Path: project.Path})
+	}
 	for _, category := range sortedKeys(tree.Labels) {
-		summary := LabelCategorySummary{Category: category}
+		summary := LabelCategorySummary{Category: category, Required: tree.Labels[category].Required}
 		registered := tree.Labels[category]
 		for _, value := range registered.LabelValues() {
 			summary.Values = append(summary.Values, LabelValueSummary{Value: value, Description: registered.Labels[value]})

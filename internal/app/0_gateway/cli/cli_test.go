@@ -383,7 +383,7 @@ func TestReset(t *testing.T) {
 		fixture := newHarness(t)
 		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
 		_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
-		_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+		_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
 		folder, _ := filepath.EvalSymlinks(t.TempDir())
 		_ = fake.NewProjectClone(folder, []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, []string{"INSTRUCTIONS.md"})
 		_ = os.WriteFile(filepath.Join(folder, "INSTRUCTIONS.md"), []byte("be brief"), 0o644)
@@ -406,7 +406,7 @@ func TestRestore(t *testing.T) {
 	fixture := newHarness(t)
 	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
 	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
-	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
 	folder, _ := filepath.EvalSymlinks(t.TempDir())
 	_ = fake.NewProjectClone(folder, []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, []string{"INSTRUCTIONS.md"})
 	_ = os.WriteFile(filepath.Join(folder, "INSTRUCTIONS.md"), []byte("be brief"), 0o644)
@@ -493,7 +493,7 @@ func TestTeamAndProjectCreate(t *testing.T) {
 		if code != ExitWorked || !strings.Contains(out, "created team web (Web) in acme") || !strings.Contains(out, "record: declarations/organizations/acme/teams/web/team.yaml, pushed to main") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
-		code, out, errOut = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "language:go", "--yes")
+		code, out, errOut = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--label", "language:go", "--yes")
 		if code != ExitWorked || !strings.Contains(out, "created project shop (Shop) in acme for the team(s) web") || !strings.Contains(out, "record: declarations/organizations/acme/projects/shop/project.yaml, pushed to main") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
@@ -505,9 +505,9 @@ func TestTeamAndProjectCreate(t *testing.T) {
 		if code != ExitWorked || !strings.Contains(out, "One line about what the team does; Enter for none.") || strings.Contains(out, "[The Web team]") || !strings.Contains(out, "created team web (Web)") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
-		// name, description, teams (the one team is the default), then the categories in order: data none, kind none, language go; path, confirm
-		code, out, errOut = fixture.runInteractive("Shop\n\n\n\n\n2\n\n\n", "project", "create")
-		for _, expected := range []string{"1) web  ", "[web]", "Label data:", "Label kind:", "Label language:", "2) go", "[.]", "with labels language:go", "created project shop (Shop) in acme for the team(s) web"} {
+		// name, description, teams (the one team is the default), the required kind, the other labels in one list, path, confirm
+		code, out, errOut = fixture.runInteractive("Shop\n\n\n1\nlanguage:go\n\n\n", "project", "create")
+		for _, expected := range []string{"1) web  ", "[web]", "Labels say what the project is, so declarations can apply to projects like it. Label kind, required: at least one; several separated by commas.", "1) cli  ", "Other labels, any that apply, several separated by commas; Enter for none.", "language:go  ", "data:public  ", "[.]", "with labels kind:cli, language:go", "created project shop (Shop) in acme for the team(s) web"} {
 			if code != ExitWorked || !strings.Contains(out, expected) {
 				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 			}
@@ -520,14 +520,18 @@ func TestTeamAndProjectCreate(t *testing.T) {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
 		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
-		code, _, errOut = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+		code, _, errOut = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
 		if code != ExitRefused || !strings.Contains(errOut, "has no teams yet") {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
 		_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
-		code, _, errOut = fixture.run("project", "create", "--name", "Shop", "--team", "nope", "--yes")
+		code, _, errOut = fixture.run("project", "create", "--name", "Shop", "--team", "nope", "--label", "kind:cli", "--yes")
 		if code != ExitRefused || !strings.Contains(errOut, `team "nope" does not exist in acme; teams are web`) {
 			t.Fatalf("code %d err %q", code, errOut)
+		}
+		code, _, errOut = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "language:go", "--yes")
+		if code != ExitRefused || !strings.Contains(errOut, "the label category kind is required; pass --label kind:<value>, one of cli, infrastructure, library, service, static-site, web-app") {
+			t.Fatalf("required label: code %d err %q", code, errOut)
 		}
 		code, _, errOut = fixture.run("project", "create", "--name", "Shop")
 		if code != ExitRefused || !strings.Contains(errOut, "--team") {
@@ -549,7 +553,7 @@ func TestInit(t *testing.T) {
 		fixture := newHarness(t)
 		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
 		_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
-		_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+		_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
 		folder := projectClone(t)
 		code, out, errOut := fixture.run("init", "--path", folder, "--project", "shop", "--yes")
 		for _, expected := range []string{"bound " + folder + " to organizations.acme.projects.shop (fingerprint: 1 root commit(s))", "moved out for fake-agent: INSTRUCTIONS.md", "snapshot: " + filepath.Join(fixture.home, "snapshots"), ".gitignore: rein block added", "committed f4ce000: move agent settings out to rein", "next: rein sync"} {
@@ -579,8 +583,8 @@ func TestInit(t *testing.T) {
 		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
 		_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
 		folder := projectClone(t)
-		// project choice (create, the default), name, description, teams, data, kind, language, confirm
-		code, out, errOut := fixture.runInteractive("\nShop\n\n\n\n\n2\n\n", "init", "--path", folder)
+		// project choice (create, the default), name, description, teams, the required kind, other labels, confirm
+		code, out, errOut := fixture.runInteractive("\nShop\n\n\n1\n\n\n", "init", "--path", folder)
 		for _, expected := range []string{"1) create a new project", "Project name\x1b[0m [" + filepath.Base(folder) + "]", "This will create the project \"Shop\" in acme and bind it", "created and bound " + folder + " to organizations.acme.projects.shop"} {
 			if code != ExitWorked || !strings.Contains(out, expected) {
 				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
@@ -593,7 +597,7 @@ func TestDistill(t *testing.T) {
 	fixture := newHarness(t)
 	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
 	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
-	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
 	home := t.TempDir()
 	_ = os.WriteFile(filepath.Join(home, "CLAUDE.md"), []byte("be brief"), 0o644)
 	orchestrator, _ := fixture.orchestrate()
@@ -644,7 +648,7 @@ func TestDistillJudgeFlags(t *testing.T) {
 	fixture := newHarness(t)
 	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
 	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
-	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
 	home := t.TempDir()
 	_ = os.WriteFile(filepath.Join(home, "CLAUDE.md"), []byte("be brief"), 0o644)
 	orchestrator, _ := fixture.orchestrate()
@@ -676,9 +680,9 @@ func TestResolve(t *testing.T) {
 	fixture := newHarness(t)
 	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
 	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
-	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
 	code, out, _ := fixture.run("resolve", "--project", "shop")
-	if code != ExitWorked || !strings.Contains(out, "organizations.acme.projects.shop: teams web, labels none, user danidani23") || !strings.Contains(out, "no declarations apply yet") {
+	if code != ExitWorked || !strings.Contains(out, "organizations.acme.projects.shop: teams web, labels kind:service, user danidani23") || !strings.Contains(out, "no declarations apply yet") {
 		t.Fatalf("code %d out %q", code, out)
 	}
 	orchestrator, _ := fixture.orchestrate()
@@ -712,7 +716,7 @@ func TestSync(t *testing.T) {
 	fixture.agent.HarnessFormat = "claude-code"
 	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
 	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
-	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
 	orchestrator, _ := fixture.orchestrate()
 	_, orgClonePath, _ := orchestrator.Organizations.Lookup("acme")
 	rule := filepath.Join(orgClonePath, "declarations", "organizations", "acme", "rules", "style.md")
@@ -780,8 +784,9 @@ func TestEditAtTheConfirmation(t *testing.T) {
 		t.Fatalf("code %d out %q err %q", code, out, errOut)
 	}
 	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
-	code, out, errOut = fixture.runInteractive("Shop\n\n\n\n\n\n\ne\n\n\n\n\n\n2\n\n\n", "project", "create")
-	if code != ExitWorked || !strings.Contains(out, "Project name\x1b[0m [Shop]") || !strings.Contains(out, "with labels language:go") || !strings.Contains(out, "created project shop (Shop)") {
+	// name, description, teams, kind, other labels, path, e; then name, description, teams, kind (previous kept), other labels, path, confirm
+	code, out, errOut = fixture.runInteractive("Shop\n\n\n1\n\n\ne\n\n\n\n\nlanguage:go\n\n\n", "project", "create")
+	if code != ExitWorked || !strings.Contains(out, "Project name\x1b[0m [Shop]") || !strings.Contains(out, "Choose one or more\x1b[0m [cli]") || !strings.Contains(out, "with labels kind:cli, language:go") || !strings.Contains(out, "created project shop (Shop)") {
 		t.Fatalf("code %d out %q err %q", code, out, errOut)
 	}
 }
@@ -806,5 +811,86 @@ func TestProgressLines(t *testing.T) {
 	code, out, errOut := fixture.run("org", "create", "--name", "Acme", "--yes")
 	if code == ExitWorked || !strings.Contains(out, "  ✗ pushing the first commit: git push failed") || !strings.Contains(out, "  ↩ undone writing the first content") {
 		t.Fatalf("failure output: code %d out %q err %q", code, out, errOut)
+	}
+}
+
+func TestProjectEditAndLabelRegistry(t *testing.T) {
+	fixture := newHarness(t)
+	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
+	code, _, errOut := fixture.run("project", "edit", "shop")
+	if code != ExitRefused || !strings.Contains(errOut, "nothing to change; pass --description") {
+		t.Fatalf("edit without flags off a terminal: code %d err %q", code, errOut)
+	}
+	code, _, errOut = fixture.run("project", "edit", "shop", "--label", "language:go", "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "the label category kind is required") {
+		t.Fatalf("edit dropping the required label: code %d err %q", code, errOut)
+	}
+	code, out, errOut := fixture.run("project", "edit", "shop", "--label", "kind:cli", "--label", "language:go", "--yes")
+	if code != ExitWorked || !strings.Contains(out, "This will change the project shop in acme: description \"\", teams web, labels kind:cli, language:go, path .") || !strings.Contains(out, "changed project shop (Shop) in acme: labels") || !strings.Contains(out, "record: declarations/organizations/acme/projects/shop/project.yaml, pushed to main") {
+		t.Fatalf("edit with flags: code %d out %q err %q", code, out, errOut)
+	}
+	code, _, errOut = fixture.run("project", "edit", "shop", "--label", "kind:cli", "--label", "language:go", "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "nothing changed on project shop") {
+		t.Fatalf("edit without a change: code %d err %q", code, errOut)
+	}
+	// the one project is the default; description typed, teams, kind and other labels kept by Enter, path kept, confirm
+	code, out, errOut = fixture.runInteractive("\nA web shop\n\n\n\n\n\n", "project", "edit")
+	if code != ExitWorked || strings.Contains(out, "Project name") || !strings.Contains(out, "1) shop  \x1b[2;3mShop, teams web") || !strings.Contains(out, "Choose one or more\x1b[0m [cli]") || !strings.Contains(out, "Choose any, or none\x1b[0m [language:go]") || !strings.Contains(out, "changed project shop (Shop) in acme: description") {
+		t.Fatalf("interactive edit: code %d out %q err %q", code, out, errOut)
+	}
+	code, out, errOut = fixture.run("label", "list")
+	if code != ExitWorked || !strings.Contains(out, "label registry of acme") || !strings.Contains(out, "kind  required: every project carries one\n  cli              a command-line tool\n") || !strings.Contains(out, "\nlanguage\n  dart") {
+		t.Fatalf("list: code %d out %q err %q", code, out, errOut)
+	}
+	code, out, errOut = fixture.run("label", "add", "kind:worker", "--description", "a background worker", "--yes")
+	if code != ExitWorked || !strings.Contains(out, "This will add kind:worker (a background worker) to the registry of acme") || !strings.Contains(out, "added kind:worker to the registry of acme") || !strings.Contains(out, "registry: declarations/organizations/acme/labels/kind.yaml, pushed to main") {
+		t.Fatalf("add: code %d out %q err %q", code, out, errOut)
+	}
+	code, _, errOut = fixture.run("label", "add", "kind:worker", "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "kind:worker is already in the registry") {
+		t.Fatalf("add twice: code %d err %q", code, errOut)
+	}
+	// category: 4 is the new one after data, kind, language; then its name, the value, the description, required yes, confirm
+	code, out, errOut = fixture.runInteractive("4\nstack\naws\nruns on AWS\ny\n\n", "label", "add")
+	if code != ExitWorked || !strings.Contains(out, "4) a new category") || !strings.Contains(out, "Must every project carry one value of stack?") || !strings.Contains(out, "This will create the category stack in the registry of acme, required: every project carries one of its values, with its first value aws (runs on AWS)") || !strings.Contains(out, "created the category stack with stack:aws in acme") {
+		t.Fatalf("interactive add: code %d out %q err %q", code, out, errOut)
+	}
+	code, out, _ = fixture.run("label", "list")
+	if !strings.Contains(out, "stack  required") || !strings.Contains(out, "  aws              runs on AWS") || !strings.Contains(out, "  worker           a background worker") {
+		t.Fatalf("list after: out %q", out)
+	}
+	code, _, errOut = fixture.run("label", "remove", "kind:cli", "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "kind:cli is carried by the projects shop; change them first with rein project edit") {
+		t.Fatalf("remove carried: code %d err %q", code, errOut)
+	}
+	code, _, errOut = fixture.run("label", "remove", "stack:aws", "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "the last value of its category") {
+		t.Fatalf("remove last: code %d err %q", code, errOut)
+	}
+	code, out, errOut = fixture.run("label", "remove", "kind:worker", "--yes")
+	if code != ExitWorked || !strings.Contains(out, "removed kind:worker from the registry of acme") {
+		t.Fatalf("remove: code %d out %q err %q", code, out, errOut)
+	}
+	code, out, errOut = fixture.run("label", "require", "language", "--yes")
+	if code != ExitWorked || !strings.Contains(out, "This will make the category language required, so every project created or edited from now on carries one of its values in acme") || !strings.Contains(out, "the category language is required in acme") {
+		t.Fatalf("require: code %d out %q err %q", code, out, errOut)
+	}
+	code, _, errOut = fixture.run("project", "create", "--name", "Blog", "--team", "web", "--label", "kind:web-app", "--label", "stack:aws", "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "the label category language is required") {
+		t.Fatalf("create after require: code %d err %q", code, errOut)
+	}
+	code, out, errOut = fixture.run("label", "require", "language", "--off", "--yes")
+	if code != ExitWorked || !strings.Contains(out, "the category language is optional in acme") {
+		t.Fatalf("optional: code %d out %q err %q", code, out, errOut)
+	}
+	code, _, errOut = fixture.run("label", "remove", "nope")
+	if code != ExitRefused || !strings.Contains(errOut, "is not category:value") {
+		t.Fatalf("bad label: code %d err %q", code, errOut)
+	}
+	code, _, errOut = fixture.run("label", "require", "nope", "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, `category "nope" is not in the registry; categories are data, kind, language, stack`) {
+		t.Fatalf("unknown category: code %d err %q", code, errOut)
 	}
 }

@@ -227,12 +227,12 @@ func TestWiring(t *testing.T) {
 		if code != cli.ExitWorked || !strings.Contains(out, "created team web (Web) in acme") {
 			t.Fatalf("team: code %d out %q err %q", code, out, errOut)
 		}
-		code, out, errOut = run("project", "create", "--name", "Shop", "--team", "web", "--label", "language:go", "--yes")
+		code, out, errOut = run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--label", "language:go", "--yes")
 		if code != cli.ExitWorked || !strings.Contains(out, "created project shop (Shop) in acme") {
 			t.Fatalf("project: code %d out %q err %q", code, out, errOut)
 		}
 		code, out, errOut = run("resolve", "--project", "shop")
-		if code != cli.ExitWorked || !strings.Contains(out, "labels language:go, user danidani23") || !strings.Contains(out, "no declarations apply yet") {
+		if code != cli.ExitWorked || !strings.Contains(out, "labels kind:service, language:go, user danidani23") || !strings.Contains(out, "no declarations apply yet") {
 			t.Fatalf("resolve: code %d out %q err %q", code, out, errOut)
 		}
 		log := exec.Command("git", "--git-dir", remote, "rev-list", "--count", "main")

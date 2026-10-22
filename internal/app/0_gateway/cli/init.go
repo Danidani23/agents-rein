@@ -49,10 +49,14 @@ func newInitCommand(environment *commandEnvironment) *cobra.Command {
 	return command
 }
 
-const initIntro = "init binds this clone to its project record in the org repository and moves the agent's " +
-	"settings out of the repository into rein's keeping, since agent settings are not repository " +
-	"settings: a snapshot keeps what was there, .gitignore gets a marked block, and the move-out " +
-	"is committed."
+const initIntro = "init puts this repository under rein.\n\n" +
+	"1. It finds this repository's project in the org repository, or creates one with you now.\n" +
+	"2. It moves the agent's own files, CLAUDE.md, .claude/ with its rules and skills, and .mcp.json, out of\n" +
+	"   this folder. rein manages them from here on. Nothing is lost: rein restore puts them back as they were.\n" +
+	"3. It adds a few lines to .gitignore, so the agent's settings stay out of the repository and rein can\n" +
+	"   manage them cleanly.\n" +
+	"4. It commits the change.\n\n" +
+	"Afterwards rein sync writes the settings this project gets from the org repository."
 
 func runInit(environment *commandEnvironment, answers initAnswers) error {
 	orchestrator, release, err := environment.orchestrateLocked()

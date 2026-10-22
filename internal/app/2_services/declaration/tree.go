@@ -213,6 +213,9 @@ func (tree Tree) crossCheck(orgAddress string, orgFolder string) []TreeProblem {
 				problems = append(problems, TreeProblem{Address: addressText, Path: path, Cross: true, Problem: Problem{Severity: SeverityError, Message: fmt.Sprintf("label %q is not in the registry; %s has %s", label, category, strings.Join(registered.LabelValues(), ", "))}})
 			}
 		}
+		for _, missing := range MissingRequiredCategories(tree.Labels, project.Labels) {
+			problems = append(problems, TreeProblem{Address: addressText, Path: path, Cross: true, Problem: Problem{Severity: SeverityWarning, Message: fmt.Sprintf("no label of the required category %s", missing)}})
+		}
 		if len(project.Fingerprint) > 0 {
 			key := strings.Join(project.Fingerprint, ",") + " " + project.Path
 			if other, taken := repositories[key]; taken {
