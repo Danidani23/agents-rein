@@ -1,23 +1,37 @@
-// Package semver reads and orders release versions of the form
-// vMAJOR.MINOR.PATCH, for the update check and the organisation's minimum.
+// Package semver reads and orders versions of the form
+// vMAJOR.MINOR.PATCH[-PRERELEASE][+BUILD], for the update check and the
+// organisation's minimum. Go names a build after a tag with the next patch
+// and a pre-release, v0.1.1-0.20261022193356-161a1127359e, so such a build
+// orders after the tag and before the next release.
 package semver
 
-import "strings"
+import (
+	"strings"
+)
+
+// parsed is a version taken apart.
+type parsed struct {
+	numbers    [3]int
+	prerelease string
+}
 
 // IsRelease says whether a text is a release version, vMAJOR.MINOR.PATCH
-// with or without the v, rather than a pseudo-version, a dirty build or
-// "unknown".
+// with or without the v and nothing after it: not a pre-release, not a
+// build after a tag, not a dirty build, not "unknown".
 func IsRelease(text string) bool {
-	_, ok := parse(text)
-	return ok
+	version, ok := parse(text)
+	return ok && version.prerelease == "" && !strings.Contains(text, "+")
 }
 
 // Compare orders two versions: negative when left is older than right, zero
-// when equal, positive when newer. A text that is no release counts as
-// older than any release, and two such texts as equal.
+// when equal, positive when newer. The numbers decide first; at equal
+// numbers a pre-release is older than the release, and two pre-releases
+// order by their text, which puts an earlier build before a later one.
+// Build metadata after a + is ignored. A text that is no version at all
+// counts as older than any version, and two such texts as equal.
 func Compare(left string, right string) int {
-	leftParts, leftOK := parse(left)
-	rightParts, rightOK := parse(right)
+	leftVersion, leftOK := parse(left)
+	rightVersion, rightOK := parse(right)
 	switch {
 	case !leftOK && !rightOK:
 		return 0
@@ -27,32 +41,49 @@ func Compare(left string, right string) int {
 		return 1
 	}
 	for index := 0; index < 3; index++ {
-		if leftParts[index] != rightParts[index] {
-			return leftParts[index] - rightParts[index]
+		if leftVersion.numbers[index] != rightVersion.numbers[index] {
+			return leftVersion.numbers[index] - rightVersion.numbers[index]
 		}
 	}
-	return 0
+	switch {
+	case leftVersion.prerelease == rightVersion.prerelease:
+		return 0
+	case leftVersion.prerelease == "":
+		return 1
+	case rightVersion.prerelease == "":
+		return -1
+	}
+	return strings.Compare(leftVersion.prerelease, rightVersion.prerelease)
 }
 
-// parse reads vMAJOR.MINOR.PATCH.
-func parse(text string) ([3]int, bool) {
-	var parts [3]int
-	segments := strings.Split(strings.TrimPrefix(strings.TrimSpace(text), "v"), ".")
+// parse reads vMAJOR.MINOR.PATCH, a pre-release after a hyphen, build
+// metadata after a plus.
+func parse(text string) (parsed, bool) {
+	var version parsed
+	core := strings.TrimPrefix(strings.TrimSpace(text), "v")
+	if plus := strings.Index(core, "+"); plus >= 0 {
+		core = core[:plus]
+	}
+	if hyphen := strings.Index(core, "-"); hyphen >= 0 {
+		version.prerelease = core[hyphen+1:]
+		core = core[:hyphen]
+	}
+	segments := strings.Split(core, ".")
 	if len(segments) != 3 {
-		return parts, false
+		return parsed{}, false
 	}
 	for index, segment := range segments {
 		if segment == "" {
-			return parts, false
+			return parsed{}, false
 		}
 		value := 0
 		for _, digit := range segment {
 			if digit < '0' || digit > '9' {
-				return parts, false
+				return parsed{}, false
 			}
 			value = value*10 + int(digit-'0')
 		}
-		parts[index] = value
+		version.numbers[index] = value
 	}
-	return parts, true
+	return version, true
 }

@@ -86,6 +86,11 @@ func TestCheckAndNudge(t *testing.T) {
 	if nudge := developer.Nudge(); !strings.Contains(nudge, "rein v0.1.0 is available") {
 		t.Fatalf("developer nudge %q", nudge)
 	}
+	// a developer's build after the latest tag is newer than it, so there is nothing to nudge about
+	after := Service{Home: t.TempDir(), Releases: releases, Current: "v0.1.1-0.20261022193356-161a1127359e+dirty", Clock: func() time.Time { return now }}
+	if nudge := after.Nudge(); nudge != "" {
+		t.Fatalf("a build after the tag was nudged: %q", nudge)
+	}
 }
 
 func TestHowInstalled(t *testing.T) {

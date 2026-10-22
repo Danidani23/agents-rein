@@ -40,7 +40,11 @@ func runUpdate(environment *commandEnvironment, check bool, yes bool) error {
 		return refusal.New("the latest release could not be read: " + err.Error())
 	}
 	if !checked.Newer {
-		fmt.Fprintf(environment.out, "rein %s is the latest release; this is %s\n", checked.Latest, checked.Current)
+		if checked.Latest != checked.Current {
+			fmt.Fprintf(environment.out, "rein %s is the latest release; this build, %s, is newer than it\n", checked.Latest, checked.Current)
+			return nil
+		}
+		fmt.Fprintf(environment.out, "rein %s is the latest release, and this is it\n", checked.Latest)
 		return nil
 	}
 	fmt.Fprintf(environment.out, "rein %s is available; this is %s\n", checked.Latest, checked.Current)
