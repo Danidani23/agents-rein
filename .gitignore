@@ -12,3 +12,10 @@
 /CLAUDE.md
 /CLAUDE.local.md
 /.claude/
+
+# >>> rein: agent settings are not repository settings; rein sync writes these, keep this block
+CLAUDE.md
+.claude
+.mcp.json
+CLAUDE.local.md
+# <<< rein
