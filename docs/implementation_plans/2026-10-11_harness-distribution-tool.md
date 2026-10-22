@@ -1189,6 +1189,28 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- ✅ **P2.29 — The proposal is one file a person reviews; the judge's conversation is named;
+  long steps spin.** [EXECUTED] 2026-10-22 on the user's design (R37, R38). `distill` writes
+  one YAML document, the proposal: every candidate with its content inline, whether it goes,
+  the level the judge's view resolves to, its labels, the comparison, the judge's verdict and
+  reason, and the snapshot it came from, under `.rein/proposals/proposal-<id>.yaml` in the
+  project's folder, covered by the rein block of `.gitignore`, or under
+  `~/.rein/proposals/pending/` for the agents' homes. The id is the first twelve hex digits
+  of the snapshot's SHA-256, so a second distillation of the same snapshot is refused unless
+  `--force`. The person edits the file, in an editor rather than at the prompt, and `propose`
+  does what it says, no `--as-distilled` or `--team` needed; afterwards the file is marked
+  proposed with the branch, the pull request and the time, and moved to
+  `~/.rein/proposals/<org>/<time>-<id>.yaml` as the history, which `restore` and `reset`
+  respect in their own ways: `restore` removes a clone's `.rein/`, `reset` the home's folder.
+  `rein status` lists the pending proposals; `rein propose` without an argument takes the one
+  pending in the folder. The `proposal` library holds the format, the checks and the
+  translation to the declarations layout; the `proposalfiles` service owns the files and
+  replaces `distillations`. The judge's brief opens with a line naming the distillation, and
+  claude runs under a session id rein chose, recorded in the proposal, so the conversation is
+  found in the agent's history and opened with `claude --resume`. On a terminal a running
+  step's line spins with the seconds elapsed. Known limits: a lift to a team the project does
+  not decide stays at the project with a note; the home's pending proposals live outside any
+  clone; the judge's session id is Claude Code's only.
 - ✅ **P2.28 — The creators ask well: required labels, the registry commands, `project edit`.**
   [EXECUTED] 2026-10-22 from the first real `init` of this repository. The intro of `init` is
   four plain numbered lines. The project created on the spot defaults to the repository's
@@ -1721,3 +1743,5 @@ writes is read from the next session on, not in the same one.
   false` and `labels: []` included, on the user's preference for transparency (R36); only a
   time that has not happened yet is left out. `sync` opens no pull request on purpose: it
   delivers what main holds, and `propose` is the one way into the org repository.
+- (2026-10-22) P2.29 executed: the proposal as one reviewable file in the project folder,
+  moved to the history on propose; the judge's conversation titled and recorded; the spinner.

@@ -82,6 +82,12 @@ func printStatus(environment *commandEnvironment, report orchestration.StatusRep
 		}
 		fmt.Fprintf(environment.out, "  %s  %s  %s\n", clone.Address, clone.ClonePath, drift)
 	}
+	if len(report.Pending) > 0 {
+		fmt.Fprintf(environment.out, "\nproposals pending  %d\n", len(report.Pending))
+		for _, pending := range report.Pending {
+			fmt.Fprintf(environment.out, "  %s  %d candidates for %s, distilled %s\n", pending.Path, pending.Candidates, pending.Level, pending.DistilledAt.Local().Format("2006-01-02 15:04"))
+		}
+	}
 	if len(report.Imports) > 0 {
 		fmt.Fprintf(environment.out, "\nimports  %d\n", len(report.Imports))
 		for _, imported := range report.Imports {

@@ -169,6 +169,10 @@ func (orchestrator Orchestrator) RestoreProject(request RestoreRequest) (Restore
 			Undo: func() error { return services.Ledger.UnmarkRestored(snapshots) },
 		},
 		{
+			Name: "removing rein's own folder",
+			Do:   func() error { return services.ProposalFiles.RemoveCloneFolder(location.Folder) },
+		},
+		{
 			Name: "forgetting the clone",
 			Do: func() error {
 				result.Unregistered = true

@@ -40,10 +40,12 @@ type AnswerCandidate struct {
 
 // JudgeRun says what happened with the judge, for the report.
 type JudgeRun struct {
-	Backend  string   `yaml:"backend"`
-	Status   string   `yaml:"status"`
-	Problems []string `yaml:"problems,omitempty"`
-	Dropped  []string `yaml:"dropped,omitempty"`
+	Backend string `yaml:"backend"`
+	Status  string `yaml:"status"`
+	// Session is the conversation the backend kept, for a person to open.
+	Session  string   `yaml:"session"`
+	Problems []string `yaml:"problems"`
+	Dropped  []string `yaml:"dropped"`
 }
 
 // Statuses of a judge run.

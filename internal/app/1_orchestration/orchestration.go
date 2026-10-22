@@ -14,13 +14,13 @@ import (
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/clones"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/credentials"
-	"github.com/Danidani23/agents-rein/internal/app/2_services/distillations"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/hosting"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/judge"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/ledger"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/organizations"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/placements"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/proposalfiles"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/proposals"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/records"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/snapshots"
@@ -41,7 +41,7 @@ type Services struct {
 	Records       records.Service
 	WorkingCopy   workingcopy.Service
 	Ledger        ledger.Service
-	Distillations distillations.Service
+	ProposalFiles proposalfiles.Service
 	Proposals     proposals.Service
 	Judge         judge.Service
 	// Lock is the machine lock a writing command holds from start to end.
@@ -70,7 +70,7 @@ func NewServices(home string, host ports.Host, repository ports.Repository, stat
 		Records:       records.Service{Repository: repository},
 		WorkingCopy:   workingcopy.Service{Repository: repository},
 		Ledger:        ledger.Service{Home: home, Clock: time.Now},
-		Distillations: distillations.Service{Home: home, Clock: time.Now},
+		ProposalFiles: proposalfiles.Service{Home: home, Clock: time.Now},
 		Proposals:     proposals.Service{Repository: repository, Host: host},
 		Judge:         judge.Service{Judge: judgeBackend},
 		Lock:          lock,

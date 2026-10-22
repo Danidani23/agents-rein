@@ -26,7 +26,7 @@ func newResetCommand(environment *commandEnvironment) *cobra.Command {
 		Long: "reset leaves the machine as before rein was first used: it restores every initialised\n" +
 			"project, committing the put-back, removes every link and copy rein made in the agents'\n" +
 			"homes, forgets the connected organisations, deletes their clones, and removes the ledger,\n" +
-			"the snapshots and the distillations. The remotes are never touched. It shows the plan and\n" +
+			"the snapshots and the proposals. The remotes are never touched. It shows the plan and\n" +
 			"confirms before changing anything; --yes skips that.",
 		Example: "  rein reset\n  rein reset --yes",
 		Args:    cobra.NoArgs,
@@ -61,7 +61,7 @@ func runReset(environment *commandEnvironment, yes bool) error {
 		fmt.Fprintf(environment.out, "- remove %d imports under %s\n", len(plan.Imports), plan.ImportsFolder)
 	}
 	fmt.Fprintf(environment.out, "- forget %d organisations and delete their clones under %s; the remotes stay\n", len(plan.Organizations), plan.OrgClonesFolder)
-	fmt.Fprintf(environment.out, "- remove the ledger %s, the snapshots under %s and the distillations under %s\n", plan.RemovalsFile, plan.SnapshotsFolder, plan.DistillFolder)
+	fmt.Fprintf(environment.out, "- remove the ledger %s, the snapshots under %s and the proposals under %s\n", plan.RemovalsFile, plan.SnapshotsFolder, plan.ProposalsFolder)
 	if !yes {
 		prompter := environment.prompter()
 		if !prompter.CanAsk() {

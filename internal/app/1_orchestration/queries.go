@@ -3,9 +3,11 @@ package orchestration
 import (
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/proposalfiles"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/resolve"
 )
@@ -38,6 +40,8 @@ type StatusReport struct {
 	ProjectClones []machine.ProjectClone
 	Clones        []CloneStatus
 	Imports       []machine.Import
+	// Pending are the proposals waiting in the clones and the home.
+	Pending []PendingProposal
 }
 
 // Status reads across the services and changes nothing. It runs without a
@@ -70,7 +74,21 @@ func (orchestrator Orchestrator) Status() (StatusReport, error) {
 	if err != nil {
 		return StatusReport{}, err
 	}
+	homePending, err := services.ProposalFiles.ListPending(services.ProposalFiles.HomePendingFolder())
+	if err != nil {
+		return StatusReport{}, err
+	}
+	for _, entry := range homePending {
+		report.Pending = append(report.Pending, PendingProposal{Path: entry.Path, ID: entry.Proposal.ID, Level: entry.Proposal.DistilledFrom, Candidates: len(entry.Proposal.Candidates), DistilledAt: entry.Proposal.DistilledAt})
+	}
 	for _, clone := range report.ProjectClones {
+		pending, err := services.ProposalFiles.ListPending(proposalfiles.PendingFolderOf(clone.ClonePath))
+		if err != nil {
+			return StatusReport{}, err
+		}
+		for _, entry := range pending {
+			report.Pending = append(report.Pending, PendingProposal{Path: entry.Path, ID: entry.Proposal.ID, Level: entry.Proposal.DistilledFrom, Candidates: len(entry.Proposal.Candidates), DistilledAt: entry.Proposal.DistilledAt})
+		}
 		status := CloneStatus{ProjectClone: clone}
 		inserts, err := services.Ledger.InsertsOf(clone.Organization, clone.ClonePath)
 		if err != nil {
@@ -100,7 +118,7 @@ type ResetPlan struct {
 	OrgClonesFolder string
 	RemovalsFile    string
 	SnapshotsFolder string
-	DistillFolder   string
+	ProposalsFolder string
 	InsertsFolder   string
 }
 
@@ -128,7 +146,7 @@ func (orchestrator Orchestrator) PlanReset() (ResetPlan, error) {
 		OrgClonesFolder: services.Clones.OrgClonesFolder(),
 		RemovalsFile:    services.Ledger.Path(),
 		SnapshotsFolder: services.Snapshots.Folder(),
-		DistillFolder:   services.Distillations.Folder(),
+		ProposalsFolder: services.ProposalFiles.Folder(),
 		InsertsFolder:   services.Ledger.InsertsFolder(),
 	}, nil
 }
@@ -337,12 +355,42 @@ func (orchestrator Orchestrator) ResolveProject(organizationSlug string, project
 }
 
 // PlanProposal says what ProposeDeclarations would do with the request:
-// each candidate at its level, the judge's lifts and drops applied, the
-// identical ones left out. It pulls the org clone and changes nothing else.
+// each included candidate at its level, the identical ones left out, the
+// excluded ones named. It pulls the org clone and changes nothing else.
 func (orchestrator Orchestrator) PlanProposal(request ProposeRequest) (ProposalPlan, error) {
-	plan, err := planProposal(orchestrator.Services, request)
+	prepared, err := prepareProposal(orchestrator.Services, request)
 	if err != nil {
 		return ProposalPlan{}, err
 	}
-	return plan.ProposalPlan, nil
+	return prepared.ProposalPlan, nil
+}
+
+// PendingProposal is a proposal waiting in a folder.
+type PendingProposal struct {
+	Path        string
+	ID          string
+	Level       string
+	Candidates  int
+	DistilledAt time.Time
+}
+
+// PendingProposals lists the proposals waiting under the project folder
+// around directory, or under the home's pending folder when directory is
+// not inside an initialised project.
+func (orchestrator Orchestrator) PendingProposals(directory string) ([]PendingProposal, error) {
+	services := orchestrator.Services
+	folder := services.ProposalFiles.HomePendingFolder()
+	location, err := services.WorkingCopy.Locate(directory)
+	if err == nil {
+		folder = proposalfiles.PendingFolderOf(location.Folder)
+	}
+	pending, err := services.ProposalFiles.ListPending(folder)
+	if err != nil {
+		return nil, err
+	}
+	var listed []PendingProposal
+	for _, entry := range pending {
+		listed = append(listed, PendingProposal{Path: entry.Path, ID: entry.Proposal.ID, Level: entry.Proposal.DistilledFrom, Candidates: len(entry.Proposal.Candidates), DistilledAt: entry.Proposal.DistilledAt})
+	}
+	return listed, nil
 }

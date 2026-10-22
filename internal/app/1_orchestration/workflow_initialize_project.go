@@ -7,6 +7,7 @@ import (
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/ledger"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/proposalfiles"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/scaffold"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/workingcopy"
@@ -265,7 +266,7 @@ func bindProject(orchestrator Orchestrator, request InitializeProjectRequest, or
 // ignoreEntries are the project harness paths and the personal paths of
 // every agent, once each.
 func ignoreEntries(services Services) []string {
-	var entries []string
+	entries := []string{proposalfiles.CloneFolder + "/"}
 	seen := map[string]bool{}
 	for _, agent := range services.Snapshots.Agents {
 		for _, harnessPath := range append(append([]string{}, agent.ProjectHarnessPaths()...), agent.PersonalPaths()...) {

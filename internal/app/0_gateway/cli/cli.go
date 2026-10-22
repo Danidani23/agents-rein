@@ -50,6 +50,59 @@ type commandEnvironment struct {
 	// pendingStep is the step whose start line is still open on the
 	// terminal, waiting to be rewritten with its outcome.
 	pendingStep string
+	// spinner redraws the open line with the time elapsed while a step
+	// runs; nil off a terminal.
+	spinner *spinner
+}
+
+// spinner redraws a step's open line a few times a second with a glyph
+// and the seconds elapsed, so a long step never looks frozen.
+type spinner struct {
+	stop chan struct{}
+	done chan struct{}
+}
+
+// spinnerFrames are the glyphs, one per tick.
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+// spinnerInterval is the time between two redraws.
+const spinnerInterval = 120 * time.Millisecond
+
+// startSpinner begins redrawing the open line with text and the elapsed
+// time until stopSpinner is called.
+func (environment *commandEnvironment) startSpinner(text string) {
+	environment.stopSpinner()
+	started := time.Now()
+	current := &spinner{stop: make(chan struct{}), done: make(chan struct{})}
+	environment.spinner = current
+	style := environment.style()
+	go func() {
+		defer close(current.done)
+		ticker := time.NewTicker(spinnerInterval)
+		defer ticker.Stop()
+		frame := 0
+		for {
+			select {
+			case <-current.stop:
+				return
+			case <-ticker.C:
+				elapsed := time.Since(started).Round(time.Second)
+				fmt.Fprintf(environment.out, "\r\033[2K  %s %s %s", style.Dim(spinnerFrames[frame%len(spinnerFrames)]), style.Dim(text+" …"), style.Dim(elapsed.String()))
+				frame++
+			}
+		}
+	}()
+}
+
+// stopSpinner ends the redrawing and waits for the last frame to be out,
+// so the outcome line overwrites it cleanly.
+func (environment *commandEnvironment) stopSpinner() {
+	if environment.spinner == nil {
+		return
+	}
+	close(environment.spinner.stop)
+	<-environment.spinner.done
+	environment.spinner = nil
 }
 
 func (environment *commandEnvironment) prompter() ports.Prompter {
@@ -114,21 +167,25 @@ func (environment *commandEnvironment) openLine(step string, text string) {
 		return
 	}
 	if environment.pendingStep != "" {
+		environment.stopSpinner()
 		fmt.Fprint(environment.out, "\n")
 	}
 	fmt.Fprintf(environment.out, "  %s", text)
 	environment.pendingStep = step
+	environment.startSpinner(step)
 }
 
 // closeLine prints a step's outcome: over its own open line on a terminal,
 // on a new line otherwise.
 func (environment *commandEnvironment) closeLine(step string, text string) {
 	if environment.terminal && environment.pendingStep == step {
+		environment.stopSpinner()
 		fmt.Fprintf(environment.out, "\r\033[2K  %s\n", text)
 		environment.pendingStep = ""
 		return
 	}
 	if environment.terminal && environment.pendingStep != "" {
+		environment.stopSpinner()
 		fmt.Fprint(environment.out, "\n")
 		environment.pendingStep = ""
 	}

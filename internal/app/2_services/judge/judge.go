@@ -7,6 +7,7 @@ package judge
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 	"github.com/Danidani23/agents-rein/internal/ports"
@@ -39,9 +40,11 @@ func (service Service) Name() string {
 // them.
 func (service Service) JudgeCandidates(level string, candidates []distill.Candidate, corpus distill.Corpus) distill.JudgeRun {
 	run := distill.JudgeRun{Backend: service.Name(), Dropped: corpus.Dropped}
-	brief := distill.Brief(level, candidates, corpus)
+	// the first line names the conversation in the agent's history
+	brief := fmt.Sprintf("rein distill, the judge's brief for %s, %s\n\n", level, time.Now().Format("2006-01-02 15:04")) + distill.Brief(level, candidates, corpus)
 	for attempt := 0; attempt < 2; attempt++ {
-		text, err := service.Judge.Ask(brief)
+		text, session, err := service.Judge.Ask(brief)
+		run.Session = session
 		if err != nil {
 			run.Status = distill.JudgeFailed
 			run.Problems = append(run.Problems, err.Error())

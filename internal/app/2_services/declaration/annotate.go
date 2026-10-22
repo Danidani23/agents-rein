@@ -8,13 +8,34 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// AnnotateApplyIf returns a candidate's files with applyIf set on its
-// declaration: in a rule's frontmatter, in a skill's metadata under
-// rein-apply-if, and at the top of a hook, a permission set or a tool
-// server. Without labels the files come back as they are.
+// AnnotateApplyIf returns the candidate's files with applyIf set on its
+// declaration; see AnnotateSelectors.
 func AnnotateApplyIf(kind string, files map[string]string, applyIf []string) (map[string]string, error) {
-	if len(applyIf) == 0 {
+	return AnnotateSelectors(kind, files, Selectors{ApplyIf: applyIf})
+}
+
+// AnnotateSelectors returns a candidate's files with the selectors set on
+// its declaration: in a rule's frontmatter, in a skill's metadata under the
+// rein- keys, and at the top of a hook, a permission set or a tool server.
+// An empty selector is left out, so files without any come back as they
+// are.
+func AnnotateSelectors(kind string, files map[string]string, selectors Selectors) (map[string]string, error) {
+	if len(selectors.ApplyIf) == 0 && len(selectors.DoNotApplyIf) == 0 && selectors.Enforcement == "" {
 		return files, nil
+	}
+	fields := map[string]any{}
+	metadata := map[string]any{}
+	if len(selectors.ApplyIf) > 0 {
+		fields["applyIf"] = selectors.ApplyIf
+		metadata[SkillApplyIfKey] = strings.Join(selectors.ApplyIf, " ")
+	}
+	if len(selectors.DoNotApplyIf) > 0 {
+		fields["doNotApplyIf"] = selectors.DoNotApplyIf
+		metadata[SkillDoNotApplyIfKey] = strings.Join(selectors.DoNotApplyIf, " ")
+	}
+	if selectors.Enforcement != "" {
+		fields["enforcement"] = selectors.Enforcement
+		metadata[SkillEnforcementKey] = selectors.Enforcement
 	}
 	annotated := map[string]string{}
 	for relative, content := range files {
@@ -25,18 +46,24 @@ func AnnotateApplyIf(kind string, files map[string]string, applyIf []string) (ma
 		var err error
 		switch {
 		case kind == "rules" && strings.HasSuffix(base, ".md"):
-			annotated[relative], err = withFrontmatter(content, func(mapping map[string]any) { mapping["applyIf"] = applyIf })
+			annotated[relative], err = withFrontmatter(content, func(mapping map[string]any) {
+				for field, value := range fields {
+					mapping[field] = value
+				}
+			})
 		case kind == "skills" && base == "SKILL.md":
 			annotated[relative], err = withFrontmatter(content, func(mapping map[string]any) {
-				metadata, _ := mapping["metadata"].(map[string]any)
-				if metadata == nil {
-					metadata = map[string]any{}
+				existing, _ := mapping["metadata"].(map[string]any)
+				if existing == nil {
+					existing = map[string]any{}
 				}
-				metadata[SkillApplyIfKey] = strings.Join(applyIf, " ")
-				mapping["metadata"] = metadata
+				for key, value := range metadata {
+					existing[key] = value
+				}
+				mapping["metadata"] = existing
 			})
 		case (kind == "hooks" && base == "hook.yaml") || ((kind == "permissions" || kind == "mcpservers") && strings.HasSuffix(base, ".yaml")):
-			annotated[relative], err = withTopLevelField(content, "applyIf", applyIf)
+			annotated[relative], err = withTopLevelFields(content, fields)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", relative, err)
@@ -69,14 +96,16 @@ func withFrontmatter(content string, set func(mapping map[string]any)) (string, 
 	return "---\n" + string(encoded) + "---\n" + body, nil
 }
 
-// withTopLevelField sets one field of a YAML mapping file.
-func withTopLevelField(content string, field string, value any) (string, error) {
+// withTopLevelFields sets fields of a YAML mapping file.
+func withTopLevelFields(content string, fields map[string]any) (string, error) {
 	mapping := map[string]any{}
 	err := yaml.Unmarshal([]byte(content), &mapping)
 	if err != nil {
 		return "", fmt.Errorf("not a YAML mapping: %w", err)
 	}
-	mapping[field] = value
+	for field, value := range fields {
+		mapping[field] = value
+	}
 	encoded, err := yaml.Marshal(mapping)
 	if err != nil {
 		return "", err

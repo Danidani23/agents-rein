@@ -42,7 +42,10 @@ those files; it is proposed to the org repository and comes back at the next syn
    has and opens the pull request. The address is ` + "`organizations.<org>`" + `,
    ` + "`organizations.<org>.teams.<team>`" + `, ` + "`organizations.<org>.projects.<project>`" + ` or
    ` + "`users.<user>`" + `.
-4. A setting for this developer on this machine only goes into ` + "`CLAUDE.local.md`" + `, or into
+4. A harness that was in a repository before rein is distilled: ` + "`rein distill`" + ` writes a
+   proposal file under ` + "`.rein/proposals/`" + ` with every candidate, its level and the judge's
+   reason; a person reviews and edits it; ` + "`rein propose`" + ` opens the pull request from it.
+5. A setting for this developer on this machine only goes into ` + "`CLAUDE.local.md`" + `, or into
    the allow list of ` + "`.claude/settings.local.json`" + `, which sync keeps.
 
 ## Secrets

@@ -54,12 +54,13 @@ rein team create
 cd <a project clone> && rein init
 ```
 
-Deliver the settings, and turn the harness `init` moved out into proposals:
+Deliver the settings, then turn the harness `init` moved out into a proposal file, review it,
+and open the pull request:
 
 ```sh
 rein sync
 rein distill
-rein propose <the folder distill printed>
+rein propose
 ```
 
 Every command asks what it needs and explains itself with `?`; `rein restore`, `rein org

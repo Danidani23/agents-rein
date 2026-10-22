@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -9,39 +10,37 @@ import (
 
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 func newProposeCommand(environment *commandEnvironment) *cobra.Command {
 	var request orchestration.ProposeRequest
 	var yes bool
 	command := &cobra.Command{
-		Use:   "propose <folder or zip>",
-		Short: "Open a pull request that adds declarations to a level of the org repository",
-		Long: "propose is the one way declarations enter an org repository. It takes a distillation folder\n" +
-			"from rein distill, a plain level folder with rules/, skills/, mcpservers/, permissions/ and\n" +
-			"hooks/, or an export zip; lints it; compares every candidate with what the organisation has\n" +
-			"and leaves out the identical ones; writes the rest on a branch of the organisation's clone,\n" +
-			"pushes it and opens the pull request, with the comparison as its body. A distillation knows\n" +
-			"its level; anything else goes to your user level unless --level says otherwise. Your user\n" +
-			"record is added when the org repository has none.\n\n" +
-			"A distillation carries the judge's view of each candidate, and propose applies it: a\n" +
-			"candidate the judge lifted goes to that level, the organisation, the project's team or\n" +
-			"your user level, with the labels it should apply to in its frontmatter; one the judge\n" +
-			"dropped stays out. The placement is printed before the confirmation and in the pull\n" +
-			"request. --as-distilled keeps everything at the distilled level and leaves the judge's\n" +
-			"view as advice; --team names the team when the project belongs to several.",
-		Example: "  rein propose ~/.rein/distill/shop-20261019-130000\n  rein propose ~/.rein/distill/shop-20261019-130000 --as-distilled\n  rein propose ./my-rules --level organizations.acme.teams.web\n  rein propose export.zip",
-		Args:    cobra.ExactArgs(1),
+		Use:   "propose [proposal file, folder or zip]",
+		Short: "Open a pull request that adds declarations to the org repository",
+		Long: "propose is the one way declarations enter an org repository. It takes the proposal file rein\n" +
+			"distill wrote, which says for every candidate whether it goes, to which level and with which\n" +
+			"labels, and does exactly that: lints the candidates, leaves out the ones identical to what the\n" +
+			"organisation has, writes the rest on a branch of the organisation's clone at their levels,\n" +
+			"pushes it and opens the pull request with the comparison as its body. The proposal is then\n" +
+			"marked proposed and moved to ~/.rein/proposals/ as the history. Inside a project folder with\n" +
+			"one pending proposal, no argument is needed; with several, it asks which.\n\n" +
+			"A plain level folder with rules/, skills/, mcpservers/, permissions/ and hooks/, or an export\n" +
+			"zip, goes whole to your user level unless --level says otherwise. Your user record is added\n" +
+			"when the org repository has none.",
+		Example: "  rein propose\n  rein propose .rein/proposals/proposal-3f9c2e1a7b4d.yaml\n  rein propose ./my-rules --level organizations.acme.teams.web\n  rein propose export.zip",
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
-			request.Source = arguments[0]
+			if len(arguments) == 1 {
+				request.Source = arguments[0]
+			}
 			return runPropose(environment, request, yes)
 		},
 	}
-	command.Flags().StringVar(&request.Level, "level", "", "the level's address (default: the distillation's, else users.<you>)")
+	command.Flags().StringVar(&request.Level, "level", "", "for a folder or a zip: the level's address (default: users.<you>)")
 	command.Flags().StringVar(&request.Organization, "org", "", "the organisation's slug for a user level (default: the active one)")
 	command.Flags().StringVar(&request.Title, "title", "", "the pull request's title")
-	command.Flags().BoolVar(&request.AsDistilled, "as-distilled", false, "keep every candidate at the distilled level; the judge's placement stays advice")
-	command.Flags().StringVar(&request.Team, "team", "", "the team a lift to the team level goes to, when the project belongs to several")
 	command.Flags().BoolVar(&yes, "yes", false, "do not ask for confirmation")
 	return command
 }
@@ -56,12 +55,18 @@ func runPropose(environment *commandEnvironment, request orchestration.ProposeRe
 	if err != nil {
 		return err
 	}
+	prompter := environment.prompter()
+	if request.Source == "" {
+		request.Source, err = pendingProposalSource(prompter, orchestrator)
+		if err != nil {
+			return err
+		}
+	}
 	request.Source, err = filepath.Abs(request.Source)
 	if err != nil {
 		return err
 	}
 	if !yes {
-		prompter := environment.prompter()
 		if !prompter.CanAsk() {
 			return refusal.New("no terminal to confirm on; pass --yes")
 		}
@@ -71,7 +76,7 @@ func runPropose(environment *commandEnvironment, request orchestration.ProposeRe
 		}
 		fmt.Fprintf(environment.out, "This will write %d declarations from %s on a branch of the org clone of %s, push the branch\nand open a pull request on GitHub:\n", len(plan.Included), request.Source, plan.Organization)
 		printPlacement(environment, plan)
-		confirmed, err := prompter.Confirm("Continue?", "Nothing reaches main: the pull request is reviewed by the code owners, and rein review checks it. If a step fails, the branch is removed again. A lift or a drop follows the judge; --as-distilled keeps every candidate at the distilled level.")
+		confirmed, err := prompter.Confirm("Continue?", "Nothing reaches main: the pull request is reviewed by the code owners, and rein review checks it. If a step fails, the branch is removed again. To change a level, a label or a file, answer n and edit the proposal file.")
 		if err != nil {
 			return refusal.New(err.Error())
 		}
@@ -83,37 +88,78 @@ func runPropose(environment *commandEnvironment, request orchestration.ProposeRe
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(environment.out, "proposed %d declarations to %s on branch %s\n", len(result.Included), result.Level, result.Branch)
+	fmt.Fprintf(environment.out, "proposed %d declarations on branch %s\n", len(result.Included), result.Branch)
 	printPlacement(environment, result.ProposalPlan)
 	fmt.Fprintf(environment.out, "pull request: %s\n", result.PullRequestURL)
+	if result.HistoryFile != "" {
+		fmt.Fprintf(environment.out, "the proposal moved to %s\n", result.HistoryFile)
+	}
 	return nil
 }
 
-// printPlacement lists each candidate with its verdict and level, the ones
-// lifted with the judge's reason, the dropped and the left out.
-func printPlacement(environment *commandEnvironment, plan orchestration.ProposalPlan) {
-	lifted := map[string]orchestration.Placement{}
-	for _, placement := range plan.Lifted {
-		lifted[placement.Kind+"/"+placement.ID] = placement
+// pendingProposalSource picks the pending proposal to propose: the one in
+// the current project folder, or on a terminal one of several.
+func pendingProposalSource(prompter ports.Prompter, orchestrator orchestration.Orchestrator) (string, error) {
+	directory, err := os.Getwd()
+	if err != nil {
+		return "", err
 	}
-	for _, summary := range plan.Included {
-		line := fmt.Sprintf("  %-10s %s/%s  at %s", summary.Verdict, summary.Kind, summary.ID, orchestration.LevelOf(summary))
-		if placement, moved := lifted[summary.Kind+"/"+summary.ID]; moved {
-			line += "  lifted"
-			if len(placement.ApplyIf) > 0 {
-				line += ", applyIf " + strings.Join(placement.ApplyIf, " ")
-			}
-			line += ": " + placement.Reason
+	pending, err := orchestrator.PendingProposals(directory)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case len(pending) == 0:
+		return "", refusal.New("no pending proposal here; rein distill writes one, or name a proposal file, a folder or a zip")
+	case len(pending) == 1:
+		return pending[0].Path, nil
+	case !prompter.CanAsk():
+		var paths []string
+		for _, entry := range pending {
+			paths = append(paths, entry.Path)
 		}
-		if len(summary.Related) > 0 {
-			line += "  same id at " + strings.Join(summary.Related, ", ")
+		return "", refusal.New("several proposals are pending; name one: " + strings.Join(paths, ", "))
+	}
+	var choices []ports.Choice
+	for _, entry := range pending {
+		choices = append(choices, ports.Choice{Name: filepath.Base(entry.Path), Description: fmt.Sprintf("%d candidates for %s, distilled %s", entry.Candidates, entry.Level, entry.DistilledAt.Local().Format("2006-01-02 15:04"))})
+	}
+	picked, err := prompter.Choose(ports.Select{Title: "Proposal", Description: "The pending proposal to open the pull request for.", Choices: choices})
+	if err != nil {
+		return "", refusal.New(err.Error())
+	}
+	for _, entry := range pending {
+		if filepath.Base(entry.Path) == picked {
+			return entry.Path, nil
+		}
+	}
+	return "", refusal.New("no such proposal")
+}
+
+// printPlacement lists each candidate with its verdict, level and labels,
+// the ones the proposal excludes, and the ones left out as identical.
+func printPlacement(environment *commandEnvironment, plan orchestration.ProposalPlan) {
+	for _, planned := range plan.Included {
+		line := fmt.Sprintf("  %-10s %s/%s  at %s", planned.Verdict, planned.Kind, planned.ID, planned.Level)
+		if len(planned.ApplyIf) > 0 {
+			line += ", applyIf " + strings.Join(planned.ApplyIf, " ")
+		}
+		if len(planned.Related) > 0 {
+			line += "  same id at " + strings.Join(planned.Related, ", ")
 		}
 		fmt.Fprintln(environment.out, line)
 	}
-	for _, placement := range plan.Dropped {
-		fmt.Fprintf(environment.out, "  dropped    %s/%s  %s\n", placement.Kind, placement.ID, placement.Reason)
+	for _, planned := range plan.Excluded {
+		fmt.Fprintf(environment.out, "  excluded   %s/%s  %s\n", planned.Kind, planned.ID, orNotJudged(planned.Judge))
 	}
-	for _, summary := range plan.LeftOut {
-		fmt.Fprintf(environment.out, "  left out   %s/%s  identical to %s\n", summary.Kind, summary.ID, strings.Join(summary.Related, ", "))
+	for _, planned := range plan.LeftOut {
+		fmt.Fprintf(environment.out, "  left out   %s/%s  identical to %s\n", planned.Kind, planned.ID, strings.Join(planned.Related, ", "))
 	}
+}
+
+func orNotJudged(text string) string {
+	if text == "" {
+		return "by the proposal"
+	}
+	return text
 }

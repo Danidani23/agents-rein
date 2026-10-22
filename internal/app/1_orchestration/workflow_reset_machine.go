@@ -119,7 +119,7 @@ func (orchestrator Orchestrator) ResetMachine(plan ResetPlan) (ResetResult, erro
 		{plan.OrgClonesFolder, services.Clones.RemoveAllOrgClones},
 		{plan.RemovalsFile, services.Ledger.Delete},
 		{plan.SnapshotsFolder, services.Snapshots.RemoveAll},
-		{plan.DistillFolder, services.Distillations.RemoveAll},
+		{plan.ProposalsFolder, services.ProposalFiles.RemoveAll},
 		{plan.InsertsFolder, services.Ledger.DeleteInserts},
 	}
 	for _, wipe := range wipes {

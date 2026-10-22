@@ -1,6 +1,7 @@
 package claudecode
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -41,36 +42,50 @@ type envelope struct {
 	Subtype string `json:"subtype"`
 }
 
-// Ask runs claude -p with JSON output and returns the result text. It runs
-// in an empty folder without tools, so no project's instructions, hooks or
-// tools colour the verdict, and keeps no session; a brief of many
-// candidates takes a minute or more, so the limit is the network one. Never
-// --bare: it skips the login with the hooks.
-func (Judge) Ask(brief string) (string, error) {
+// Ask runs claude -p with JSON output and returns the result text and the
+// session's id, which claude --resume opens again. It runs in an empty
+// folder without tools, so no project's instructions, hooks or tools
+// colour the verdict; a brief of many candidates takes a minute or more,
+// so the limit is the network one. Never --bare: it skips the login with
+// the hooks.
+func (Judge) Ask(brief string) (string, string, error) {
 	scratch, err := os.MkdirTemp("", "rein-judge-*")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer os.RemoveAll(scratch)
-	result, err := execute.RunWith(execute.Options{Directory: scratch, Input: brief, Timeout: execute.NetworkTimeout}, "claude", "-p", "--output-format", "json", "--max-turns", "1", "--tools", "", "--no-session-persistence")
+	session := newSessionID()
+	result, err := execute.RunWith(execute.Options{Directory: scratch, Input: brief, Timeout: execute.NetworkTimeout}, "claude", "-p", "--output-format", "json", "--max-turns", "1", "--tools", "", "--session-id", session)
 	var output envelope
 	parsed := json.Unmarshal([]byte(result.Stdout), &output) == nil
 	if err != nil {
 		if parsed && strings.TrimSpace(output.Result) != "" {
-			return "", fmt.Errorf("claude reported: %s (%s)", strings.TrimSpace(output.Result), output.Subtype)
+			return "", session, fmt.Errorf("claude reported: %s (%s)", strings.TrimSpace(output.Result), output.Subtype)
 		}
 		if tail := lastLines(result.Stdout, 3); tail != "" {
-			return "", fmt.Errorf("%w; it printed: %s", err, tail)
+			return "", session, fmt.Errorf("%w; it printed: %s", err, tail)
 		}
-		return "", err
+		return "", session, err
 	}
 	if !parsed {
-		return "", fmt.Errorf("claude answered with something other than its JSON envelope: %s", lastLines(result.Stdout, 3))
+		return "", session, fmt.Errorf("claude answered with something other than its JSON envelope: %s", lastLines(result.Stdout, 3))
 	}
 	if output.IsError {
-		return "", fmt.Errorf("claude reported an error: %s", strings.TrimSpace(output.Result))
+		return "", session, fmt.Errorf("claude reported an error: %s", strings.TrimSpace(output.Result))
 	}
-	return output.Result, nil
+	return output.Result, session, nil
+}
+
+// newSessionID is a fresh UUID, version 4, for claude --session-id.
+func newSessionID() string {
+	var bytes [16]byte
+	_, err := rand.Read(bytes[:])
+	if err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
+	bytes[6] = bytes[6]&0x0f | 0x40
+	bytes[8] = bytes[8]&0x3f | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", bytes[0:4], bytes[4:6], bytes[6:8], bytes[8:10], bytes[10:16])
 }
 
 // lastLines is the last few non-empty lines of a text, joined by " | ".

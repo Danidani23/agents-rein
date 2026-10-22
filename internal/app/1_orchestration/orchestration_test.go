@@ -10,8 +10,8 @@ import (
 
 	"github.com/Danidani23/agents-rein/internal/adapters/fake"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
-	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/proposal"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/resolve"
 	"github.com/Danidani23/agents-rein/internal/ports"
@@ -204,7 +204,7 @@ func TestReset(t *testing.T) {
 		if err != nil || len(plan.Placements) != 1 || len(plan.Organizations) != 1 {
 			t.Fatalf("plan %+v err %v", plan, err)
 		}
-		if plan.OrgClonesFolder != filepath.Join(fixture.home, "orgs") || plan.ImportsFolder != filepath.Join(fixture.home, "imports") || plan.RemovalsFile != filepath.Join(fixture.home, "removals.yaml") || plan.SnapshotsFolder != filepath.Join(fixture.home, "snapshots") || plan.DistillFolder != filepath.Join(fixture.home, "distill") {
+		if plan.OrgClonesFolder != filepath.Join(fixture.home, "orgs") || plan.ImportsFolder != filepath.Join(fixture.home, "imports") || plan.RemovalsFile != filepath.Join(fixture.home, "removals.yaml") || plan.SnapshotsFolder != filepath.Join(fixture.home, "snapshots") || plan.ProposalsFolder != filepath.Join(fixture.home, "proposals") {
 			t.Fatalf("plan %+v", plan)
 		}
 	})
@@ -212,7 +212,7 @@ func TestReset(t *testing.T) {
 		fixture := newHarness(t)
 		orgClonePath := filepath.Join(fixture.home, "orgs", "id-1")
 		_ = os.MkdirAll(orgClonePath, 0o755)
-		for _, folder := range []string{"imports", "snapshots", "distill"} {
+		for _, folder := range []string{"imports", "snapshots", "proposals"} {
 			_ = os.MkdirAll(filepath.Join(fixture.home, folder), 0o755)
 		}
 		_ = os.WriteFile(filepath.Join(fixture.home, "removals.yaml"), []byte("version: 1\n"), 0o644)
@@ -230,7 +230,7 @@ func TestReset(t *testing.T) {
 		if len(state.Placements) != 1 || state.Placements[0].Path != "/foreign" || state.Active != "" || len(state.Organizations) != 0 || len(state.ProjectClones) != 0 || len(state.Imports) != 0 {
 			t.Fatalf("state %+v", state)
 		}
-		for _, gone := range []string{orgClonePath, filepath.Join(fixture.home, "imports"), filepath.Join(fixture.home, "snapshots"), filepath.Join(fixture.home, "distill"), filepath.Join(fixture.home, "removals.yaml")} {
+		for _, gone := range []string{orgClonePath, filepath.Join(fixture.home, "imports"), filepath.Join(fixture.home, "snapshots"), filepath.Join(fixture.home, "proposals"), filepath.Join(fixture.home, "removals.yaml")} {
 			_, err = os.Stat(gone)
 			if err == nil {
 				t.Fatalf("%s still there", gone)
@@ -694,9 +694,11 @@ func TestInitializeProject(t *testing.T) {
 
 // claudeCodeSnapshot stores a snapshot of a Claude Code harness for the
 // project address, as init would have taken it.
-func claudeCodeSnapshot(t *testing.T, fixture *harness, project string) string {
+func claudeCodeSnapshot(t *testing.T, fixture *harness, project string, folder string) string {
 	t.Helper()
-	folder := t.TempDir()
+	if folder == "" {
+		folder = t.TempDir()
+	}
 	for relative, content := range map[string]string{"CLAUDE.md": "# Shop\n\nBe brief.\n", ".claude/rules/go.md": "Two-line errors.\n", ".mcp.json": `{"mcpServers":{"docs":{"type":"http","url":"https://docs.example/mcp"}}}`} {
 		path := filepath.Join(folder, filepath.FromSlash(relative))
 		_ = os.MkdirAll(filepath.Dir(path), 0o755)
@@ -710,7 +712,7 @@ func claudeCodeSnapshot(t *testing.T, fixture *harness, project string) string {
 }
 
 func TestDistillHarness(t *testing.T) {
-	t.Run("an initialised project's latest snapshot becomes candidates with verdicts, written for propose", func(t *testing.T) {
+	t.Run("an initialised project's latest snapshot becomes one pending proposal in the clone, with verdicts, and the rein folder is ignored", func(t *testing.T) {
 		fixture, created := withTeam(t)
 		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
 		folder := projectClone(t)
@@ -718,43 +720,60 @@ func TestDistillHarness(t *testing.T) {
 		if err != nil {
 			t.Fatalf("init: %v", err)
 		}
-		snapshotPath := claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop")
+		snapshotPath := claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", folder)
 		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "rules", "go.md")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("Two-line errors.\n"), 0o644)
 		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Directory: folder})
-		if err != nil || result.Level != "organizations.acme.projects.shop" || len(result.Candidates) != 3 || len(result.Report.Snapshots) != 2 || len(result.Report.Skipped) != 1 {
+		if err != nil || result.Level != "organizations.acme.projects.shop" || len(result.Proposal.Candidates) != 3 || len(result.Proposal.Skipped) != 1 || result.Proposal.Snapshot.Path != snapshotPath || len(result.Proposal.ID) != 12 || result.Proposal.Status != proposal.StatusPending {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		verdicts := map[string]string{}
-		for _, summary := range result.Report.Candidates {
-			verdicts[summary.Kind+"/"+summary.ID] = summary.Verdict
-		}
-		if verdicts["rules/go"] != "identical" || verdicts["rules/instructions"] != "new" || verdicts["mcpservers/docs"] != "new" || !strings.Contains(strings.Join(result.Report.Snapshots, ","), snapshotPath) {
-			t.Fatalf("verdicts %v snapshots %v", verdicts, result.Report.Snapshots)
-		}
-		if !strings.HasPrefix(result.Folder, filepath.Join(fixture.home, "distill", "shop-")) {
-			t.Fatalf("folder %q", result.Folder)
-		}
-		for _, relative := range []string{"rules/instructions.md", "rules/go.md", "mcpservers/docs.yaml", "report.yaml"} {
-			_, err = os.Stat(filepath.Join(result.Folder, filepath.FromSlash(relative)))
-			if err != nil {
-				t.Fatalf("%s: %v", relative, err)
+		for _, candidate := range result.Proposal.Candidates {
+			verdicts[candidate.Kind+"/"+candidate.ID] = candidate.Compared.Verdict
+			if !candidate.Include || candidate.Level != "organizations.acme.projects.shop" || candidate.Judge != nil {
+				t.Fatalf("unjudged candidate %+v", candidate)
 			}
 		}
-		report, _ := os.ReadFile(filepath.Join(result.Folder, "report.yaml"))
-		if !strings.Contains(string(report), "level: organizations.acme.projects.shop") || !strings.Contains(string(report), "verdict: identical") {
-			t.Fatalf("report %q", report)
+		if verdicts["rules/go"] != "identical" || verdicts["rules/instructions"] != "new" || verdicts["mcpservers/docs"] != "new" {
+			t.Fatalf("verdicts %v", verdicts)
+		}
+		if result.File != filepath.Join(folder, ".rein", "proposals", "proposal-"+result.Proposal.ID+".yaml") {
+			t.Fatalf("file %q", result.File)
+		}
+		content, _ := os.ReadFile(result.File)
+		if !strings.Contains(string(content), "distilled_from: organizations.acme.projects.shop") || !strings.Contains(string(content), "verdict: identical") || !strings.Contains(string(content), "Be brief.") {
+			t.Fatalf("proposal %q", content)
+		}
+		ignore, _ := os.ReadFile(filepath.Join(folder, ".gitignore"))
+		if !strings.Contains(string(ignore), "\n.rein/\n") {
+			t.Fatalf("gitignore %q", ignore)
+		}
+		_, err = fixture.orchestrator().DistillHarness(DistillRequest{Directory: folder})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "is pending at "+result.File) {
+			t.Fatalf("second distill: %v", err)
+		}
+		again, err := fixture.orchestrator().DistillHarness(DistillRequest{Directory: folder, Force: true})
+		if err != nil || again.File != result.File {
+			t.Fatalf("forced: %+v err %v", again, err)
+		}
+		pending, err := fixture.orchestrator().PendingProposals(folder)
+		if err != nil || len(pending) != 1 || pending[0].Path != result.File || pending[0].Candidates != 3 {
+			t.Fatalf("pending %+v err %v", pending, err)
+		}
+		report, err := fixture.orchestrator().Status()
+		if err != nil || len(report.Pending) != 1 || report.Pending[0].Path != result.File || report.Pending[0].Level != "organizations.acme.projects.shop" {
+			t.Fatalf("status pending %+v err %v", report.Pending, err)
 		}
 	})
-	t.Run("the home becomes the user's level, a named snapshot its own, and the refusals", func(t *testing.T) {
+	t.Run("the home becomes the user's level under the home's pending folder, a named snapshot its own, and the refusals", func(t *testing.T) {
 		fixture, _ := withTeam(t)
-		snapshotPath := claudeCodeSnapshot(t, fixture, "")
+		snapshotPath := claudeCodeSnapshot(t, fixture, "", "")
 		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Home: true})
-		if err != nil || result.Level != "users.danidani23" || len(result.Candidates) != 3 {
+		if err != nil || result.Level != "users.danidani23" || len(result.Proposal.Candidates) != 3 || filepath.Dir(result.File) != filepath.Join(fixture.home, "proposals", "pending") {
 			t.Fatalf("result %+v err %v", result, err)
 		}
-		result, err = fixture.orchestrator().DistillHarness(DistillRequest{SnapshotPath: snapshotPath})
+		result, err = fixture.orchestrator().DistillHarness(DistillRequest{SnapshotPath: snapshotPath, Force: true})
 		if err != nil || result.Level != "users.danidani23" {
 			t.Fatalf("result %+v err %v", result, err)
 		}
@@ -771,10 +790,10 @@ func TestDistillHarness(t *testing.T) {
 }
 
 func TestProposeDeclarations(t *testing.T) {
-	t.Run("a distillation goes to its level on a branch, as a pull request, and the clone ends on main", func(t *testing.T) {
+	t.Run("a proposal file goes where it says, as a pull request, is marked proposed and moved to the history, and the clone ends on main", func(t *testing.T) {
 		fixture, created := withTeam(t)
 		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
-		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop")
+		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", "")
 		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "rules", "go.md")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("Two-line errors.\n"), 0o644)
@@ -782,15 +801,15 @@ func TestProposeDeclarations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("distill: %v", err)
 		}
-		result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.Folder})
-		if err != nil || result.Level != "organizations.acme.projects.shop" || len(result.Included) != 2 || len(result.LeftOut) != 1 || !strings.HasPrefix(result.Branch, "rein/propose-shop-") || result.PullRequestURL != "https://github.com/Danidani23/acme-agent-settings/pull/1" {
+		result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.File})
+		if err != nil || result.Organization != "acme" || len(result.Included) != 2 || len(result.LeftOut) != 1 || !strings.HasPrefix(result.Branch, "rein/propose-shop-") || result.PullRequestURL != "https://github.com/Danidani23/acme-agent-settings/pull/1" {
 			t.Fatalf("result %+v err %v", result, err)
 		}
-		if result.LeftOut[0].ID != "go" || result.LeftOut[0].Related[0] != "organizations.acme.rules.go" {
-			t.Fatalf("left out %+v", result.LeftOut)
+		if result.LeftOut[0].ID != "go" || result.LeftOut[0].Related[0] != "organizations.acme.rules.go" || result.Included[0].Level != "organizations.acme.projects.shop" {
+			t.Fatalf("left out %+v included %+v", result.LeftOut, result.Included)
 		}
 		pullRequest := fixture.host.PullRequests[0]
-		if pullRequest.Branch != result.Branch || !strings.Contains(pullRequest.Title, "Propose 2 declarations to organizations.acme.projects.shop") || !strings.Contains(pullRequest.Body, "| rules | instructions | organizations.acme.projects.shop | new |") || !strings.Contains(pullRequest.Body, "Left out, identical") {
+		if pullRequest.Branch != result.Branch || !strings.Contains(pullRequest.Title, "Propose 2 declarations to organizations.acme.projects.shop") || !strings.Contains(pullRequest.Body, "| rules | instructions | organizations.acme.projects.shop |  | new |") || !strings.Contains(pullRequest.Body, "Left out, identical") {
 			t.Fatalf("pull request %+v", pullRequest)
 		}
 		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
@@ -807,11 +826,23 @@ func TestProposeDeclarations(t *testing.T) {
 		if fixture.repository.Current != "main" || strings.Join(fixture.repository.Deleted, ",") != result.Branch {
 			t.Fatalf("clone on %q deleted %v", fixture.repository.Current, fixture.repository.Deleted)
 		}
+		_, err = os.Stat(distilled.File)
+		if err == nil || !strings.HasPrefix(result.HistoryFile, filepath.Join(fixture.home, "proposals", "acme")) {
+			t.Fatalf("pending file still there, or history %q", result.HistoryFile)
+		}
+		history, err := fixture.orchestrator().ProposalFiles.History("acme")
+		if err != nil || len(history) != 1 || history[0].Proposal.Status != proposal.StatusProposed || history[0].Proposal.PullRequest != result.PullRequestURL || history[0].Proposal.Branch != result.Branch || history[0].Proposal.ProposedAt.IsZero() {
+			t.Fatalf("history %+v err %v", history, err)
+		}
+		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: result.HistoryFile})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "was proposed on") {
+			t.Fatalf("proposing the history: %v", err)
+		}
 	})
-	t.Run("the judge's lifts and drops are applied: each candidate at its level with its labels, unless asked for as distilled", func(t *testing.T) {
+	t.Run("the judge's lifts and drops are written into the proposal, and the file is what propose follows after an edit", func(t *testing.T) {
 		fixture, created := withTeam(t)
 		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
-		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop")
+		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", "")
 		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "mcpservers", "docs.yaml")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("description: the docs server\ntransport: http\nurl: https://docs.example/other\n"), 0o644)
@@ -823,64 +854,76 @@ func TestProposeDeclarations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("distill: %v", err)
 		}
-		if !strings.Contains(fixture.judge.Briefs[0], "applyIf labels come from the organisation's registry and nowhere else: data:internal") || !strings.Contains(fixture.judge.Briefs[0], "language:go") {
-			t.Fatalf("brief without the registry: %q", fixture.judge.Briefs[0])
+		if !strings.HasPrefix(fixture.judge.Briefs[0], "rein distill, the judge's brief for organizations.acme.projects.shop, ") || !strings.Contains(fixture.judge.Briefs[0], "applyIf labels come from the organisation's registry and nowhere else: data:internal") {
+			t.Fatalf("brief: %q", fixture.judge.Briefs[0][:120])
 		}
-		plan, err := fixture.orchestrator().PlanProposal(ProposeRequest{Source: distilled.Folder})
-		if err != nil || len(plan.Included) != 2 || len(plan.Lifted) != 2 || len(plan.Dropped) != 1 || len(plan.LeftOut) != 0 || len(fixture.repository.Branches) != 0 {
+		byKey := map[string]proposal.Candidate{}
+		for _, candidate := range distilled.Proposal.Candidates {
+			byKey[candidate.Kind+"/"+candidate.ID] = candidate
+		}
+		instructions, goRule, docs := byKey["rules/instructions"], byKey["rules/go"], byKey["mcpservers/docs"]
+		if !instructions.Include || instructions.Level != "organizations.acme" || strings.Join(instructions.ApplyIf, ",") != "language:go" || instructions.Judge.Level != "organizations.acme" || instructions.Judge.Suggestion != "lift" {
+			t.Fatalf("instructions %+v", instructions)
+		}
+		if !goRule.Include || goRule.Level != "organizations.acme.teams.web" || docs.Include || docs.Judge.Suggestion != "drop" || distilled.Proposal.Judge.Session != "fake-session" {
+			t.Fatalf("go %+v docs %+v judge %+v", goRule, docs, distilled.Proposal.Judge)
+		}
+		plan, err := fixture.orchestrator().PlanProposal(ProposeRequest{Source: distilled.File})
+		if err != nil || len(plan.Included) != 2 || len(plan.Excluded) != 1 || len(plan.LeftOut) != 0 || len(fixture.repository.Branches) != 0 {
 			t.Fatalf("plan %+v err %v branches %v", plan, err, fixture.repository.Branches)
 		}
-		if plan.Included[0].Address != "organizations.acme.rules.instructions" || plan.Included[1].Address != "organizations.acme.teams.web.rules.go" || LevelOf(plan.Included[0]) != "organizations.acme" {
-			t.Fatalf("placed %+v", plan.Included)
+		if plan.Included[0].Level != "organizations.acme" || plan.Included[0].ID != "instructions" || plan.Included[1].Level != "organizations.acme.teams.web" || plan.Excluded[0].ID != "docs" || !strings.Contains(plan.Excluded[0].Judge, "drop: already declared") {
+			t.Fatalf("placed %+v excluded %+v", plan.Included, plan.Excluded)
 		}
-		if plan.Lifted[1].To != "organizations.acme" || strings.Join(plan.Lifted[1].ApplyIf, ",") != "language:go" || plan.Lifted[0].To != "organizations.acme.teams.web" || plan.Dropped[0].ID != "docs" || !strings.Contains(plan.Dropped[0].Reason, "covered by organizations.acme.mcpservers.docs: already declared") {
-			t.Fatalf("lifted %+v dropped %+v", plan.Lifted, plan.Dropped)
+		// the person edits the file: the team rule moves to the project, the docs server is included after all
+		edited, _ := proposal.Read(distilled.File)
+		for index := range edited.Candidates {
+			switch edited.Candidates[index].ID {
+			case "go":
+				edited.Candidates[index].Level = "organizations.acme.projects.shop"
+			case "docs":
+				edited.Candidates[index].Include = true
+			}
 		}
-		result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.Folder})
-		if err != nil || len(result.Included) != 2 || !strings.Contains(fixture.host.PullRequests[0].Title, "Propose 2 declarations to organizations.acme.projects.shop, 2 lifted") {
+		_ = edited.Write(distilled.File)
+		result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.File})
+		if err != nil || len(result.Included) != 3 || !strings.Contains(fixture.host.PullRequests[0].Title, "Propose 3 declarations to 2 levels of acme") {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
-		instructions, err := os.ReadFile(filepath.Join(published, "declarations", "organizations", "acme", "rules", "instructions.md"))
-		if err != nil || !strings.HasPrefix(string(instructions), "---\napplyIf:\n    - language:go\n---\n") || !strings.Contains(string(instructions), "Be brief.") {
-			t.Fatalf("instructions %q err %v", instructions, err)
+		instructionsFile, err := os.ReadFile(filepath.Join(published, "declarations", "organizations", "acme", "rules", "instructions.md"))
+		if err != nil || !strings.HasPrefix(string(instructionsFile), "---\napplyIf:\n    - language:go\n---\n") || !strings.Contains(string(instructionsFile), "Be brief.") {
+			t.Fatalf("instructions %q err %v", instructionsFile, err)
 		}
-		_, err = os.Stat(filepath.Join(published, "declarations", "organizations", "acme", "teams", "web", "rules", "go.md"))
-		if err != nil {
-			t.Fatalf("the team rule is not on the branch: %v", err)
-		}
-		for _, absent := range []string{"organizations/acme/projects/shop/rules/instructions.md", "organizations/acme/projects/shop/mcpservers/docs.yaml"} {
-			_, err = os.Stat(filepath.Join(published, "declarations", filepath.FromSlash(absent)))
-			if err == nil {
-				t.Fatalf("%s was written although lifted or dropped", absent)
+		for _, present := range []string{"organizations/acme/projects/shop/rules/go.md", "organizations/acme/projects/shop/mcpservers/docs.yaml"} {
+			_, err = os.Stat(filepath.Join(published, "declarations", filepath.FromSlash(present)))
+			if err != nil {
+				t.Fatalf("%s is not on the branch: %v", present, err)
 			}
 		}
+		_, err = os.Stat(filepath.Join(published, "declarations", "organizations", "acme", "teams", "web", "rules", "go.md"))
+		if err == nil {
+			t.Fatalf("the edited level was ignored")
+		}
 		body := fixture.host.PullRequests[0].Body
-		if !strings.Contains(body, "| rules | instructions | organizations.acme (lifted from organizations.acme.projects.shop, applyIf language:go) | new |") || !strings.Contains(body, "Dropped on the judge's advice") || !strings.Contains(body, "- mcpservers/docs: covered by") {
+		if !strings.Contains(body, "| rules | instructions | organizations.acme | language:go | new | lift: general |") || !strings.Contains(body, "Judge: fake-judge, answered, session fake-session") {
 			t.Fatalf("body %q", body)
 		}
-		asDistilled, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.Folder, AsDistilled: true})
-		if err != nil || len(asDistilled.Included) != 3 || len(asDistilled.Lifted) != 0 || len(asDistilled.Dropped) != 0 || asDistilled.Included[0].Address != "organizations.acme.projects.shop.mcpservers.docs" || !strings.Contains(fixture.host.PullRequests[1].Body, "Placed as distilled") {
-			t.Fatalf("as distilled %+v err %v", asDistilled, err)
-		}
 	})
-	t.Run("a lift to the team level needs one team, or --team", func(t *testing.T) {
+	t.Run("a lift to the team level with several teams stays at the project with a note", func(t *testing.T) {
 		fixture, _ := withTeam(t)
 		_, _ = fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "Ops"})
 		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web", "ops"}})
-		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop")
+		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", "")
 		fixture.judge = &fake.Judge{Answers: []string{`{"version":1,"candidates":[{"candidate":"rules/go","verdict":"new","suggestion":"lift","level":"team","reason":"style"},{"candidate":"rules/instructions","verdict":"new","suggestion":"keep","reason":"fine"},{"candidate":"mcpservers/docs","verdict":"new","suggestion":"keep","reason":"fine"}]}`}}
 		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
 		if err != nil {
 			t.Fatalf("distill: %v", err)
 		}
-		_, err = fixture.orchestrator().PlanProposal(ProposeRequest{Source: distilled.Folder})
-		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "belongs to the teams web, ops; pass --team") {
-			t.Fatalf("err %v", err)
-		}
-		plan, err := fixture.orchestrator().PlanProposal(ProposeRequest{Source: distilled.Folder, Team: "ops"})
-		if err != nil || len(plan.Lifted) != 1 || plan.Lifted[0].To != "organizations.acme.teams.ops" {
-			t.Fatalf("plan %+v err %v", plan, err)
+		for _, candidate := range distilled.Proposal.Candidates {
+			if candidate.ID == "go" && (candidate.Level != "organizations.acme.projects.shop" || len(candidate.Notes) != 1 || !strings.Contains(candidate.Notes[0], "belongs to the teams web, ops; set level to one of them")) {
+				t.Fatalf("go %+v", candidate)
+			}
 		}
 	})
 	t.Run("a plain folder goes to the user's level with the user record, and a zip is read too", func(t *testing.T) {
@@ -889,7 +932,7 @@ func TestProposeDeclarations(t *testing.T) {
 		_ = os.MkdirAll(filepath.Join(folder, "rules"), 0o755)
 		_ = os.WriteFile(filepath.Join(folder, "rules", "brief.md"), []byte("Be brief.\n"), 0o644)
 		result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: folder, Title: "My rules"})
-		if err != nil || result.Level != "users.danidani23" || len(result.Included) != 1 || fixture.host.PullRequests[0].Title != "My rules" {
+		if err != nil || len(result.Included) != 1 || result.Included[0].Level != "users.danidani23" || result.HistoryFile != "" || fixture.host.PullRequests[0].Title != "My rules" {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
@@ -898,7 +941,7 @@ func TestProposeDeclarations(t *testing.T) {
 			t.Fatalf("user record %q err %v", record, err)
 		}
 	})
-	t.Run("refusals: no declarations, a bad level, a level of another organisation, the lint, nothing new, no GitHub remote", func(t *testing.T) {
+	t.Run("refusals: no declarations, a bad level, a level of another organisation, a bad proposal, the lint, nothing new, no GitHub remote", func(t *testing.T) {
 		fixture, created := withTeam(t)
 		empty := t.TempDir()
 		_, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: empty})
@@ -917,6 +960,17 @@ func TestProposeDeclarations(t *testing.T) {
 				t.Fatalf("%s: err %v", expected, err)
 			}
 		}
+		broken := proposal.Proposal{Version: proposal.Version, Status: proposal.StatusPending, Organization: "acme", DistilledFrom: "organizations.acme", Candidates: []proposal.Candidate{{Kind: "rules", ID: "x", Include: true, Level: "nowhere", ApplyIf: []string{"stack:aws"}, Files: map[string]string{"x.md": "x"}}}}
+		brokenPath := filepath.Join(t.TempDir(), "proposal-abc.yaml")
+		_ = broken.Write(brokenPath)
+		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: brokenPath})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "cannot go as it is") || !strings.Contains(err.Error(), `level "nowhere" is not one`) || !strings.Contains(err.Error(), `label "stack:aws" names no category`) {
+			t.Fatalf("broken: %v", err)
+		}
+		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: brokenPath, Level: "organizations.acme"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "instead of --level") {
+			t.Fatalf("level with a file: %v", err)
+		}
 		bad := t.TempDir()
 		_ = os.MkdirAll(filepath.Join(bad, "mcpservers"), 0o755)
 		_ = os.WriteFile(filepath.Join(bad, "mcpservers", "x.yaml"), []byte("transport: carrier-pigeon\n"), 0o644)
@@ -928,7 +982,7 @@ func TestProposeDeclarations(t *testing.T) {
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("Be brief.\n"), 0o644)
 		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: folder, Level: "organizations.acme.teams.web"})
-		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "nothing new") || len(fixture.repository.Branches) != 0 {
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "nothing to propose") || len(fixture.repository.Branches) != 0 {
 			t.Fatalf("err %v branches %v", err, fixture.repository.Branches)
 		}
 		local := newHarness(t)
@@ -939,18 +993,25 @@ func TestProposeDeclarations(t *testing.T) {
 			t.Fatalf("err %v", err)
 		}
 	})
-	t.Run("a failed pull request abandons the branch locally and on the remote", func(t *testing.T) {
+	t.Run("a failed pull request abandons the branch locally and on the remote, and the proposal stays pending", func(t *testing.T) {
 		fixture, created := withTeam(t)
-		folder := t.TempDir()
-		_ = os.MkdirAll(filepath.Join(folder, "rules"), 0o755)
-		_ = os.WriteFile(filepath.Join(folder, "rules", "brief.md"), []byte("Be brief.\n"), 0o644)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", "")
+		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		if err != nil {
+			t.Fatalf("distill: %v", err)
+		}
 		fixture.host.FailPullRequest = true
-		_, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: folder, Level: "organizations.acme"})
+		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.File})
 		if err == nil || errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "already exists") {
 			t.Fatalf("err %v", err)
 		}
 		if len(fixture.repository.RemoteDeleted) != 1 || len(fixture.repository.Deleted) != 1 || fixture.repository.Current != "main" || len(fixture.repository.Published) != 1 {
 			t.Fatalf("repository %+v remote %s", fixture.repository, created.Remote)
+		}
+		still, err := proposal.Read(distilled.File)
+		if err != nil || still.Status != proposal.StatusPending {
+			t.Fatalf("pending file: %+v err %v", still, err)
 		}
 	})
 }
@@ -964,53 +1025,53 @@ func TestDistillWithTheJudge(t *testing.T) {
 		t.Helper()
 		fixture, created := withTeam(t)
 		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
-		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop")
+		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", "")
 		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "rules", "go.md")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("Two-line errors.\n"), 0o644)
 		return fixture, created
 	}
-	t.Run("the judge's answer lands in the candidates, the report and the pull request", func(t *testing.T) {
+	t.Run("the judge's answer lands in the proposal and the pull request", func(t *testing.T) {
 		fixture, _ := prepare(t)
 		fixture.judge = &fake.Judge{Answers: []string{answer}}
 		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
-		if err != nil || result.Report.Judge == nil || result.Report.Judge.Status != "answered" || result.Report.Judge.Backend != "fake-judge" {
-			t.Fatalf("result %+v err %v", result.Report.Judge, err)
+		if err != nil || result.Proposal.Judge.Status != "answered" || result.Proposal.Judge.Backend != "fake-judge" {
+			t.Fatalf("result %+v err %v", result.Proposal.Judge, err)
 		}
 		if !strings.Contains(fixture.judge.Briefs[0], "## organizations.acme.rules.go (applies)") || !strings.Contains(fixture.judge.Briefs[0], "## rules/instructions") {
 			t.Fatalf("brief %q", fixture.judge.Briefs[0])
 		}
-		judged := map[string]*distill.Judgement{}
-		for _, summary := range result.Report.Candidates {
-			judged[summary.Kind+"/"+summary.ID] = summary.Judgement
+		judged := map[string]proposal.Candidate{}
+		for _, candidate := range result.Proposal.Candidates {
+			judged[candidate.Kind+"/"+candidate.ID] = candidate
 		}
-		if judged["rules/go"] == nil || judged["rules/go"].Verdict != "duplicate" || judged["mcpservers/docs"].Level != "organization" {
+		if judged["rules/go"].Judge == nil || judged["rules/go"].Judge.Verdict != "duplicate" || judged["rules/go"].Include || judged["mcpservers/docs"].Level != "organizations.acme" || len(judged["rules/go"].Judge.Quotes) != 1 {
 			t.Fatalf("judged %+v", judged)
 		}
-		report, _ := os.ReadFile(filepath.Join(result.Folder, "report.yaml"))
-		if !strings.Contains(string(report), "judgement:") || !strings.Contains(string(report), "status: answered") {
-			t.Fatalf("report %q", report)
+		content, _ := os.ReadFile(result.File)
+		if !strings.Contains(string(content), "status: answered") || !strings.Contains(string(content), "session: fake-session") {
+			t.Fatalf("proposal %q", content)
 		}
-		proposed, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: result.Folder})
-		if err != nil || !strings.Contains(fixture.host.PullRequests[0].Body, "| the judge |") || !strings.Contains(fixture.host.PullRequests[0].Body, "lift to the organization level: everyone reads the docs") || !strings.Contains(fixture.host.PullRequests[0].Body, "Judge: fake-judge, answered") {
+		proposed, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: result.File})
+		if err != nil || !strings.Contains(fixture.host.PullRequests[0].Body, "| the judge |") || !strings.Contains(fixture.host.PullRequests[0].Body, "| mcpservers | docs | organizations.acme |  | new | lift: everyone reads the docs |") || !strings.Contains(fixture.host.PullRequests[0].Body, "Judge: fake-judge, answered") || !strings.Contains(fixture.host.PullRequests[0].Body, "- rules/go: drop: the organisation says it") {
 			t.Fatalf("proposed %+v err %v body %q", proposed, err, fixture.host.PullRequests[0].Body)
 		}
 	})
-	t.Run("an unavailable judge is reported and skipped, none skips it silently, a dry run writes nothing", func(t *testing.T) {
+	t.Run("an unavailable judge is reported and skipped, none skips it, a dry run writes nothing", func(t *testing.T) {
 		fixture, _ := prepare(t)
 		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
-		if err != nil || result.Report.Judge == nil || result.Report.Judge.Status != "skipped" || !strings.Contains(result.Report.Judge.Problems[0], "no judge in this test") {
-			t.Fatalf("result %+v err %v", result.Report.Judge, err)
+		if err != nil || result.Proposal.Judge.Status != "skipped" || !strings.Contains(result.Proposal.Judge.Problems[0], "no judge in this test") {
+			t.Fatalf("result %+v err %v", result.Proposal.Judge, err)
 		}
-		result, err = fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop", Judge: "none"})
-		if err != nil || result.Report.Judge != nil || result.Brief != "" {
-			t.Fatalf("result %+v err %v", result.Report, err)
+		result, err = fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop", Judge: "none", Force: true})
+		if err != nil || result.Proposal.Judge.Status != "skipped" || result.Proposal.Judge.Problems[0] != "not asked" || result.Brief != "" {
+			t.Fatalf("result %+v err %v", result.Proposal.Judge, err)
 		}
-		before, _ := os.ReadDir(filepath.Join(fixture.home, "distill"))
+		before, _ := os.ReadDir(filepath.Join(fixture.home, "proposals", "pending"))
 		result, err = fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop", DryRun: true})
-		after, _ := os.ReadDir(filepath.Join(fixture.home, "distill"))
-		if err != nil || result.Folder != "" || !strings.Contains(result.Brief, "# Candidates") || len(after) != len(before) {
-			t.Fatalf("result folder %q brief %d err %v", result.Folder, len(result.Brief), err)
+		after, _ := os.ReadDir(filepath.Join(fixture.home, "proposals", "pending"))
+		if err != nil || result.File != "" || !strings.Contains(result.Brief, "# Candidates") || len(after) != len(before) || len(result.Proposal.Candidates) != 3 {
+			t.Fatalf("result file %q brief %d err %v", result.File, len(result.Brief), err)
 		}
 	})
 }

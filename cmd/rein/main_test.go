@@ -304,8 +304,12 @@ func TestWiring(t *testing.T) {
 			t.Fatalf("the binding was not pushed")
 		}
 		code, out, errOut = run("distill", "--path", project)
-		if code != cli.ExitWorked || !strings.Contains(out, "distilled 2 candidates for organizations.acme.projects.shop") || !strings.Contains(out, "rules/go") || !strings.Contains(out, "written to "+filepath.Join(reinHome, "distill")) || !strings.Contains(out, "judge: agent-cli:claude answered") {
+		if code != cli.ExitWorked || !strings.Contains(out, "distilled 2 candidates for organizations.acme.projects.shop") || !strings.Contains(out, "rules/go") || !strings.Contains(out, "written to "+filepath.Join(project, ".rein", "proposals", "proposal-")) || !strings.Contains(out, "judge: agent-cli:claude answered, conversation ") {
 			t.Fatalf("distill: code %d out %q err %q", code, out, errOut)
+		}
+		ignore, _ = os.ReadFile(filepath.Join(project, ".gitignore"))
+		if !strings.Contains(string(ignore), ".rein/") {
+			t.Fatalf("the rein folder is not ignored: %q", ignore)
 		}
 		distilled := ""
 		for _, line := range strings.Split(out, "\n") {
@@ -314,8 +318,12 @@ func TestWiring(t *testing.T) {
 			}
 		}
 		code, out, errOut = run("propose", distilled, "--yes")
-		if code != cli.ExitWorked || !strings.Contains(out, "proposed 2 declarations to organizations.acme.projects.shop on branch rein/propose-shop-") || !strings.Contains(out, "pull request: https://github.com/Danidani23/acme-agent-settings/pull/1") {
+		if code != cli.ExitWorked || !strings.Contains(out, "proposed 2 declarations on branch rein/propose-shop-") || !strings.Contains(out, "pull request: https://github.com/Danidani23/acme-agent-settings/pull/1") || !strings.Contains(out, "the proposal moved to "+filepath.Join(reinHome, "proposals", "acme")) {
 			t.Fatalf("propose: code %d out %q err %q", code, out, errOut)
+		}
+		_, err = os.Stat(distilled)
+		if err == nil {
+			t.Fatalf("the pending proposal stayed after propose")
 		}
 		branches := exec.Command("git", "--git-dir", remote, "branch", "--list", "rein/propose-*")
 		listed, err := branches.Output()
@@ -358,7 +366,7 @@ func TestWiring(t *testing.T) {
 		if code != cli.ExitWorked || !strings.Contains(out, "removals.yaml") {
 			t.Fatalf("reset: code %d out %q err %q", code, out, errOut)
 		}
-		for _, gone := range []string{"orgs", "snapshots", "distill", "removals.yaml", "inserts"} {
+		for _, gone := range []string{"orgs", "snapshots", "proposals", "removals.yaml", "inserts"} {
 			_, err = os.Stat(filepath.Join(reinHome, gone))
 			if err == nil {
 				t.Fatalf("%s still there after reset", gone)

@@ -598,14 +598,14 @@ func (judge *Judge) Available() (string, bool) {
 }
 
 // Ask records the brief and returns the next scripted answer.
-func (judge *Judge) Ask(brief string) (string, error) {
+func (judge *Judge) Ask(brief string) (string, string, error) {
 	judge.Briefs = append(judge.Briefs, brief)
 	if len(judge.Answers) == 0 {
-		return "", errors.New("fake judge has no answer left")
+		return "", "", errors.New("fake judge has no answer left")
 	}
 	answer := judge.Answers[0]
 	judge.Answers = judge.Answers[1:]
-	return answer, nil
+	return answer, "fake-session", nil
 }
 
 // Lock is a machine lock that is free, or held by someone else when Holder

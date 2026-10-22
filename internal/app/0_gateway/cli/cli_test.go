@@ -606,10 +606,23 @@ func TestDistill(t *testing.T) {
 		t.Fatalf("snapshot: %v", err)
 	}
 	code, out, errOut := fixture.run("distill", "--project", "shop")
-	for _, expected := range []string{"distilled 1 candidates for organizations.acme.projects.shop", "new        rules/instructions", "1 new, 0 identical", "written to " + filepath.Join(fixture.home, "distill", "shop-"), "next: rein propose"} {
+	for _, expected := range []string{"  ✓ reading the snapshot (", "  ✓ writing the proposal (", "distilled 1 candidates for organizations.acme.projects.shop", "new        rules/instructions", "1 new, 0 identical", "written to " + filepath.Join(home, ".rein", "proposals", "proposal-"), "next: review and edit it, then rein propose"} {
 		if code != ExitWorked || !strings.Contains(out, expected) {
 			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 		}
+	}
+	code, _, errOut = fixture.run("distill", "--project", "shop")
+	if code != ExitRefused || !strings.Contains(errOut, "is pending at") || !strings.Contains(errOut, "--force") {
+		t.Fatalf("pending twice: code %d err %q", code, errOut)
+	}
+	code, _, errOut = fixture.run("distill", "--project", "shop", "--force")
+	if code != ExitWorked {
+		t.Fatalf("forced: code %d err %q", code, errOut)
+	}
+	code, out, _ = fixture.run("status")
+	if code != ExitWorked || strings.Contains(out, "proposals pending") {
+		// the snapshot's folder is no registered clone, so status does not look there
+		t.Fatalf("status: code %d out %q", code, out)
 	}
 	code, _, errOut = fixture.run("distill", "--path", t.TempDir())
 	if code != ExitRefused || !strings.Contains(errOut, "--project") {
@@ -628,19 +641,52 @@ func TestPropose(t *testing.T) {
 		t.Fatalf("code %d err %q", code, errOut)
 	}
 	code, out, errOut := fixture.run("propose", folder, "--level", "organizations.acme", "--yes")
-	for _, expected := range []string{"proposed 1 declarations to organizations.acme on branch rein/propose-acme-", "new        rules/brief", "pull request: https://github.com/Danidani23/acme-agent-settings/pull/1"} {
+	for _, expected := range []string{"proposed 1 declarations on branch rein/propose-acme-", "new        rules/brief  at organizations.acme", "pull request: https://github.com/Danidani23/acme-agent-settings/pull/1"} {
 		if code != ExitWorked || !strings.Contains(out, expected) {
 			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 		}
+	}
+	if strings.Contains(out, "the proposal moved to") {
+		t.Fatalf("a folder has no history file: %q", out)
 	}
 	code, out, errOut = fixture.runInteractive("\n", "propose", folder, "--level", "organizations.acme.teams.nowhere")
 	if code != ExitWorked || !strings.Contains(out, "This will write 1 declarations from "+folder+" on a branch of the org clone of acme") || !strings.Contains(out, "  new        rules/brief  at organizations.acme.teams.nowhere\n") || !strings.Contains(out, "Continue?") {
 		// the level's team need not exist for the proposal; the review decides
 		t.Fatalf("code %d out %q err %q", code, out, errOut)
 	}
-	code, _, errOut = fixture.run("propose", folder, "--level", "organizations.acme", "--as-distilled", "--team", "web", "--yes")
-	if code != ExitWorked {
-		t.Fatalf("flags: code %d err %q", code, errOut)
+	code, _, errOut = fixture.run("propose", "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "no pending proposal here") {
+		t.Fatalf("no pending: code %d err %q", code, errOut)
+	}
+}
+
+func TestProposePendingFile(t *testing.T) {
+	fixture := newHarness(t)
+	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
+	home := t.TempDir()
+	_ = os.WriteFile(filepath.Join(home, "CLAUDE.md"), []byte("be brief"), 0o644)
+	orchestrator, _ := fixture.orchestrate()
+	_, _, _ = orchestrator.Snapshots.Take("claude-code", "organizations.acme.projects.shop", home, []string{"CLAUDE.md"})
+	fixture.judge = &fake.Judge{Answers: []string{`{"version":1,"candidates":[{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"user","reason":"personal"}]}`}}
+	code, out, errOut := fixture.run("distill", "--project", "shop")
+	if code != ExitWorked || !strings.Contains(out, "judge: new; lift to users.danidani23: personal") {
+		t.Fatalf("distill: code %d out %q err %q", code, out, errOut)
+	}
+	file := ""
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "written to ") {
+			file = strings.TrimPrefix(line, "written to ")
+		}
+	}
+	code, out, errOut = fixture.runInteractive("\n", "propose", file)
+	if code != ExitWorked || !strings.Contains(out, "  new        rules/instructions  at users.danidani23\n") || !strings.Contains(out, "proposed 1 declarations on branch rein/propose-shop-") || !strings.Contains(out, "the proposal moved to "+filepath.Join(fixture.home, "proposals", "acme")) {
+		t.Fatalf("propose: code %d out %q err %q", code, out, errOut)
+	}
+	code, _, errOut = fixture.run("propose", file, "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "cannot read") {
+		t.Fatalf("gone: code %d err %q", code, errOut)
 	}
 }
 
@@ -658,12 +704,12 @@ func TestDistillJudgeFlags(t *testing.T) {
 		t.Fatalf("code %d out %q", code, out)
 	}
 	fixture.judge = &fake.Judge{Answers: []string{`{"version":1,"candidates":[{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"organization","reason":"general"}]}`}}
-	code, out, _ = fixture.run("distill", "--project", "shop")
-	if code != ExitWorked || !strings.Contains(out, "judge: new; lift to the organization level: general") || !strings.Contains(out, "judge: fake-judge answered") {
+	code, out, _ = fixture.run("distill", "--project", "shop", "--force")
+	if code != ExitWorked || !strings.Contains(out, "judge: new; lift to organizations.acme: general") || !strings.Contains(out, "judge: fake-judge answered, conversation fake-session") {
 		t.Fatalf("code %d out %q", code, out)
 	}
-	code, out, _ = fixture.run("distill", "--project", "shop", "--judge", "none")
-	if code != ExitWorked || strings.Contains(out, "judge:") {
+	code, out, _ = fixture.run("distill", "--project", "shop", "--judge", "none", "--force")
+	if code != ExitWorked || !strings.Contains(out, "judge: fake-judge skipped: not asked") || strings.Contains(out, "asking the judge") {
 		t.Fatalf("code %d out %q", code, out)
 	}
 	code, out, errOut := fixture.run("distill", "--project", "shop", "--dry-run")
@@ -909,5 +955,25 @@ func TestProjectEditAndLabelRegistry(t *testing.T) {
 	code, _, errOut = fixture.run("label", "set", "nope", "--required", "--yes")
 	if code != ExitRefused || !strings.Contains(errOut, `category "nope" is not in the registry; categories are data, kind, language, stack`) {
 		t.Fatalf("unknown category: code %d err %q", code, errOut)
+	}
+}
+
+func TestSpinner(t *testing.T) {
+	var out bytes.Buffer
+	environment := &commandEnvironment{out: &out, errOut: &out, terminal: true}
+	environment.printProgress(orchestration.ProgressEvent{Kind: orchestration.ProgressStarted, Step: "asking the judge"})
+	time.Sleep(3 * spinnerInterval)
+	environment.printProgress(orchestration.ProgressEvent{Kind: orchestration.ProgressDone, Step: "asking the judge", Elapsed: 400 * time.Millisecond})
+	text := out.String()
+	if !strings.Contains(text, "\r\x1b[2K  \x1b[2m⠋\x1b[0m \x1b[2masking the judge …\x1b[0m \x1b[2m0s\x1b[0m") || !strings.HasSuffix(text, "\r\x1b[2K  \x1b[32m✓ asking the judge (400ms)\x1b[0m\n") || environment.spinner != nil {
+		t.Fatalf("out %q", text)
+	}
+	quiet := &commandEnvironment{out: &out, errOut: &out}
+	out.Reset()
+	quiet.printProgress(orchestration.ProgressEvent{Kind: orchestration.ProgressStarted, Step: "step"})
+	time.Sleep(2 * spinnerInterval)
+	quiet.printProgress(orchestration.ProgressEvent{Kind: orchestration.ProgressDone, Step: "step"})
+	if out.String() != "  ✓ step (0s)\n" {
+		t.Fatalf("off a terminal: %q", out.String())
 	}
 }

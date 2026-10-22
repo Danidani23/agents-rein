@@ -195,8 +195,10 @@ type Judge interface {
 	Name() string
 	// Available says whether the backend can answer on this machine, or why not.
 	Available() (reason string, ok bool)
-	// Ask sends the brief and returns the answer's text.
-	Ask(brief string) (answer string, err error)
+	// Ask sends the brief and returns the answer's text, with the id of
+	// the conversation it ran as, "" when the backend keeps none, so a
+	// person can open it again.
+	Ask(brief string) (answer string, session string, err error)
 }
 
 // MachineLock keeps two rein processes from changing this machine at once:
