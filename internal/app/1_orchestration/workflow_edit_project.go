@@ -76,7 +76,7 @@ func (orchestrator Orchestrator) EditProject(request EditProjectRequest) (EditPr
 				}
 				project.Description, project.Teams, project.Labels, project.Path = request.Description, request.Teams, request.Labels, request.Path
 				project.UpdatedAt = services.Clock()
-				relativePath, content, err = scaffold.ProjectRecord(organization.Slug, project)
+				relativePath, content, err = scaffold.ProjectRecord(project)
 				if err != nil {
 					return err
 				}

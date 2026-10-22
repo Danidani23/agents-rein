@@ -62,7 +62,7 @@ func TestConvertClaudeCode(t *testing.T) {
 func TestDistilledCandidatesPassTheLint(t *testing.T) {
 	candidates, _, _ := ConvertClaudeCode(harness)
 	root := t.TempDir()
-	level := filepath.Join(root, "declarations", "organizations", "acme", "projects", "shop")
+	level := filepath.Join(root, "declarations", "projects", "shop")
 	for _, candidate := range candidates {
 		for relative, content := range candidate.Files {
 			target := filepath.Join(level, filepath.FromSlash(relative))
@@ -87,10 +87,11 @@ func TestCatalogueAndCompare(t *testing.T) {
 		_ = os.MkdirAll(filepath.Dir(target), 0o755)
 		_ = os.WriteFile(target, []byte(content), 0o644)
 	}
-	write("organizations/acme/rules/go-style.md", harness[".claude/rules/Go Style.md"])
-	write("organizations/acme/rules/instructions.md", "# Acme\n\nDifferent.\n")
-	write("organizations/acme/teams/web/mcpservers/github.yaml", "description: elsewhere\ntransport: stdio\ncommand: npx\nargs: [\"-y\", \"@modelcontextprotocol/server-github\"]\n")
-	write("organizations/acme/projects/shop/skills/commit/SKILL.md", "other content")
+	write("organization.yaml", "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\nhost: github\n")
+	write("rules/go-style.md", harness[".claude/rules/Go Style.md"])
+	write("rules/instructions.md", "# Acme\n\nDifferent.\n")
+	write("teams/web/mcpservers/github.yaml", "description: elsewhere\ntransport: stdio\ncommand: npx\nargs: [\"-y\", \"@modelcontextprotocol/server-github\"]\n")
+	write("projects/shop/skills/commit/SKILL.md", "other content")
 	write("users/danidani23/hooks/pretooluse-1/hook.yaml", "format: claude-code\nevent: PreToolUse\nmatcher: Bash\nrun: run.sh\n")
 	write("users/danidani23/hooks/pretooluse-1/run.sh", "#!/bin/sh\necho hi\n")
 	catalogue, err := LoadCatalogue(root)
@@ -103,7 +104,7 @@ func TestCatalogueAndCompare(t *testing.T) {
 	cases := map[string][2]string{
 		"rules/go-style":       {VerdictIdentical, "organizations.acme.rules.go-style"},
 		"mcpservers/github":    {VerdictIdentical, "organizations.acme.teams.web.mcpservers.github"},
-		"hooks/pretooluse-1":   {VerdictIdentical, "users.danidani23.hooks.pretooluse-1"},
+		"hooks/pretooluse-1":   {VerdictIdentical, "organizations.acme.users.danidani23.hooks.pretooluse-1"},
 		"rules/instructions":   {VerdictSameID, "organizations.acme.rules.instructions"},
 		"skills/commit":        {VerdictNew, ""},
 		"permissions/settings": {VerdictNew, ""},

@@ -334,6 +334,18 @@ committed instead of gitignored (D4).
   reach its repositories; `org create` names the installation address when GitHub refuses.
   A GitHub Enterprise has its own registration, so the addresses and the client ID are
   overridable. `gh` is no longer required anywhere.
+- ✅ **D27 — One organisation per repository, so its folders leave it out; a user level is a
+  level of the organisation.** Decided 2026-10-22 by the user on the first look at the org
+  repository on GitHub. The layout is `declarations/organization.yaml`, `labels/`, the
+  organisation's own declaration folders, `teams/<slug>/`, `projects/<slug>/` and
+  `users/<slug>/`, with no `organizations/<slug>/` folder, since `org connect` refuses a
+  repository with more than one organisation anyway. Addresses keep `organizations.<slug>` in
+  front, since a machine connected to several org repositories must read every address
+  unambiguously, and the user level moves under it, `organizations.<org>.users.<user>`,
+  because it lives in that organisation's repository and a person with two organisations has
+  one in each. The address library maps between the two: `Path` drops the first pair,
+  `FromPath` adds it back from the record at the root. No migration: the pilot started again
+  on the new layout; `rein migrate` stays on the board for repositories that will exist.
 - ✅ **D26 — Rein never deletes a repository.** Decided 2026-10-21 by the user. Deletion is the
   one irreversible act, so rein never asks for the scope and never calls it: a failed `org
   create` leaves the empty repository and says so, a rerun with the same name adopts an empty
@@ -1189,6 +1201,15 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- ✅ **P2.31 — The flat layout, the user level under the organisation, `team list`, `team
+  edit`, `project list`.** [EXECUTED] 2026-10-22 (R41, R42, D27). Every place that turned a
+  level into a folder goes through the address library now; the lint reads the
+  organisation's slug from the record at the root of a declarations folder and treats a
+  folder outside the layout as plain; the catalogue, the corpus, the resolver and the tree
+  take the slug the same way. `team list` and `project list` pull the org clone first and
+  print a table of what main holds; `team edit [slug]` changes the description the owner's
+  way. The declaration list takes `--level` as an exact level. Known limits: a team's name
+  and slug never change; `rein migrate` for repositories on the old layout is not written.
 - ✅ **P2.30 — `rein declaration`: what is around a declaration changes by a pull request.**
   [EXECUTED] 2026-10-22 on the user's question how the commit skill moves from the user to
   the organisation (R39, R40). The content of a declaration enters and changes through
@@ -1765,3 +1786,6 @@ writes is read from the next session on, not in the same one.
   table with a header, so "default" reads as the enforcement; Ctrl-C at a prompt releases the
   machine lock before quitting, and a lock whose holder is gone is taken over at once instead
   of after ten minutes.
+- (2026-10-22) P2.31 executed with D27: the flat org repository, the user level under the
+  organisation in every address, `team list`, `team edit`, `project list`. The bug-first-test
+  skill is written into this repository's harness for the next distillation.

@@ -132,8 +132,9 @@ func TestRun(t *testing.T) {
 	})
 	t.Run("inside a declarations tree a finding carries the address", func(t *testing.T) {
 		root := t.TempDir()
-		writeFile(t, root, "declarations/organizations/dani/teams/web/skills/commit/SKILL.md", skillFile("commits", "Draft commits."))
-		writeFile(t, root, "declarations/organizations/dani/rules/go-style.md", "---\npaths: 3\n---\n")
+		writeFile(t, root, "declarations/organization.yaml", "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: dani\nname: Dani\nhost: github\n")
+		writeFile(t, root, "declarations/teams/web/skills/commit/SKILL.md", skillFile("commits", "Draft commits."))
+		writeFile(t, root, "declarations/rules/go-style.md", "---\npaths: 3\n---\n")
 		report := mustRun(t, root)
 		if report.Errors() != 2 {
 			t.Fatalf("findings: %v", messages(report))
@@ -148,7 +149,7 @@ func TestRun(t *testing.T) {
 	})
 	t.Run("a path inside a declarations tree that is not pairs is an error", func(t *testing.T) {
 		root := t.TempDir()
-		writeFile(t, root, "declarations/organizations/dani/skills/SKILL.md", skillFile("skills", "Misplaced."))
+		writeFile(t, root, "declarations/skills/SKILL.md", skillFile("skills", "Misplaced."))
 		report := mustRun(t, root)
 		found := false
 		for _, finding := range report.Findings {
@@ -189,10 +190,10 @@ func TestRecords(t *testing.T) {
 	team := "id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427\nslug: web\nname: Web\n"
 	t.Run("a consistent org repository lints clean", func(t *testing.T) {
 		root := t.TempDir()
-		writeFile(t, root, "declarations/organizations/acme/organization.yaml", organization)
-		writeFile(t, root, "declarations/organizations/acme/labels/language.yaml", "category: language\nlabels:\n  go: Go\n")
-		writeFile(t, root, "declarations/organizations/acme/teams/web/team.yaml", team)
-		writeFile(t, root, "declarations/organizations/acme/projects/shop/project.yaml", "id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: shop\nname: Shop\nteams: [web]\nlabels: [language:go]\n")
+		writeFile(t, root, "declarations/organization.yaml", organization)
+		writeFile(t, root, "declarations/labels/language.yaml", "category: language\nlabels:\n  go: Go\n")
+		writeFile(t, root, "declarations/teams/web/team.yaml", team)
+		writeFile(t, root, "declarations/projects/shop/project.yaml", "id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: shop\nname: Shop\nteams: [web]\nlabels: [language:go]\n")
 		writeFile(t, root, "declarations/users/danidani23/user.yaml", "slug: danidani23\ngithub: Danidani23\n")
 		report := mustRun(t, root)
 		if len(report.Findings) != 0 {
@@ -201,9 +202,9 @@ func TestRecords(t *testing.T) {
 	})
 	t.Run("a broken record and a bad reference are reported with their addresses", func(t *testing.T) {
 		root := t.TempDir()
-		writeFile(t, root, "declarations/organizations/acme/organization.yaml", organization)
-		writeFile(t, root, "declarations/organizations/acme/teams/web/team.yaml", "id: nope\nslug: web\nname: Web\n")
-		writeFile(t, root, "declarations/organizations/acme/projects/shop/project.yaml", "id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: shop\nname: Shop\nteams: [web]\n")
+		writeFile(t, root, "declarations/organization.yaml", organization)
+		writeFile(t, root, "declarations/teams/web/team.yaml", "id: nope\nslug: web\nname: Web\n")
+		writeFile(t, root, "declarations/projects/shop/project.yaml", "id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: shop\nname: Shop\nteams: [web]\n")
 		report := mustRun(t, root)
 		if report.Errors() != 2 {
 			t.Fatalf("findings: %v", messages(report))
@@ -233,16 +234,16 @@ func TestDeclarationFormats(t *testing.T) {
 	hook := "description: Format Go before a commit\napplyIf: [language:go]\nformat: claude-code\nevent: PreToolUse\nmatcher: \"Bash(git commit*)\"\nrun: run.sh\ntimeout_seconds: 30\n"
 	t.Run("well-formed declarations lint clean, each with its address", func(t *testing.T) {
 		root := t.TempDir()
-		writeFile(t, root, "declarations/organizations/acme/organization.yaml", organization)
-		writeFile(t, root, "declarations/organizations/acme/mcpservers/github.yaml", server)
-		writeFile(t, root, "declarations/organizations/acme/permissions/no-history-rewrites.yaml", permissions)
-		writeFile(t, root, "declarations/organizations/acme/teams/web/hooks/gofmt/hook.yaml", hook)
-		writeFile(t, root, "declarations/organizations/acme/teams/web/hooks/gofmt/run.sh", "#!/bin/sh\ngofmt -l .\n")
+		writeFile(t, root, "declarations/organization.yaml", organization)
+		writeFile(t, root, "declarations/mcpservers/github.yaml", server)
+		writeFile(t, root, "declarations/permissions/no-history-rewrites.yaml", permissions)
+		writeFile(t, root, "declarations/teams/web/hooks/gofmt/hook.yaml", hook)
+		writeFile(t, root, "declarations/teams/web/hooks/gofmt/run.sh", "#!/bin/sh\ngofmt -l .\n")
 		report := mustRun(t, root)
 		if len(report.Findings) != 0 {
 			t.Fatalf("findings: %v", messages(report))
 		}
-		writeFile(t, root, "declarations/organizations/acme/mcpservers/github.yaml", server+"url: http://x\n")
+		writeFile(t, root, "declarations/mcpservers/github.yaml", server+"url: http://x\n")
 		report = mustRun(t, root)
 		if report.Errors() != 1 || report.Findings[0].Address != "organizations.acme.mcpservers.github" {
 			t.Fatalf("findings: %+v", report.Findings)
@@ -291,14 +292,14 @@ func TestDeclarationFormats(t *testing.T) {
 func TestResolutionChecks(t *testing.T) {
 	organization := "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\nhost: github\n"
 	root := t.TempDir()
-	writeFile(t, root, "declarations/organizations/acme/organization.yaml", organization)
-	writeFile(t, root, "declarations/organizations/acme/teams/web/team.yaml", "id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427\nslug: web\nname: Web\nskip: [organizations.acme.rules.missing]\n")
-	writeFile(t, root, "declarations/organizations/acme/projects/shop/project.yaml", "id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: shop\nname: Shop\nteams: [web]\n")
-	writeFile(t, root, "declarations/organizations/acme/exceptions/old.yaml", "declaration: organizations.acme.rules.style\ngrantee: organizations.acme.teams.web\nreason: old\nuntil: 2020-01-01T00:00:00Z\n")
-	writeFile(t, root, "declarations/organizations/acme/exceptions/nobody.yaml", "declaration: organizations.acme.rules.style\ngrantee: organizations.acme.teams.nobody\nreason: whoever\n")
-	writeFile(t, root, "declarations/organizations/acme/rules/style.md", "---\nenforcement: required\n---\nStyle.\n")
-	writeFile(t, root, "declarations/organizations/acme/teams/web/rules/style.md", "Our style.\n")
-	writeFile(t, root, "declarations/organizations/acme/skills/commit/SKILL.md", "---\nname: commit\ndescription: Draft commits.\nmetadata:\n  rein-enforcement: sometimes\n---\n")
+	writeFile(t, root, "declarations/organization.yaml", organization)
+	writeFile(t, root, "declarations/teams/web/team.yaml", "id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427\nslug: web\nname: Web\nskip: [organizations.acme.rules.missing]\n")
+	writeFile(t, root, "declarations/projects/shop/project.yaml", "id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: shop\nname: Shop\nteams: [web]\n")
+	writeFile(t, root, "declarations/exceptions/old.yaml", "declaration: organizations.acme.rules.style\ngrantee: organizations.acme.teams.web\nreason: old\nuntil: 2020-01-01T00:00:00Z\n")
+	writeFile(t, root, "declarations/exceptions/nobody.yaml", "declaration: organizations.acme.rules.style\ngrantee: organizations.acme.teams.nobody\nreason: whoever\n")
+	writeFile(t, root, "declarations/rules/style.md", "---\nenforcement: required\n---\nStyle.\n")
+	writeFile(t, root, "declarations/teams/web/rules/style.md", "Our style.\n")
+	writeFile(t, root, "declarations/skills/commit/SKILL.md", "---\nname: commit\ndescription: Draft commits.\nmetadata:\n  rein-enforcement: sometimes\n---\n")
 	report := mustRun(t, root)
 	joined := strings.Join(messages(report), "\n")
 	for _, expected := range []string{"skip names organizations.acme.rules.missing, which does not exist", "expired on 2020-01-01", "grantee organizations.acme.teams.nobody is not a team or a project", "for project shop: redeclares organizations.acme.rules.style, which is required", `enforcement "sometimes" is not`} {

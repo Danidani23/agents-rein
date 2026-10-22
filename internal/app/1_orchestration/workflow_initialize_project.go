@@ -244,7 +244,7 @@ func bindProject(orchestrator Orchestrator, request InitializeProjectRequest, or
 	}
 	project.Fingerprint = location.Fingerprint
 	project.Path = location.Path
-	relativePath, content, err := scaffold.ProjectRecord(organizationSlug, project)
+	relativePath, content, err := scaffold.ProjectRecord(project)
 	if err != nil {
 		return "", false, false, err
 	}

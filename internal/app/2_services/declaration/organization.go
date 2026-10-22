@@ -31,7 +31,7 @@ var Hosts = []string{"github"}
 var PlannedHosts = []string{"gitlab"}
 
 // Organization is the record of an organisation, organization.yaml under
-// declarations/organizations/<slug>/. The id never changes; the slug is the
+// declarations/organization.yaml. The id never changes; the slug is the
 // address segment; name and description are free to change; host says which
 // forge holds the org repository and its identities.
 type Organization struct {
@@ -46,8 +46,8 @@ type Organization struct {
 	CreatedAt time.Time `yaml:"created_at,omitempty"`
 }
 
-// ParseOrganization reads the record; folder is the slug folder holding it.
-func ParseOrganization(folder string, content []byte) (organization Organization, problems []Problem) {
+// ParseOrganization reads the record.
+func ParseOrganization(content []byte) (organization Organization, problems []Problem) {
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	decoder.KnownFields(true)
 	err := decoder.Decode(&organization)
@@ -62,8 +62,6 @@ func ParseOrganization(folder string, content []byte) (organization Organization
 		problems = append(problems, Problem{Severity: SeverityError, Message: "slug is required"})
 	case !address.IsSlug(organization.Slug):
 		problems = append(problems, Problem{Severity: SeverityError, Message: fmt.Sprintf("slug %q may only contain lowercase letters, digits and single hyphens", organization.Slug)})
-	case organization.Slug != folder:
-		problems = append(problems, Problem{Severity: SeverityError, Message: fmt.Sprintf("slug %q does not match the folder name %q", organization.Slug, folder)})
 	}
 	if organization.Name == "" {
 		problems = append(problems, Problem{Severity: SeverityError, Message: "name is required"})
@@ -90,16 +88,16 @@ func checkHost(host string) []Problem {
 }
 
 // FindOrganization locates the one organisation record in an org repository
-// clone, at declarations/organizations/<slug>/organization.yaml.
+// clone, at declarations/organization.yaml.
 func FindOrganization(clonePath string) (Organization, error) {
-	pattern := filepath.Join(clonePath, "declarations", "organizations", "*", "organization.yaml")
+	pattern := filepath.Join(clonePath, "declarations", "organization.yaml")
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		return Organization{}, err
 	}
 	switch len(matches) {
 	case 0:
-		return Organization{}, fmt.Errorf("not an org repository: no declarations/organizations/<slug>/organization.yaml in %s", clonePath)
+		return Organization{}, fmt.Errorf("not an org repository: no declarations/organization.yaml in %s", clonePath)
 	case 1:
 	default:
 		return Organization{}, fmt.Errorf("%s holds %d organisations; an org repository holds exactly one", clonePath, len(matches))
@@ -108,8 +106,7 @@ func FindOrganization(clonePath string) (Organization, error) {
 	if err != nil {
 		return Organization{}, err
 	}
-	folder := filepath.Base(filepath.Dir(matches[0]))
-	organization, problems := ParseOrganization(folder, content)
+	organization, problems := ParseOrganization(content)
 	if len(problems) > 0 {
 		var messages []string
 		for _, problem := range problems {

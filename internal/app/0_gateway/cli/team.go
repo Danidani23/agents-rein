@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -20,7 +21,7 @@ func newTeamCommand(environment *commandEnvironment) *cobra.Command {
 			"team's own declarations later live next to its record. The organisation's owner writes team\n" +
 			"records straight to main; everyone else proposes them through a pull request.",
 	}
-	team.AddCommand(newTeamCreateCommand(environment))
+	team.AddCommand(newTeamCreateCommand(environment), newTeamListCommand(environment), newTeamEditCommand(environment))
 	return team
 }
 
@@ -148,4 +149,155 @@ func askTeamCreate(prompter ports.Prompter, answers teamCreateAnswers, again boo
 		}
 	}
 	return answers, nil
+}
+
+func newTeamListCommand(environment *commandEnvironment) *cobra.Command {
+	var organizationSlug string
+	command := &cobra.Command{
+		Use:   "list",
+		Short: "Show the teams as the org repository's main holds them, with their projects",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, arguments []string) error {
+			orchestrator, release, err := environment.orchestrateLocked()
+			if err != nil {
+				return err
+			}
+			defer release()
+			err = requireLogin(orchestrator)
+			if err != nil {
+				return err
+			}
+			organization, err := orchestrator.RefreshOrganization(organizationSlug)
+			if err != nil {
+				return err
+			}
+			if len(organization.Teams) == 0 {
+				fmt.Fprintf(environment.out, "%s has no teams yet; rein team create makes one\n", organization.Slug)
+				return nil
+			}
+			rows := [][]string{{"SLUG", "NAME", "DESCRIPTION", "PROJECTS"}}
+			for _, team := range organization.Teams {
+				rows = append(rows, []string{team.Slug, team.Name, team.Description, strings.Join(team.Projects, " ")})
+			}
+			printTable(environment, rows)
+			return nil
+		},
+	}
+	command.Flags().StringVar(&organizationSlug, "org", "", "the organisation's slug (default: the active one)")
+	return command
+}
+
+func newTeamEditCommand(environment *commandEnvironment) *cobra.Command {
+	var organizationSlug, description string
+	var yes bool
+	command := &cobra.Command{
+		Use:   "edit [slug]",
+		Short: "Change a team's description; asks which team when the slug is left out",
+		Long: "edit rewrites a team record in the organisation's clone, commits it and pushes it to main,\n" +
+			"as create does. The description is asked with the current one as the default, or given as\n" +
+			"--description. The slug and the name never change.",
+		Example: "  rein team edit\n  rein team edit web --description \"the web shop\" --yes",
+		Args:    cobra.MaximumNArgs(1),
+		RunE: func(command *cobra.Command, arguments []string) error {
+			return runTeamEdit(environment, arguments, organizationSlug, description, command.Flags().Changed("description"), yes)
+		},
+	}
+	command.Flags().StringVar(&organizationSlug, "org", "", "the organisation's slug (default: the active one)")
+	command.Flags().StringVar(&description, "description", "", "one line about what the team does")
+	command.Flags().BoolVar(&yes, "yes", false, "do not ask for confirmation")
+	return command
+}
+
+func runTeamEdit(environment *commandEnvironment, arguments []string, organizationSlug string, description string, descriptionGiven bool, yes bool) error {
+	orchestrator, release, err := environment.orchestrateLocked()
+	if err != nil {
+		return err
+	}
+	defer release()
+	err = requireLogin(orchestrator)
+	if err != nil {
+		return err
+	}
+	organization, err := orchestrator.DescribeOrganization(organizationSlug)
+	if err != nil {
+		return err
+	}
+	prompter := environment.prompter()
+	slug, err := teamSlug(prompter, organization, arguments)
+	if err != nil {
+		return err
+	}
+	var current orchestration.TeamSummary
+	found := false
+	for _, team := range organization.Teams {
+		if team.Slug == slug {
+			current, found = team, true
+		}
+	}
+	if !found {
+		return refusal.New(fmt.Sprintf("team %q does not exist in %s; rein team list shows them", slug, organization.Slug))
+	}
+	if !descriptionGiven && !prompter.CanAsk() {
+		return refusal.New("nothing to change; pass --description, or run on a terminal to be asked")
+	}
+	if !descriptionGiven {
+		description, err = prompter.Ask(ports.Text{
+			Title:       "Description",
+			Description: "One line about what the team does; Enter keeps the current one.",
+			Default:     current.Description,
+			Optional:    true,
+		})
+		if err != nil {
+			return refusal.New(err.Error())
+		}
+	}
+	if description == current.Description {
+		return refusal.New("nothing changed on team " + slug)
+	}
+	fmt.Fprintf(environment.out, "This will change the description of team %s in %s to %q and push its record to main.\n", slug, organization.Slug, description)
+	if !yes {
+		if !prompter.CanAsk() {
+			return refusal.New("no terminal to confirm on; pass --yes")
+		}
+		confirmed, err := prompter.Confirm("Continue?", "The record is rewritten in the organisation's clone, committed and pushed. If the push is rejected, the clone is put back as the remote has it and nothing changes.")
+		if err != nil {
+			return refusal.New(err.Error())
+		}
+		if !confirmed {
+			return refusal.New("nothing changed")
+		}
+	}
+	result, err := orchestrator.EditTeam(orchestration.EditTeamRequest{Organization: organization.Slug, Slug: slug, Description: description})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(environment.out, "changed team %s (%s) in %s: description\nrecord: %s, pushed to main\n", result.Slug, result.Name, result.Organization, result.RelativePath)
+	return nil
+}
+
+// teamSlug is the slug given as the argument or, when none was, the one
+// picked from the organisation's teams on a terminal.
+func teamSlug(prompter ports.Prompter, organization orchestration.OrganizationDescription, arguments []string) (string, error) {
+	if len(arguments) == 1 {
+		return arguments[0], nil
+	}
+	if len(organization.Teams) == 0 {
+		return "", refusal.New(fmt.Sprintf("%s has no teams yet; rein team create makes one", organization.Slug))
+	}
+	if !prompter.CanAsk() {
+		return "", refusal.New("name the team; rein team list shows them")
+	}
+	var choices []ports.Choice
+	for _, team := range organization.Teams {
+		choices = append(choices, ports.Choice{Name: team.Slug, Description: team.Name})
+	}
+	defaultSlug := ""
+	if len(choices) == 1 {
+		defaultSlug = choices[0].Name
+	}
+	slug, err := prompter.Choose(ports.Select{Title: "Team", Description: "The team to change.", Choices: choices, Default: defaultSlug})
+	if err != nil {
+		return "", refusal.New(err.Error())
+	}
+	return slug, nil
 }

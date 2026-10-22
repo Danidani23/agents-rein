@@ -1,6 +1,9 @@
 // Package address names where a declaration is stored in an org repository,
 // for instance organizations.dani.teams.web.skills.commit. An address is a
-// sequence of collection and slug pairs; the last pair is the kind and the id.
+// sequence of collection and slug pairs; the first pair is the organisation,
+// the last pair is the kind and the id. The org repository holds one
+// organisation, so its folders leave the first pair out: the address above
+// is the path teams/web/skills/commit under declarations/.
 package address
 
 import (
@@ -35,14 +38,21 @@ var declarationKinds = map[string]bool{
 // allowedBelow lists the collections that may follow a pair of each
 // collection; the empty key is the root.
 var allowedBelow = map[string][]string{
-	"":            {Organizations, Users},
-	Organizations: {Teams, Projects, Labels, Exceptions, Skills, Rules, MCPServers, Hooks, Permissions, Agents},
+	"":            {Organizations},
+	Organizations: {Teams, Projects, Users, Labels, Exceptions, Skills, Rules, MCPServers, Hooks, Permissions, Agents},
 	Teams:         {Exceptions, Skills, Rules, MCPServers, Hooks, Permissions, Agents},
 	Projects:      {Skills, Rules, MCPServers, Hooks, Permissions, Agents},
 	Users:         {Skills, Rules, MCPServers, Hooks, Permissions, Agents},
 }
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// IsOrganizationCollection says whether a folder name directly under
+// declarations/ belongs to the layout: teams, projects, users, labels,
+// exceptions or a declaration kind.
+func IsOrganizationCollection(name string) bool {
+	return contains(allowedBelow[Organizations], name)
+}
 
 // IsSlug reports whether text is lowercase letters, digits and single hyphens,
 // with no hyphen at either end.
@@ -69,13 +79,28 @@ func Parse(text string) (Address, error) {
 }
 
 // FromPath reads an address from a directory path relative to the
-// declarations root, such as organizations/dani/skills/commit.
-func FromPath(relativePath string) (Address, error) {
-	cleaned := filepath.ToSlash(filepath.Clean(relativePath))
-	if cleaned == "." || cleaned == "" {
-		return Address{}, fmt.Errorf("path is empty")
+// declarations root of the organisation's repository, such as
+// teams/web/skills/commit; the empty path is the organisation itself.
+func FromPath(relativePath string, organizationSlug string) (Address, error) {
+	if !IsSlug(organizationSlug) {
+		return Address{}, fmt.Errorf("organisation %q is not a slug", organizationSlug)
 	}
-	return fromSegments(strings.Split(cleaned, "/"), relativePath)
+	cleaned := filepath.ToSlash(filepath.Clean(relativePath))
+	segments := []string{Organizations, organizationSlug}
+	if cleaned != "." && cleaned != "" {
+		segments = append(segments, strings.Split(cleaned, "/")...)
+	}
+	return fromSegments(segments, relativePath)
+}
+
+// LevelPath is the folder of a level under declarations/: "" for the
+// organisation, teams/web, projects/shop or users/jane.
+func LevelPath(level string) (string, error) {
+	parsed, err := Parse(level)
+	if err != nil {
+		return "", err
+	}
+	return parsed.Path(), nil
 }
 
 func fromSegments(segments []string, source string) (Address, error) {
@@ -122,6 +147,25 @@ func (address Address) String() string {
 		parts = append(parts, current.collection, current.slug)
 	}
 	return strings.Join(parts, ".")
+}
+
+// Path is the address as a folder under declarations/, the organisation's
+// pair left out: "" for the organisation, teams/web/skills/commit for a
+// team's skill.
+func (address Address) Path() string {
+	parts := make([]string, 0, len(address.pairs)*2)
+	for _, current := range address.pairs[min(1, len(address.pairs)):] {
+		parts = append(parts, current.collection, current.slug)
+	}
+	return strings.Join(parts, "/")
+}
+
+// OrganizationSlug is the organisation the address belongs to.
+func (address Address) OrganizationSlug() string {
+	if len(address.pairs) == 0 {
+		return ""
+	}
+	return address.pairs[0].slug
 }
 
 // Kind is the last collection, for instance "skills".

@@ -47,9 +47,9 @@ func (orchestrator Orchestrator) EditDeclaration(request EditDeclarationRequest)
 	}
 	targetLevel, err := address.Parse(request.Level)
 	if err != nil || targetLevel.IsDeclaration() {
-		return EditDeclarationResult{}, refusal.New(fmt.Sprintf("%q is not a level: organizations.<org>, organizations.<org>.teams.<team>, organizations.<org>.projects.<project> or users.<user>", request.Level))
+		return EditDeclarationResult{}, refusal.New(fmt.Sprintf("%q is not a level: organizations.<org>, organizations.<org>.teams.<team>, organizations.<org>.projects.<project> or organizations.<org>.users.<user>", request.Level))
 	}
-	if !strings.HasPrefix(request.Level, address.Organizations+"."+located.organization.Slug) && !strings.HasPrefix(request.Level, address.Users+".") {
+	if targetLevel.OrganizationSlug() != located.organization.Slug {
 		return EditDeclarationResult{}, refusal.New(fmt.Sprintf("the level %s is not in %s", request.Level, located.organization.Slug))
 	}
 	accessToken, err := services.Credentials.AccessToken(located.organization.Login)
@@ -58,7 +58,7 @@ func (orchestrator Orchestrator) EditDeclaration(request EditDeclarationRequest)
 	}
 	access := accessOf(located.organization)
 	result := EditDeclarationResult{Organization: located.organization.Slug, Address: request.Address, NewAddress: request.Level + "." + located.kind + "." + located.id}
-	targetLevelPath := strings.ReplaceAll(request.Level, ".", "/")
+	targetLevelPath := targetLevel.Path()
 	var currentFiles map[string]string
 	var newFiles map[string]string
 	var removed []string
@@ -146,8 +146,8 @@ func (orchestrator Orchestrator) EditDeclaration(request EditDeclarationRequest)
 					return err
 				}
 				paths = append(paths, written...)
-				if strings.HasPrefix(request.Level, address.Users+".") {
-					userRecord, err := userRecordIfMissing(located.orgClonePath, targetLevelPath, strings.TrimPrefix(request.Level, address.Users+"."), located.organization, services)
+				if strings.HasPrefix(targetLevelPath, address.Users+"/") {
+					userRecord, err := userRecordIfMissing(located.orgClonePath, targetLevelPath, path.Base(targetLevelPath), located.organization, services)
 					if err != nil {
 						return err
 					}
@@ -208,14 +208,14 @@ type declarationLocation struct {
 func locateDeclaration(services Services, named string, text string) (declarationLocation, error) {
 	parsed, err := address.Parse(text)
 	if err != nil || !parsed.IsDeclaration() {
-		return declarationLocation{}, refusal.New(fmt.Sprintf("%q is not a declaration's address, such as organizations.acme.skills.commit or users.jane.rules.brief", text))
+		return declarationLocation{}, refusal.New(fmt.Sprintf("%q is not a declaration's address, such as organizations.acme.skills.commit or organizations.acme.users.jane.rules.brief", text))
 	}
 	level, _ := parsed.Parent()
 	organization, orgClonePath, err := organizationOfLevel(services, level.String(), named)
 	if err != nil {
 		return declarationLocation{}, err
 	}
-	return declarationLocation{organization: organization, orgClonePath: orgClonePath, level: level.String(), levelPath: strings.ReplaceAll(level.String(), ".", "/"), kind: parsed.Kind(), id: parsed.ID()}, nil
+	return declarationLocation{organization: organization, orgClonePath: orgClonePath, level: level.String(), levelPath: level.Path(), kind: parsed.Kind(), id: parsed.ID()}, nil
 }
 
 // readDeclaration reads a declaration's files, keyed by their path inside
@@ -270,9 +270,9 @@ func readDeclaration(located declarationLocation) (map[string]string, declaratio
 func checkLevelExists(tree declaration.Tree, organization machine.OrganizationRef, level string) error {
 	segments := strings.Split(level, ".")
 	switch {
-	case segments[0] == address.Users:
-		if segments[1] != userSlugOf(organization) {
-			if _, found := tree.Users[segments[1]]; !found {
+	case len(segments) == 4 && segments[2] == address.Users:
+		if segments[3] != userSlugOf(organization) {
+			if _, found := tree.Users[segments[3]]; !found {
 				return refusal.New(fmt.Sprintf("the level %s does not exist; a user's level is made by that user", level))
 			}
 		}

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/proposalfiles"
@@ -155,8 +154,11 @@ func (orchestrator Orchestrator) PlanReset() (ResetPlan, error) {
 
 // TeamSummary is a team as a question lists it.
 type TeamSummary struct {
-	Slug string
-	Name string
+	Slug        string
+	Name        string
+	Description string
+	// Projects are the slugs of the projects on the team.
+	Projects []string
 }
 
 // LabelValueSummary is one registered value of a category.
@@ -208,9 +210,17 @@ func (orchestrator Orchestrator) DescribeOrganization(slug string) (Organization
 	if err != nil {
 		return OrganizationDescription{}, err
 	}
-	description := OrganizationDescription{Slug: organization.Slug, Name: tree.Organization.Name, OrgClonePath: orgClonePath, UserLevel: address.Users + "." + userSlugOf(organization)}
+	description := OrganizationDescription{Slug: organization.Slug, Name: tree.Organization.Name, OrgClonePath: orgClonePath, UserLevel: userLevelOf(organization)}
 	for _, teamSlug := range sortedKeys(tree.Teams) {
-		description.Teams = append(description.Teams, TeamSummary{Slug: teamSlug, Name: tree.Teams[teamSlug].Name})
+		summary := TeamSummary{Slug: teamSlug, Name: tree.Teams[teamSlug].Name, Description: tree.Teams[teamSlug].Description}
+		for _, projectSlug := range sortedKeys(tree.Projects) {
+			for _, memberOf := range tree.Projects[projectSlug].Teams {
+				if memberOf == teamSlug {
+					summary.Projects = append(summary.Projects, projectSlug)
+				}
+			}
+		}
+		description.Teams = append(description.Teams, summary)
 	}
 	for _, projectSlug := range sortedKeys(tree.Projects) {
 		project := tree.Projects[projectSlug]
@@ -427,7 +437,7 @@ func (orchestrator Orchestrator) DescribeDeclaration(organizationSlug string, de
 }
 
 // ListDeclarations reads every declaration of an organisation from its
-// clone, the ones under level when given, sorted by address.
+// clone, the ones at level when given, sorted by address.
 func (orchestrator Orchestrator) ListDeclarations(organizationSlug string, level string) ([]DeclarationDescription, error) {
 	services := orchestrator.Services
 	organization, orgClonePath, err := resolveOrganization(services, organizationSlug)
@@ -440,10 +450,10 @@ func (orchestrator Orchestrator) ListDeclarations(organizationSlug string, level
 	}
 	var listed []DeclarationDescription
 	for _, entry := range catalogue.Entries {
-		if level != "" && entry.Level != level && !strings.HasPrefix(entry.Address, level+".") {
+		if level != "" && entry.Level != level {
 			continue
 		}
-		located := declarationLocation{organization: organization, orgClonePath: orgClonePath, level: entry.Level, levelPath: strings.ReplaceAll(entry.Level, ".", "/"), kind: entry.Kind, id: entry.ID}
+		located := declarationLocation{organization: organization, orgClonePath: orgClonePath, level: entry.Level, levelPath: levelPathOf(entry.Level), kind: entry.Kind, id: entry.ID}
 		files, selectors, err := readDeclaration(located)
 		if err != nil {
 			return nil, err
@@ -452,4 +462,19 @@ func (orchestrator Orchestrator) ListDeclarations(organizationSlug string, level
 	}
 	sort.Slice(listed, func(left, right int) bool { return listed[left].Address < listed[right].Address })
 	return listed, nil
+}
+
+// RefreshOrganization pulls the org clone and then describes the
+// organisation, so a listing shows what main holds.
+func (orchestrator Orchestrator) RefreshOrganization(slug string) (OrganizationDescription, error) {
+	services := orchestrator.Services
+	organization, orgClonePath, err := resolveOrganization(services, slug)
+	if err != nil {
+		return OrganizationDescription{}, err
+	}
+	err = services.Records.Pull(accessOf(organization), orgClonePath)
+	if err != nil {
+		return OrganizationDescription{}, err
+	}
+	return orchestrator.DescribeOrganization(organization.Slug)
 }

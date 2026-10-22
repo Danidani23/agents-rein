@@ -146,7 +146,7 @@ func (orchestrator Orchestrator) EditLabelRegistry(request LabelRegistryRequest)
 				}
 				result.Required = category.Required
 				result.Multiple = category.Multiple
-				relativePath, content, err = scaffold.LabelCategoryRecord(organization.Slug, category)
+				relativePath, content, err = scaffold.LabelCategoryRecord(category)
 				if err != nil {
 					return err
 				}

@@ -39,13 +39,9 @@ type TreeProblem struct {
 // projects, labels and the users, then cross-checks them. A missing or
 // unreadable organisation is an error; everything else is a problem.
 func LoadTree(clone string) (Tree, []TreeProblem, error) {
-	matches := glob(filepath.Join(clone, "declarations", "organizations", "*", "organization.yaml"))
-	switch len(matches) {
-	case 0:
-		return Tree{}, nil, fmt.Errorf("not an org repository: no declarations/organizations/<slug>/organization.yaml in %s", clone)
-	case 1:
-	default:
-		return Tree{}, nil, fmt.Errorf("%s holds %d organisations; an org repository holds exactly one", clone, len(matches))
+	matches := glob(filepath.Join(clone, "declarations", "organization.yaml"))
+	if len(matches) == 0 {
+		return Tree{}, nil, fmt.Errorf("not an org repository: no declarations/organization.yaml in %s", clone)
 	}
 	var problems []TreeProblem
 	add := func(addressText string, path string, found []Problem) {
@@ -54,15 +50,18 @@ func LoadTree(clone string) (Tree, []TreeProblem, error) {
 		}
 	}
 	// The organisation's own problems are reported like any record's, and
-	// the tree is still read and cross-checked, keyed by the folder name.
+	// the tree is still read and cross-checked, keyed by the record's slug.
 	orgFolder := filepath.Dir(matches[0])
-	orgSlug := filepath.Base(orgFolder)
-	orgAddress := "organizations." + orgSlug
 	content, err := os.ReadFile(matches[0])
 	if err != nil {
 		return Tree{}, nil, err
 	}
-	organization, found := ParseOrganization(orgSlug, content)
+	organization, found := ParseOrganization(content)
+	orgSlug := organization.Slug
+	if !address.IsSlug(orgSlug) {
+		orgSlug = "organization"
+	}
+	orgAddress := "organizations." + orgSlug
 	add(orgAddress, matches[0], found)
 	tree := Tree{Organization: organization, Teams: map[string]Team{}, Projects: map[string]Project{}, Users: map[string]User{}, Labels: map[string]LabelCategory{}, Declarations: map[string]bool{}}
 	base := filepath.Join(clone, "declarations")
@@ -118,7 +117,7 @@ func LoadTree(clone string) (Tree, []TreeProblem, error) {
 			tree.Exceptions = append(tree.Exceptions, ExceptionRecord{Address: owner + ".exceptions." + name, Owner: owner, Exception: exception})
 		}
 	}
-	tree.Declarations = declarationAddresses(base)
+	tree.Declarations = declarationAddresses(base, orgSlug)
 	for _, file := range glob(filepath.Join(base, "users", "*", "user.yaml")) {
 		folder := filepath.Base(filepath.Dir(file))
 		content, err := os.ReadFile(file)
@@ -126,7 +125,7 @@ func LoadTree(clone string) (Tree, []TreeProblem, error) {
 			return Tree{}, nil, err
 		}
 		user, found := ParseUser(folder, content)
-		add("users."+folder, file, found)
+		add(orgAddress+".users."+folder, file, found)
 		if len(found) == 0 {
 			tree.Users[user.Slug] = user
 		}
@@ -232,10 +231,10 @@ func (tree Tree) crossCheck(orgAddress string, orgFolder string) []TreeProblem {
 }
 
 // declarationAddresses lists every declaration in the tree by address.
-func declarationAddresses(base string) map[string]bool {
+func declarationAddresses(base string, organizationSlug string) map[string]bool {
 	found := map[string]bool{}
 	note := func(levelPath string, kind string, id string) {
-		level, err := address.FromPath(levelPath)
+		level, err := address.FromPath(levelPath, organizationSlug)
 		if err != nil {
 			return
 		}
@@ -250,7 +249,7 @@ func declarationAddresses(base string) map[string]bool {
 			return nil
 		}
 		segments := strings.Split(filepath.ToSlash(relative), "/")
-		if len(segments) < 3 {
+		if len(segments) < 2 {
 			return nil
 		}
 		collection := segments[len(segments)-2]
@@ -262,9 +261,9 @@ func declarationAddresses(base string) map[string]bool {
 			note(strings.Join(segments[:len(segments)-2], "/"), address.MCPServers, strings.TrimSuffix(name, ".yaml"))
 		case collection == address.Permissions && strings.HasSuffix(name, ".yaml"):
 			note(strings.Join(segments[:len(segments)-2], "/"), address.Permissions, strings.TrimSuffix(name, ".yaml"))
-		case name == "SKILL.md" && len(segments) >= 4 && segments[len(segments)-3] == address.Skills:
+		case name == "SKILL.md" && len(segments) >= 3 && segments[len(segments)-3] == address.Skills:
 			note(strings.Join(segments[:len(segments)-3], "/"), address.Skills, collection)
-		case name == "hook.yaml" && len(segments) >= 4 && segments[len(segments)-3] == address.Hooks:
+		case name == "hook.yaml" && len(segments) >= 3 && segments[len(segments)-3] == address.Hooks:
 			note(strings.Join(segments[:len(segments)-3], "/"), address.Hooks, collection)
 		}
 		return nil

@@ -23,7 +23,7 @@ func newProjectCommand(environment *commandEnvironment) *cobra.Command {
 			"to it by fingerprint. The organisation's owner writes project records straight to main;\n" +
 			"everyone else proposes them through a pull request.",
 	}
-	project.AddCommand(newProjectCreateCommand(environment), newProjectEditCommand(environment))
+	project.AddCommand(newProjectCreateCommand(environment), newProjectListCommand(environment), newProjectEditCommand(environment))
 	return project
 }
 
@@ -480,4 +480,40 @@ func projectSlug(prompter ports.Prompter, organization orchestration.Organizatio
 		return "", refusal.New(err.Error())
 	}
 	return slug, nil
+}
+
+func newProjectListCommand(environment *commandEnvironment) *cobra.Command {
+	var organizationSlug string
+	command := &cobra.Command{
+		Use:   "list",
+		Short: "Show the projects as the org repository's main holds them, with their teams and labels",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, arguments []string) error {
+			orchestrator, release, err := environment.orchestrateLocked()
+			if err != nil {
+				return err
+			}
+			defer release()
+			err = requireLogin(orchestrator)
+			if err != nil {
+				return err
+			}
+			organization, err := orchestrator.RefreshOrganization(organizationSlug)
+			if err != nil {
+				return err
+			}
+			if len(organization.Projects) == 0 {
+				fmt.Fprintf(environment.out, "%s has no projects yet; rein project create or rein init makes one\n", organization.Slug)
+				return nil
+			}
+			rows := [][]string{{"SLUG", "NAME", "TEAMS", "LABELS", "PATH", "DESCRIPTION"}}
+			for _, project := range organization.Projects {
+				rows = append(rows, []string{project.Slug, project.Name, strings.Join(project.Teams, " "), strings.Join(project.Labels, " "), firstOf(project.Path, "."), project.Description})
+			}
+			printTable(environment, rows)
+			return nil
+		},
+	}
+	command.Flags().StringVar(&organizationSlug, "org", "", "the organisation's slug (default: the active one)")
+	return command
 }

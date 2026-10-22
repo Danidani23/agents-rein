@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 )
 
 // Entry is one declaration an organisation already has.
@@ -22,17 +23,26 @@ type Entry struct {
 
 // Catalogue is every declaration of an org repository, for the comparison.
 type Catalogue struct {
-	Entries []Entry
+	Entries      []Entry
+	organization string
 }
 
 // LoadCatalogue reads the rules, skills, tool servers, permission sets and
 // hooks of an org repository clone at every level.
 func LoadCatalogue(orgClonePath string) (Catalogue, error) {
 	root := filepath.Join(orgClonePath, "declarations")
-	var catalogue Catalogue
+	_, statErr := os.Stat(root)
+	if os.IsNotExist(statErr) {
+		return Catalogue{}, nil
+	}
+	organization, err := declaration.FindOrganization(orgClonePath)
+	if err != nil {
+		return Catalogue{}, err
+	}
+	catalogue := Catalogue{organization: organization.Slug}
 	folders := map[string]map[string]string{}
 	folderKinds := map[string]string{}
-	err := filepath.WalkDir(root, func(filePath string, entry fs.DirEntry, walkErr error) error {
+	err = filepath.WalkDir(root, func(filePath string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			if os.IsNotExist(walkErr) && filePath == root {
 				return filepath.SkipDir
@@ -48,7 +58,7 @@ func LoadCatalogue(orgClonePath string) (Catalogue, error) {
 		}
 		relative = filepath.ToSlash(relative)
 		segments := strings.Split(relative, "/")
-		if len(segments) < 3 {
+		if len(segments) < 2 {
 			return nil
 		}
 		content, err := os.ReadFile(filePath)
@@ -98,9 +108,9 @@ func LoadCatalogue(orgClonePath string) (Catalogue, error) {
 }
 
 // add records one declaration; levelPath is its level's folder under
-// declarations/, such as organizations/acme/teams/web.
+// declarations/, such as teams/web, or "" for the organisation.
 func (catalogue *Catalogue) add(levelPath string, kind string, id string, files map[string]string) {
-	level, err := address.FromPath(levelPath)
+	level, err := address.FromPath(levelPath, catalogue.organization)
 	if err != nil {
 		return
 	}

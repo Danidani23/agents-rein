@@ -170,7 +170,7 @@ func (keychain *Keychain) Delete(login string) error {
 }
 
 // Repository "clones" by writing an org repository with the organisation
-// record it was given under declarations/organizations/<Slug>/, unless the
+// record it was given under declarations/, unless the
 // remote was published through it, in which case it copies what was
 // published. An empty Record writes the folder without a record, Fail fails
 // the clone, FailPublish fails the publish.
@@ -234,11 +234,7 @@ func (repository *Repository) Clone(access ports.RemoteAccess, remote string, di
 		}
 		return rememberOrigin(directory, remote)
 	}
-	slug := repository.Slug
-	if slug == "" {
-		slug = "acme"
-	}
-	folder := filepath.Join(directory, "declarations", "organizations", slug)
+	folder := filepath.Join(directory, "declarations")
 	err := os.MkdirAll(folder, 0o755)
 	if err != nil {
 		return err

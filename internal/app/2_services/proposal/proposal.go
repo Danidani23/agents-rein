@@ -211,7 +211,7 @@ func (proposal Proposal) Check(registry map[string]declaration.LabelCategory) []
 		}
 		parsed, err := address.Parse(candidate.Level)
 		if err != nil || parsed.IsDeclaration() {
-			problems = append(problems, fmt.Sprintf("%s: level %q is not one; organizations.<org>, organizations.<org>.teams.<team>, organizations.<org>.projects.<project> or users.<user>", where, candidate.Level))
+			problems = append(problems, fmt.Sprintf("%s: level %q is not one; organizations.<org>, organizations.<org>.teams.<team>, organizations.<org>.projects.<project> or organizations.<org>.users.<user>", where, candidate.Level))
 		}
 		key := candidate.Level + "/" + where
 		if seen[key] {

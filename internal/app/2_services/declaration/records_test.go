@@ -116,11 +116,11 @@ func writeTreeFile(t *testing.T, root string, relative string, content string) {
 func scratchTree(t *testing.T) string {
 	t.Helper()
 	clone := t.TempDir()
-	writeTreeFile(t, clone, "declarations/organizations/acme/organization.yaml", validOrganization)
-	writeTreeFile(t, clone, "declarations/organizations/acme/labels/language.yaml", validLabels)
-	writeTreeFile(t, clone, "declarations/organizations/acme/labels/kind.yaml", "category: kind\nlabels:\n  web-app: a web application\n")
-	writeTreeFile(t, clone, "declarations/organizations/acme/teams/web/team.yaml", validTeam)
-	writeTreeFile(t, clone, "declarations/organizations/acme/projects/shop/project.yaml", validProject)
+	writeTreeFile(t, clone, "declarations/organization.yaml", validOrganization)
+	writeTreeFile(t, clone, "declarations/labels/language.yaml", validLabels)
+	writeTreeFile(t, clone, "declarations/labels/kind.yaml", "category: kind\nlabels:\n  web-app: a web application\n")
+	writeTreeFile(t, clone, "declarations/teams/web/team.yaml", validTeam)
+	writeTreeFile(t, clone, "declarations/projects/shop/project.yaml", validProject)
 	writeTreeFile(t, clone, "declarations/users/danidani23/user.yaml", validUser)
 	return clone
 }
@@ -145,7 +145,7 @@ func TestLoadTree(t *testing.T) {
 	})
 	t.Run("a missing team, an unregistered label and a missing category are reported at the project", func(t *testing.T) {
 		clone := scratchTree(t)
-		writeTreeFile(t, clone, "declarations/organizations/acme/projects/shop/project.yaml", strings.Replace(validProject, "teams: [web]\nlabels: [language:go, kind:web-app]", "teams: [mobile]\nlabels: [language:cobol, client:acme]", 1))
+		writeTreeFile(t, clone, "declarations/projects/shop/project.yaml", strings.Replace(validProject, "teams: [web]\nlabels: [language:go, kind:web-app]", "teams: [mobile]\nlabels: [language:cobol, client:acme]", 1))
 		_, problems, err := LoadTree(clone)
 		if err != nil {
 			t.Fatalf("err %v", err)
@@ -160,8 +160,8 @@ func TestLoadTree(t *testing.T) {
 	t.Run("two records with one id and two projects with one repository and path are reported", func(t *testing.T) {
 		clone := scratchTree(t)
 		hash := strings.Repeat("a", 40)
-		writeTreeFile(t, clone, "declarations/organizations/acme/projects/shop/project.yaml", validProject+"fingerprint: ["+hash+"]\n")
-		writeTreeFile(t, clone, "declarations/organizations/acme/projects/store/project.yaml", strings.Replace(validProject, "slug: shop", "slug: store", 1)+"fingerprint: ["+hash+"]\n")
+		writeTreeFile(t, clone, "declarations/projects/shop/project.yaml", validProject+"fingerprint: ["+hash+"]\n")
+		writeTreeFile(t, clone, "declarations/projects/store/project.yaml", strings.Replace(validProject, "slug: shop", "slug: store", 1)+"fingerprint: ["+hash+"]\n")
 		_, problems, _ := LoadTree(clone)
 		text := strings.Join(problemsOf(problems), "\n")
 		if !strings.Contains(text, "is also the id of organizations.acme.projects.shop") || !strings.Contains(text, "the same repository and path as organizations.acme.projects.shop") {
@@ -170,7 +170,7 @@ func TestLoadTree(t *testing.T) {
 	})
 	t.Run("a broken record is reported at its address and left out of the tree", func(t *testing.T) {
 		clone := scratchTree(t)
-		writeTreeFile(t, clone, "declarations/organizations/acme/teams/web/team.yaml", "id: nope\nslug: web\nname: Web\n")
+		writeTreeFile(t, clone, "declarations/teams/web/team.yaml", "id: nope\nslug: web\nname: Web\n")
 		tree, problems, _ := LoadTree(clone)
 		text := strings.Join(problemsOf(problems), "\n")
 		if !strings.Contains(text, "organizations.acme.teams.web: id \"nope\"") || len(tree.Teams) != 0 {
@@ -179,8 +179,8 @@ func TestLoadTree(t *testing.T) {
 	})
 	t.Run("an organisation record with a problem still lets the tree cross-check", func(t *testing.T) {
 		clone := scratchTree(t)
-		writeTreeFile(t, clone, "declarations/organizations/acme/organization.yaml", strings.Replace(validOrganization, "host: github", "host: gitlab", 1))
-		writeTreeFile(t, clone, "declarations/organizations/acme/projects/shop/project.yaml", strings.Replace(validProject, "teams: [web]", "teams: [mobile]", 1))
+		writeTreeFile(t, clone, "declarations/organization.yaml", strings.Replace(validOrganization, "host: github", "host: gitlab", 1))
+		writeTreeFile(t, clone, "declarations/projects/shop/project.yaml", strings.Replace(validProject, "teams: [web]", "teams: [mobile]", 1))
 		_, problems, err := LoadTree(clone)
 		if err != nil {
 			t.Fatalf("err %v", err)

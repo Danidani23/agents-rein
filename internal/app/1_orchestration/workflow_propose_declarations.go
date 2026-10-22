@@ -3,6 +3,7 @@ package orchestration
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -108,8 +109,8 @@ func (orchestrator Orchestrator) ProposeDeclarations(request ProposeRequest) (Pr
 			Name: "writing and pushing the proposal",
 			Do: func() error {
 				var relativePaths []string
-				for _, levelPath := range sortedKeys(prepared.filesByLevel) {
-					written, err := services.Proposals.Write(prepared.orgClonePath, levelPath, prepared.filesByLevel[levelPath])
+				for _, level := range sortedKeys(prepared.filesByLevel) {
+					written, err := services.Proposals.Write(prepared.orgClonePath, levelPathOf(level), prepared.filesByLevel[level])
 					if err != nil {
 						return err
 					}
@@ -206,7 +207,6 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 			group = append(group, distill.Candidate{Kind: candidate.Kind, ID: candidate.ID, Files: files})
 		}
 		distill.Compare(group, catalogue, level)
-		levelPath := strings.ReplaceAll(level, ".", "/")
 		for index, compared := range group {
 			planned := plannedOf(byLevel[level][index], compared)
 			if compared.Verdict == distill.VerdictIdentical {
@@ -214,11 +214,11 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 				continue
 			}
 			prepared.Included = append(prepared.Included, planned)
-			if prepared.filesByLevel[levelPath] == nil {
-				prepared.filesByLevel[levelPath] = map[string]string{}
+			if prepared.filesByLevel[level] == nil {
+				prepared.filesByLevel[level] = map[string]string{}
 			}
 			for relative, content := range compared.Files {
-				prepared.filesByLevel[levelPath][relative] = content
+				prepared.filesByLevel[level][relative] = content
 			}
 		}
 	}
@@ -228,20 +228,25 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 	if len(prepared.Included) == 0 {
 		return preparedProposal{}, refusal.New("nothing to propose: every included candidate is identical to a declaration the organisation has")
 	}
-	err = lintCandidates(prepared.filesByLevel)
+	byPath := map[string]map[string]string{}
+	for level, files := range prepared.filesByLevel {
+		byPath[levelPathOf(level)] = files
+	}
+	err = lintCandidates(byPath)
 	if err != nil {
 		return preparedProposal{}, err
 	}
-	for _, levelPath := range sortedKeys(prepared.filesByLevel) {
+	for _, level := range sortedKeys(prepared.filesByLevel) {
+		levelPath := levelPathOf(level)
 		if !strings.HasPrefix(levelPath, address.Users+"/") {
 			continue
 		}
-		userRecord, err := userRecordIfMissing(orgClonePath, levelPath, strings.TrimPrefix(levelPath, address.Users+"/"), organization, services)
+		userRecord, err := userRecordIfMissing(orgClonePath, levelPath, path.Base(levelPath), organization, services)
 		if err != nil {
 			return preparedProposal{}, err
 		}
 		for relative, content := range userRecord {
-			prepared.filesByLevel[levelPath][relative] = content
+			prepared.filesByLevel[level][relative] = content
 		}
 	}
 	return prepared, nil
@@ -276,7 +281,7 @@ func loadProposal(services Services, request ProposeRequest) (document proposal.
 		if err != nil {
 			return proposal.Proposal{}, false, err
 		}
-		level = address.Users + "." + userSlugOf(organization)
+		level = userLevelOf(organization)
 	} else {
 		parsed, err := address.Parse(level)
 		if err != nil || parsed.IsDeclaration() {
@@ -318,22 +323,23 @@ func levelIDOf(level string) string {
 func proposalTitle(prepared preparedProposal) string {
 	levels := sortedKeys(prepared.filesByLevel)
 	if len(levels) == 1 {
-		return fmt.Sprintf("Propose %d declarations to %s", len(prepared.Included), strings.ReplaceAll(levels[0], "/", "."))
+		return fmt.Sprintf("Propose %d declarations to %s", len(prepared.Included), levels[0])
 	}
 	return fmt.Sprintf("Propose %d declarations to %d levels of %s", len(prepared.Included), len(levels), prepared.Organization)
 }
 
-// organizationOfLevel is the organisation a level belongs to: the one in
-// its address, or for a user's level the one named or active.
+// organizationOfLevel is the organisation a level belongs to, the first
+// pair of its address; a different organisation named is a refusal.
 func organizationOfLevel(services Services, level string, named string) (machine.OrganizationRef, string, error) {
-	if strings.HasPrefix(level, address.Organizations+".") {
-		slug := strings.Split(level, ".")[1]
-		if named != "" && named != slug {
-			return machine.OrganizationRef{}, "", refusal.New(fmt.Sprintf("the level %s belongs to %s, not %s", level, slug, named))
-		}
-		return services.Organizations.Lookup(slug)
+	parsed, err := address.Parse(level)
+	if err != nil {
+		return machine.OrganizationRef{}, "", refusal.New(err.Error())
 	}
-	return resolveOrganization(services, named)
+	slug := parsed.OrganizationSlug()
+	if named != "" && named != slug {
+		return machine.OrganizationRef{}, "", refusal.New(fmt.Sprintf("the level %s belongs to %s, not %s", level, slug, named))
+	}
+	return services.Organizations.Lookup(slug)
 }
 
 // groupCandidates turns files into one candidate per declaration, so the
@@ -416,7 +422,7 @@ func userRecordIfMissing(orgClonePath string, levelPath string, userSlug string,
 	}
 	who := ports.Identity{Login: organization.Login, Slug: userSlugOf(organization)}
 	if who.Slug != userSlug {
-		return nil, refusal.New(fmt.Sprintf("the level users.%s is not yours (%s); a user's level is proposed by that user", userSlug, who.Slug))
+		return nil, refusal.New(fmt.Sprintf("the level %s is %s's; a user's level is proposed by that user", levelPath, userSlug))
 	}
 	_, content, err := scaffold.UserRecord(who, services.Clock())
 	if err != nil {

@@ -89,9 +89,13 @@ const (
 // frontmatter for rules, from the metadata for skills.
 func LoadDeclarations(orgClonePath string) ([]Declaration, error) {
 	base := filepath.Join(orgClonePath, "declarations")
+	organization, err := declaration.FindOrganization(orgClonePath)
+	if err != nil {
+		return nil, err
+	}
 	byKey := map[string]*Declaration{}
 	var keys []string
-	err := filepath.WalkDir(base, func(filePath string, entry fs.DirEntry, walkErr error) error {
+	err = filepath.WalkDir(base, func(filePath string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			if os.IsNotExist(walkErr) && filePath == base {
 				return filepath.SkipDir
@@ -106,7 +110,7 @@ func LoadDeclarations(orgClonePath string) ([]Declaration, error) {
 			return err
 		}
 		segments := strings.Split(filepath.ToSlash(relative), "/")
-		for index := len(segments) - 2; index >= 1; index-- {
+		for index := len(segments) - 2; index >= 0; index-- {
 			collection := segments[index]
 			folderKind := collection == address.Skills || collection == address.Hooks
 			fileKind := collection == address.Rules || collection == address.MCPServers || collection == address.Permissions
@@ -134,7 +138,7 @@ func LoadDeclarations(orgClonePath string) ([]Declaration, error) {
 				inside = segments[len(segments)-1]
 				key = path.Join(levelPath, collection, id)
 			}
-			level, err := address.FromPath(levelPath)
+			level, err := address.FromPath(levelPath, organization.Slug)
 			if err != nil {
 				return nil
 			}
@@ -204,7 +208,7 @@ func Resolve(declarations []Declaration, context Context) Result {
 	}
 	ranks[organization+".projects."+context.ProjectSlug] = rankProject
 	if context.UserSlug != "" {
-		ranks[address.Users+"."+context.UserSlug] = rankUser
+		ranks[organization+"."+address.Users+"."+context.UserSlug] = rankUser
 	}
 	labels := map[string]bool{}
 	for _, label := range context.Labels {

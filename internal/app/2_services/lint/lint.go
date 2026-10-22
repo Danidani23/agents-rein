@@ -308,7 +308,7 @@ func (state *run) lintRecord(filePath string, kind fileKind) {
 	var problems []declaration.Problem
 	switch kind {
 	case kindOrganization:
-		_, problems = declaration.ParseOrganization(folder, content)
+		_, problems = declaration.ParseOrganization(content)
 	case kindTeam:
 		_, problems = declaration.ParseTeam(folder, content)
 	case kindProject:
@@ -323,7 +323,7 @@ func (state *run) lintRecord(filePath string, kind fileKind) {
 		state.add(filePath, addressText, problem)
 	}
 	if kind == kindOrganization {
-		state.trees = append(state.trees, filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filePath)))))
+		state.trees = append(state.trees, filepath.Dir(filepath.Dir(filePath)))
 	}
 }
 
@@ -381,20 +381,35 @@ func recordAddress(absolutePath string, kind fileKind) (text string, problem *de
 		return "", nil
 	}
 	inside := segments[start+1:]
-	if inside[0] != address.Organizations && inside[0] != address.Users {
+	if !address.IsOrganizationCollection(inside[0]) && inside[0] != "organization.yaml" {
 		return "", nil
 	}
+	organizationSlug := organizationSlugOf(strings.Join(segments[:start+1], "/"))
 	var relative string
 	if kind == kindLabels {
 		relative = path.Join(append(inside[:len(inside)-1], strings.TrimSuffix(inside[len(inside)-1], ".yaml"))...)
 	} else {
 		relative = path.Join(inside[:len(inside)-1]...)
 	}
-	parsed, err := address.FromPath(relative)
+	parsed, err := address.FromPath(relative, organizationSlug)
 	if err != nil {
 		return "", &declaration.Problem{Severity: declaration.SeverityError, Message: "path does not form an address: " + err.Error()}
 	}
 	return parsed.String(), nil
+}
+
+// organizationSlugOf reads the organisation's slug from the record at the
+// root of a declarations folder; a tree without one, such as the scratch
+// tree of a proposal, is addressed under "organization".
+func organizationSlugOf(declarationsFolder string) string {
+	content, err := os.ReadFile(filepath.Join(filepath.FromSlash(declarationsFolder), "organization.yaml"))
+	if err == nil {
+		organization, _ := declaration.ParseOrganization(content)
+		if address.IsSlug(organization.Slug) {
+			return organization.Slug
+		}
+	}
+	return "organization"
 }
 
 // reportDuplicateSkills warns about skills that share a name across the run:
@@ -435,9 +450,10 @@ func addressOf(absolutePath string, kind fileKind) (text string, problem *declar
 		return "", nil
 	}
 	inside := segments[start+1:]
-	if inside[0] != address.Organizations && inside[0] != address.Users {
+	if !address.IsOrganizationCollection(inside[0]) {
 		return "", nil
 	}
+	organizationSlug := organizationSlugOf(strings.Join(segments[:start+1], "/"))
 	var relative string
 	switch kind {
 	case kindSkill, kindHook:
@@ -448,7 +464,7 @@ func addressOf(absolutePath string, kind fileKind) (text string, problem *declar
 	default:
 		return "", nil
 	}
-	parsed, err := address.FromPath(relative)
+	parsed, err := address.FromPath(relative, organizationSlug)
 	if err != nil {
 		return "", &declaration.Problem{Severity: declaration.SeverityError, Message: "path does not form an address: " + err.Error()}
 	}

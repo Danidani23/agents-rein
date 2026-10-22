@@ -42,7 +42,7 @@ func TestFilesMakeAnOrgRepositoryTheLintAccepts(t *testing.T) {
 	}
 	codeowners, _ := os.ReadFile(filepath.Join(root, "CODEOWNERS"))
 	readme, _ := os.ReadFile(filepath.Join(root, "README.md"))
-	record, _ := os.ReadFile(filepath.Join(root, "declarations", "organizations", "acme", "organization.yaml"))
+	record, _ := os.ReadFile(filepath.Join(root, "declarations", "organization.yaml"))
 	if !strings.Contains(string(codeowners), "* @Danidani23") || !strings.HasPrefix(string(readme), "# Acme") || !strings.Contains(string(record), "host: github") || !strings.HasPrefix(string(record), "# Written by rein org create") {
 		t.Fatalf("codeowners %q readme %q record %q", codeowners, readme, record)
 	}
@@ -53,12 +53,12 @@ func TestTeamAndProjectRecordsPassTheLint(t *testing.T) {
 	files, _ := Files(organization, "Danidani23")
 	root := t.TempDir()
 	_ = Write(root, files)
-	teamPath, teamContent, err := TeamRecord("acme", declaration.Team{ID: NewID(), Slug: "web", Name: "Web", Description: "the web team"})
-	if err != nil || teamPath != "declarations/organizations/acme/teams/web/team.yaml" {
+	teamPath, teamContent, err := TeamRecord(declaration.Team{ID: NewID(), Slug: "web", Name: "Web", Description: "the web team"})
+	if err != nil || teamPath != "declarations/teams/web/team.yaml" {
 		t.Fatalf("team %q err %v", teamPath, err)
 	}
-	projectPath, projectContent, err := ProjectRecord("acme", declaration.Project{ID: NewID(), Slug: "shop", Name: "Shop", Teams: []string{"web"}, Labels: []string{"language:go", "kind:web-app"}, Path: "services/shop"})
-	if err != nil || projectPath != "declarations/organizations/acme/projects/shop/project.yaml" {
+	projectPath, projectContent, err := ProjectRecord(declaration.Project{ID: NewID(), Slug: "shop", Name: "Shop", Teams: []string{"web"}, Labels: []string{"language:go", "kind:web-app"}, Path: "services/shop"})
+	if err != nil || projectPath != "declarations/projects/shop/project.yaml" {
 		t.Fatalf("project %q err %v", projectPath, err)
 	}
 	_ = Write(root, map[string]string{teamPath: teamContent, projectPath: projectContent})

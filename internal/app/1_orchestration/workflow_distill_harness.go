@@ -204,7 +204,7 @@ func placeJudged(services Services, orgClonePath string, organization machine.Or
 		case "organization":
 			target = address.Organizations + "." + organization.Slug
 		case "user":
-			target = address.Users + "." + userSlugOf(organization)
+			target = userLevelOf(organization)
 		case "team":
 			teams := teamsOfLevel(services, orgClonePath, level)
 			switch len(teams) {
@@ -270,7 +270,7 @@ func distillSources(orchestrator Orchestrator, request DistillRequest) (level st
 				return "", machine.OrganizationRef{}, nil, err
 			}
 		}
-		return "users." + userSlugOf(organization), organization, stored, nil
+		return userLevelOf(organization), organization, stored, nil
 	}
 	var address string
 	if request.Project != "" {

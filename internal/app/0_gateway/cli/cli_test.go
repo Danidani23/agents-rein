@@ -490,11 +490,11 @@ func TestTeamAndProjectCreate(t *testing.T) {
 		fixture := newHarness(t)
 		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
 		code, out, errOut := fixture.run("team", "create", "--name", "Web", "--yes")
-		if code != ExitWorked || !strings.Contains(out, "created team web (Web) in acme") || !strings.Contains(out, "record: declarations/organizations/acme/teams/web/team.yaml, pushed to main") {
+		if code != ExitWorked || !strings.Contains(out, "created team web (Web) in acme") || !strings.Contains(out, "record: declarations/teams/web/team.yaml, pushed to main") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
 		code, out, errOut = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--label", "language:go", "--yes")
-		if code != ExitWorked || !strings.Contains(out, "created project shop (Shop) in acme for the team(s) web") || !strings.Contains(out, "record: declarations/organizations/acme/projects/shop/project.yaml, pushed to main") {
+		if code != ExitWorked || !strings.Contains(out, "created project shop (Shop) in acme for the team(s) web") || !strings.Contains(out, "record: declarations/projects/shop/project.yaml, pushed to main") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
 	})
@@ -671,7 +671,7 @@ func TestProposePendingFile(t *testing.T) {
 	_, _, _ = orchestrator.Snapshots.Take("claude-code", "organizations.acme.projects.shop", home, []string{"CLAUDE.md"})
 	fixture.judge = &fake.Judge{Answers: []string{`{"version":1,"candidates":[{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"user","reason":"personal"}]}`}}
 	code, out, errOut := fixture.run("distill", "--project", "shop")
-	if code != ExitWorked || !strings.Contains(out, "judge: new; lift to users.danidani23: personal") {
+	if code != ExitWorked || !strings.Contains(out, "judge: new; lift to organizations.acme.users.danidani23: personal") {
 		t.Fatalf("distill: code %d out %q err %q", code, out, errOut)
 	}
 	file := ""
@@ -681,7 +681,7 @@ func TestProposePendingFile(t *testing.T) {
 		}
 	}
 	code, out, errOut = fixture.runInteractive("\n", "propose", file)
-	if code != ExitWorked || !strings.Contains(out, "  new        rules/instructions  at users.danidani23\n") || !strings.Contains(out, "proposed 1 declarations on branch rein/propose-shop-") || !strings.Contains(out, "the proposal moved to "+filepath.Join(fixture.home, "proposals", "acme")) {
+	if code != ExitWorked || !strings.Contains(out, "  new        rules/instructions  at organizations.acme.users.danidani23\n") || !strings.Contains(out, "proposed 1 declarations on branch rein/propose-shop-") || !strings.Contains(out, "the proposal moved to "+filepath.Join(fixture.home, "proposals", "acme")) {
 		t.Fatalf("propose: code %d out %q err %q", code, out, errOut)
 	}
 	code, _, errOut = fixture.run("propose", file, "--yes")
@@ -738,15 +738,15 @@ func TestResolve(t *testing.T) {
 		_ = os.MkdirAll(filepath.Dir(target), 0o755)
 		_ = os.WriteFile(target, []byte(content), 0o644)
 	}
-	write("organizations/acme/rules/style.md", "---\nenforcement: required\n---\nStyle.\n")
-	write("organizations/acme/teams/web/rules/testing.md", "Web tests.\n")
+	write("rules/style.md", "---\nenforcement: required\n---\nStyle.\n")
+	write("teams/web/rules/testing.md", "Web tests.\n")
 	code, out, _ = fixture.run("resolve", "--project", "shop")
 	for _, expected := range []string{"organizations.acme\n  rules        required  style", "organizations.acme.teams.web\n  rules        default   testing"} {
 		if code != ExitWorked || !strings.Contains(out, expected) {
 			t.Fatalf("missing %q: code %d out %q", expected, code, out)
 		}
 	}
-	write("organizations/acme/teams/web/rules/style.md", "Ours.\n")
+	write("teams/web/rules/style.md", "Ours.\n")
 	code, _, errOut := fixture.run("resolve", "--project", "shop")
 	if code != ExitRefused || !strings.Contains(errOut, "problem  organizations.acme.teams.web.rules.style: redeclares") || !strings.Contains(errOut, "sync would refuse") {
 		t.Fatalf("code %d err %q", code, errOut)
@@ -765,7 +765,7 @@ func TestSync(t *testing.T) {
 	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
 	orchestrator, _ := fixture.orchestrate()
 	_, orgClonePath, _ := orchestrator.Organizations.Lookup("acme")
-	rule := filepath.Join(orgClonePath, "declarations", "organizations", "acme", "rules", "style.md")
+	rule := filepath.Join(orgClonePath, "declarations", "rules", "style.md")
 	_ = os.MkdirAll(filepath.Dir(rule), 0o755)
 	_ = os.WriteFile(rule, []byte("House style.\n"), 0o644)
 	folder, _ := filepath.EvalSymlinks(t.TempDir())
@@ -874,7 +874,7 @@ func TestProjectEditAndLabelRegistry(t *testing.T) {
 		t.Fatalf("edit dropping the required label: code %d err %q", code, errOut)
 	}
 	code, out, errOut := fixture.run("project", "edit", "shop", "--label", "kind:cli", "--label", "language:go", "--yes")
-	if code != ExitWorked || !strings.Contains(out, "This will change the project shop in acme: description \"\", teams web, labels kind:cli, language:go, path .") || !strings.Contains(out, "changed project shop (Shop) in acme: labels") || !strings.Contains(out, "record: declarations/organizations/acme/projects/shop/project.yaml, pushed to main") {
+	if code != ExitWorked || !strings.Contains(out, "This will change the project shop in acme: description \"\", teams web, labels kind:cli, language:go, path .") || !strings.Contains(out, "changed project shop (Shop) in acme: labels") || !strings.Contains(out, "record: declarations/projects/shop/project.yaml, pushed to main") {
 		t.Fatalf("edit with flags: code %d out %q err %q", code, out, errOut)
 	}
 	code, _, errOut = fixture.run("project", "edit", "shop", "--label", "kind:cli", "--label", "language:go", "--yes")
@@ -891,7 +891,7 @@ func TestProjectEditAndLabelRegistry(t *testing.T) {
 		t.Fatalf("list: code %d out %q err %q", code, out, errOut)
 	}
 	code, out, errOut = fixture.run("label", "add", "kind:worker", "--description", "a background worker", "--yes")
-	if code != ExitWorked || !strings.Contains(out, "This will add kind:worker (a background worker) to the registry of acme") || !strings.Contains(out, "added kind:worker to the registry of acme") || !strings.Contains(out, "registry: declarations/organizations/acme/labels/kind.yaml, pushed to main") {
+	if code != ExitWorked || !strings.Contains(out, "This will add kind:worker (a background worker) to the registry of acme") || !strings.Contains(out, "added kind:worker to the registry of acme") || !strings.Contains(out, "registry: declarations/labels/kind.yaml, pushed to main") {
 		t.Fatalf("add: code %d out %q err %q", code, out, errOut)
 	}
 	code, _, errOut = fixture.run("label", "add", "kind:worker", "--yes")
@@ -987,29 +987,29 @@ func TestDeclarationCommands(t *testing.T) {
 		t.Fatalf("empty list: code %d out %q", code, out)
 	}
 	root := filepath.Join(fixture.state.Current.OrgClonePaths[fixture.state.Current.Organizations[0].ID], "declarations")
-	for relative, content := range map[string]string{"users/danidani23/user.yaml": "slug: danidani23\ngithub: Danidani23\nname: Dani\n", "users/danidani23/skills/commit/SKILL.md": "---\nname: commit\ndescription: Draft commits.\n---\n\n# Commit\n", "organizations/acme/rules/style.md": "---\napplyIf:\n  - language:go\n---\n\nHouse style.\n"} {
+	for relative, content := range map[string]string{"users/danidani23/user.yaml": "slug: danidani23\ngithub: Danidani23\nname: Dani\n", "users/danidani23/skills/commit/SKILL.md": "---\nname: commit\ndescription: Draft commits.\n---\n\n# Commit\n", "rules/style.md": "---\napplyIf:\n  - language:go\n---\n\nHouse style.\n"} {
 		target := filepath.Join(root, filepath.FromSlash(relative))
 		_ = os.MkdirAll(filepath.Dir(target), 0o755)
 		_ = os.WriteFile(target, []byte(content), 0o644)
 	}
 	_ = fixture.repository.Push(ports.RemoteAccess{}, filepath.Dir(root))
 	code, out, errOut := fixture.run("declaration", "list")
-	if code != ExitWorked || !strings.Contains(out, "ADDRESS                         APPLY IF     DO NOT APPLY IF  ENFORCEMENT\n") || !strings.Contains(out, "organizations.acme.rules.style  language:go                   default\n") || !strings.Contains(out, "users.danidani23.skills.commit                                default\n") {
+	if code != ExitWorked || !strings.Contains(out, "ADDRESS                                            APPLY IF     DO NOT APPLY IF  ENFORCEMENT\n") || !strings.Contains(out, "organizations.acme.rules.style                     language:go                   default\n") || !strings.Contains(out, "organizations.acme.users.danidani23.skills.commit                                default\n") {
 		t.Fatalf("list: code %d out %q err %q", code, out, errOut)
 	}
-	code, _, errOut = fixture.run("declaration", "edit", "users.danidani23.skills.commit")
+	code, _, errOut = fixture.run("declaration", "edit", "organizations.acme.users.danidani23.skills.commit")
 	if code != ExitRefused || !strings.Contains(errOut, "nothing to change; pass --level") {
 		t.Fatalf("edit without flags: code %d err %q", code, errOut)
 	}
-	code, out, errOut = fixture.run("declaration", "edit", "users.danidani23.skills.commit", "--level", "organizations.acme", "--apply-if", "language:go", "--yes")
-	for _, expected := range []string{"This will open a pull request on the org repository of acme that puts users.danidani23.skills.commit at organizations.acme with applyIf language:go, default.", "changed users.danidani23.skills.commit: level, applyIf", "its address after the merge: organizations.acme.skills.commit", "pull request: https://github.com/Danidani23/acme-agent-settings/pull/1", "next: review and merge it"} {
+	code, out, errOut = fixture.run("declaration", "edit", "organizations.acme.users.danidani23.skills.commit", "--level", "organizations.acme", "--apply-if", "language:go", "--yes")
+	for _, expected := range []string{"This will open a pull request on the org repository of acme that puts organizations.acme.users.danidani23.skills.commit at organizations.acme with applyIf language:go, default.", "changed organizations.acme.users.danidani23.skills.commit: level, applyIf", "its address after the merge: organizations.acme.skills.commit", "pull request: https://github.com/Danidani23/acme-agent-settings/pull/1", "next: review and merge it"} {
 		if code != ExitWorked || !strings.Contains(out, expected) {
 			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 		}
 	}
 	// level kept, applyIf cleared with Enter? no: Enter keeps the default; the answer "" on a multi-select means none only without a default, so type the new labels
 	code, out, errOut = fixture.runInteractive("\nlanguage:go,language:rust\n\n2\n\n", "declaration", "edit", "organizations.acme.rules.style")
-	if code != ExitWorked || !strings.Contains(out, "1) organizations.acme  \x1b[2;3mthe whole organisation\x1b[0m  \x1b[2;3m(default)") || !strings.Contains(out, "2) organizations.acme.teams.web  \x1b[2;3mthe team Web") || !strings.Contains(out, "3) users.danidani23  \x1b[2;3myour own user level") || !strings.Contains(out, "Choose any, or none\x1b[0m [language:go]") || !strings.Contains(out, "1) default") || !strings.Contains(out, "puts organizations.acme.rules.style at organizations.acme with applyIf language:go language:rust, required") || !strings.Contains(out, "changed organizations.acme.rules.style: applyIf, enforcement") {
+	if code != ExitWorked || !strings.Contains(out, "1) organizations.acme  \x1b[2;3mthe whole organisation\x1b[0m  \x1b[2;3m(default)") || !strings.Contains(out, "2) organizations.acme.teams.web  \x1b[2;3mthe team Web") || !strings.Contains(out, "3) organizations.acme.users.danidani23  \x1b[2;3myour own user level") || !strings.Contains(out, "Choose any, or none\x1b[0m [language:go]") || !strings.Contains(out, "1) default") || !strings.Contains(out, "puts organizations.acme.rules.style at organizations.acme with applyIf language:go language:rust, required") || !strings.Contains(out, "changed organizations.acme.rules.style: applyIf, enforcement") {
 		t.Fatalf("interactive edit: code %d out %q err %q", code, out, errOut)
 	}
 	code, _, errOut = fixture.run("declaration", "edit", "organizations.acme.rules.style", "--apply-if", "", "--yes")
@@ -1044,5 +1044,41 @@ func TestInterruptReleasesTheLock(t *testing.T) {
 	release()
 	if fixture.lock.Released != 1 {
 		t.Fatalf("released twice: %d", fixture.lock.Released)
+	}
+}
+
+func TestTeamAndProjectListAndTeamEdit(t *testing.T) {
+	fixture := newHarness(t)
+	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+	code, out, _ := fixture.run("team", "list")
+	if code != ExitWorked || !strings.Contains(out, "acme has no teams yet") {
+		t.Fatalf("no teams: code %d out %q", code, out)
+	}
+	_, _, _ = fixture.run("team", "create", "--name", "Web", "--description", "the web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--label", "language:go", "--yes")
+	code, out, errOut := fixture.run("team", "list")
+	if code != ExitWorked || !strings.Contains(out, "SLUG  NAME  DESCRIPTION  PROJECTS\n") || !strings.Contains(out, "web   Web   the web      shop\n") {
+		t.Fatalf("team list: code %d out %q err %q", code, out, errOut)
+	}
+	code, out, errOut = fixture.run("project", "list")
+	if code != ExitWorked || !strings.Contains(out, "SLUG  NAME  TEAMS  LABELS                    PATH  DESCRIPTION\n") || !strings.Contains(out, "shop  Shop  web    kind:service language:go  .\n") {
+		t.Fatalf("project list: code %d out %q err %q", code, out, errOut)
+	}
+	code, _, errOut = fixture.run("team", "edit", "web")
+	if code != ExitRefused || !strings.Contains(errOut, "nothing to change; pass --description") {
+		t.Fatalf("edit off a terminal: code %d err %q", code, errOut)
+	}
+	code, out, errOut = fixture.run("team", "edit", "web", "--description", "the web shop", "--yes")
+	if code != ExitWorked || !strings.Contains(out, "This will change the description of team web in acme to \"the web shop\"") || !strings.Contains(out, "changed team web (Web) in acme: description") || !strings.Contains(out, "record: declarations/teams/web/team.yaml, pushed to main") {
+		t.Fatalf("edit with the flag: code %d out %q err %q", code, out, errOut)
+	}
+	// the one team is the default; the description typed; confirm
+	code, out, errOut = fixture.runInteractive("\nthe shop on the web\n\n", "team", "edit")
+	if code != ExitWorked || !strings.Contains(out, "1) web  \x1b[2;3mWeb\x1b[0m  \x1b[2;3m(default)") || !strings.Contains(out, "Description\x1b[0m [the web shop]") || !strings.Contains(out, "changed team web (Web) in acme: description") {
+		t.Fatalf("interactive edit: code %d out %q err %q", code, out, errOut)
+	}
+	code, _, errOut = fixture.run("team", "edit", "web", "--description", "the shop on the web", "--yes")
+	if code != ExitRefused || !strings.Contains(errOut, "nothing changed on team web") {
+		t.Fatalf("no change: code %d err %q", code, errOut)
 	}
 }

@@ -41,7 +41,7 @@ those files; it is proposed to the org repository and comes back at the next syn
 3. ` + "`rein propose <folder> --level <address>`" + ` lints it, compares it with what the organisation
    has and opens the pull request. The address is ` + "`organizations.<org>`" + `,
    ` + "`organizations.<org>.teams.<team>`" + `, ` + "`organizations.<org>.projects.<project>`" + ` or
-   ` + "`users.<user>`" + `.
+   ` + "`organizations.<org>.users.<user>`" + `.
 4. A harness that was in a repository before rein is distilled: ` + "`rein distill`" + ` writes a
    proposal file under ` + "`.rein/proposals/`" + ` with every candidate, its level and the judge's
    reason; a person reviews and edits it; ` + "`rein propose`" + ` opens the pull request from it.

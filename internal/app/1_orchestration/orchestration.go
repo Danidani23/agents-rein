@@ -8,6 +8,7 @@
 package orchestration
 
 import (
+	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
 	"time"
 
 	"strings"
@@ -87,6 +88,21 @@ func accessOf(organization machine.OrganizationRef) ports.RemoteAccess {
 // form of the login that acts on it (D8).
 func userSlugOf(organization machine.OrganizationRef) string {
 	return strings.ToLower(organization.Login)
+}
+
+// userLevelOf is the acting user's own level in an organisation.
+func userLevelOf(organization machine.OrganizationRef) string {
+	return "organizations." + organization.Slug + ".users." + userSlugOf(organization)
+}
+
+// levelPathOf is a level's folder under declarations/, "" for the
+// organisation; a level that does not parse gives its dotted form.
+func levelPathOf(level string) string {
+	levelPath, err := address.LevelPath(level)
+	if err != nil {
+		return strings.ReplaceAll(level, ".", "/")
+	}
+	return levelPath
 }
 
 // resolveOrganization is the organisation a command works in: the one named,

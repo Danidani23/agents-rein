@@ -56,7 +56,7 @@ func TestParseException(t *testing.T) {
 			t.Fatalf("missing %q in %q", expected, joined)
 		}
 	}
-	_, problems = ParseException("user", []byte("declaration: organizations.acme.rules.x\ngrantee: users.dani\nreason: why\n"), now)
+	_, problems = ParseException("user", []byte("declaration: organizations.acme.rules.x\ngrantee: organizations.acme.users.dani\nreason: why\n"), now)
 	if len(problems) != 1 || !strings.Contains(problems[0].Message, "not a team or a project") {
 		t.Fatalf("problems %v", problems)
 	}

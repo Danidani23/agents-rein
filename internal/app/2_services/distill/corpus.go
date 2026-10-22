@@ -59,10 +59,14 @@ func LoadCorpus(orgClonePath string, level string, teams []string, userSlug stri
 			resolved[organizationLevel+".teams."+team] = true
 		}
 	}
-	if userSlug != "" {
-		resolved["users."+userSlug] = true
+	if userSlug != "" && organizationLevel != "" {
+		resolved[organizationLevel+".users."+userSlug] = true
 	}
-	passages, err := readPassages(orgClonePath)
+	organizationSlug := ""
+	if len(segments) >= 2 {
+		organizationSlug = segments[1]
+	}
+	passages, err := readPassages(orgClonePath, organizationSlug)
 	if err != nil {
 		return Corpus{}, err
 	}
@@ -90,7 +94,7 @@ func LoadCorpus(orgClonePath string, level string, teams []string, userSlug stri
 }
 
 // readPassages walks the declarations of a clone.
-func readPassages(orgClonePath string) ([]Passage, error) {
+func readPassages(orgClonePath string, organizationSlug string) ([]Passage, error) {
 	catalogueFiles := map[string]map[string]string{}
 	catalogueLevels := map[string]string{}
 	catalogueKinds := map[string]string{}
@@ -110,7 +114,7 @@ func readPassages(orgClonePath string) ([]Passage, error) {
 			return err
 		}
 		segments := strings.Split(filepath.ToSlash(relative), "/")
-		for index := len(segments) - 2; index >= 1; index-- {
+		for index := len(segments) - 2; index >= 0; index-- {
 			collection := segments[index]
 			if collection != address.Rules && collection != address.Skills && collection != address.MCPServers && collection != address.Permissions && collection != address.Hooks {
 				continue
@@ -154,7 +158,7 @@ func readPassages(orgClonePath string) ([]Passage, error) {
 	sort.Strings(keys)
 	var passages []Passage
 	for _, key := range keys {
-		level, err := address.FromPath(catalogueLevels[key])
+		level, err := address.FromPath(catalogueLevels[key], organizationSlug)
 		if err != nil {
 			continue
 		}

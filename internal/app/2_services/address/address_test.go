@@ -19,7 +19,7 @@ func TestParse(t *testing.T) {
 		}
 	})
 	t.Run("a user's rule parses", func(t *testing.T) {
-		_, err := Parse("users.danielmolnar.rules.communication")
+		_, err := Parse("organizations.dani.users.danielmolnar.rules.communication")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -76,7 +76,7 @@ func TestParse(t *testing.T) {
 
 func TestFromPath(t *testing.T) {
 	t.Run("a directory path becomes an address", func(t *testing.T) {
-		parsed, err := FromPath("organizations/dani/projects/w2going/skills/deploy")
+		parsed, err := FromPath("projects/w2going/skills/deploy", "dani")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -85,7 +85,7 @@ func TestFromPath(t *testing.T) {
 		}
 	})
 	t.Run("a path that is not pairs is refused", func(t *testing.T) {
-		_, err := FromPath("organizations/dani/skills")
+		_, err := FromPath("skills", "dani")
 		if err == nil {
 			t.Fatalf("expected an error")
 		}

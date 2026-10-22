@@ -51,7 +51,7 @@ func Files(organization declaration.Organization, codeowner string) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	organizationFolder := path.Join("declarations", "organizations", organization.Slug)
+	organizationFolder := "declarations"
 	files[path.Join(organizationFolder, "organization.yaml")] = header + string(record)
 	for _, category := range declaration.SeededLabels() {
 		content, err := yaml.Marshal(category)
@@ -71,22 +71,22 @@ func Files(organization declaration.Organization, codeowner string) (map[string]
 
 // TeamRecord is the file of a team record, by path relative to the org
 // repository's root.
-func TeamRecord(organizationSlug string, team declaration.Team) (relativePath string, content string, err error) {
+func TeamRecord(team declaration.Team) (relativePath string, content string, err error) {
 	record, err := yaml.Marshal(team)
 	if err != nil {
 		return "", "", err
 	}
-	return path.Join("declarations", "organizations", organizationSlug, "teams", team.Slug, "team.yaml"), header + string(record), nil
+	return path.Join("declarations", "teams", team.Slug, "team.yaml"), header + string(record), nil
 }
 
 // ProjectRecord is the file of a project record, by path relative to the
 // org repository's root.
-func ProjectRecord(organizationSlug string, project declaration.Project) (relativePath string, content string, err error) {
+func ProjectRecord(project declaration.Project) (relativePath string, content string, err error) {
 	record, err := yaml.Marshal(project)
 	if err != nil {
 		return "", "", err
 	}
-	return path.Join("declarations", "organizations", organizationSlug, "projects", project.Slug, "project.yaml"), header + string(record), nil
+	return path.Join("declarations", "projects", project.Slug, "project.yaml"), header + string(record), nil
 }
 
 // UserRecord is the file of a user record, by path relative to the org
@@ -118,10 +118,10 @@ func Write(root string, files map[string]string) error {
 
 // LabelCategoryRecord is one file of the label registry, as the registry
 // commands write it.
-func LabelCategoryRecord(organizationSlug string, category declaration.LabelCategory) (relativePath string, content string, err error) {
+func LabelCategoryRecord(category declaration.LabelCategory) (relativePath string, content string, err error) {
 	record, err := yaml.Marshal(category)
 	if err != nil {
 		return "", "", err
 	}
-	return path.Join("declarations", "organizations", organizationSlug, "labels", category.Category+".yaml"), header + string(record), nil
+	return path.Join("declarations", "labels", category.Category+".yaml"), header + string(record), nil
 }

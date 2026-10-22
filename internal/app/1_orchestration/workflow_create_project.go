@@ -45,7 +45,7 @@ func (orchestrator Orchestrator) CreateProject(request CreateProjectRequest) (Cr
 		return CreateProjectResult{}, refusal.New("the name must contain at least one letter or digit")
 	}
 	project := declaration.Project{ID: scaffold.NewID(), Slug: slug, Name: request.Name, Description: request.Description, Teams: request.Teams, Labels: request.Labels, Path: request.Path, Fingerprint: request.Fingerprint, CreatedAt: services.Clock()}
-	relativePath, content, err := scaffold.ProjectRecord(organization.Slug, project)
+	relativePath, content, err := scaffold.ProjectRecord(project)
 	if err != nil {
 		return CreateProjectResult{}, err
 	}

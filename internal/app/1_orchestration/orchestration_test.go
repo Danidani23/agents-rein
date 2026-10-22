@@ -363,7 +363,7 @@ func TestCreateOrganization(t *testing.T) {
 		if len(fixture.host.Created) != 1 || !fixture.host.Created[0].Private || fixture.host.Created[0].Description != "Agent settings of Acme" || len(fixture.host.ProtectedBranches) != 1 {
 			t.Fatalf("host %+v", fixture.host)
 		}
-		for _, relative := range []string{"CODEOWNERS", "README.md", filepath.Join("declarations", "organizations", "acme", "organization.yaml"), filepath.Join("declarations", "organizations", "acme", "labels", "language.yaml")} {
+		for _, relative := range []string{"CODEOWNERS", "README.md", filepath.Join("declarations", "organization.yaml"), filepath.Join("declarations", "labels", "language.yaml")} {
 			_, err = os.Stat(filepath.Join(result.Connected.OrgClonePath, relative))
 			if err != nil {
 				t.Fatalf("%s: %v", relative, err)
@@ -447,7 +447,7 @@ func TestCreateTeam(t *testing.T) {
 	t.Run("writes the record, commits and pushes it; the remote has it", func(t *testing.T) {
 		fixture, created := withOrganization(t)
 		result, err := fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "Web Team", Description: "the web"})
-		if err != nil || result.Slug != "web-team" || result.Organization != "acme" || result.RelativePath != "declarations/organizations/acme/teams/web-team/team.yaml" {
+		if err != nil || result.Slug != "web-team" || result.Organization != "acme" || result.RelativePath != "declarations/teams/web-team/team.yaml" {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		content, err := os.ReadFile(filepath.Join(created.Connected.OrgClonePath, filepath.FromSlash(result.RelativePath)))
@@ -486,7 +486,7 @@ func TestCreateTeam(t *testing.T) {
 		if err == nil || errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "protected branch") {
 			t.Fatalf("result %+v err %v", result, err)
 		}
-		_, err = os.Stat(filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "teams"))
+		_, err = os.Stat(filepath.Join(created.Connected.OrgClonePath, "declarations", "teams"))
 		if err == nil {
 			t.Fatalf("the team record is still in the clone")
 		}
@@ -498,7 +498,7 @@ func TestCreateProject(t *testing.T) {
 		fixture, created := withOrganization(t)
 		_, _ = fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "Web"})
 		result, err := fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}, Labels: []string{"language:go", "kind:web-app"}, Path: "services/shop"})
-		if err != nil || result.Slug != "shop" || result.RelativePath != "declarations/organizations/acme/projects/shop/project.yaml" {
+		if err != nil || result.Slug != "shop" || result.RelativePath != "declarations/projects/shop/project.yaml" {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		content, _ := os.ReadFile(filepath.Join(created.Connected.OrgClonePath, filepath.FromSlash(result.RelativePath)))
@@ -528,7 +528,7 @@ func TestCreateProject(t *testing.T) {
 				t.Fatalf("%s: err %v", expected, err)
 			}
 		}
-		_, err := os.Stat(filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "projects"))
+		_, err := os.Stat(filepath.Join(created.Connected.OrgClonePath, "declarations", "projects"))
 		if err == nil {
 			t.Fatalf("a project record was written")
 		}
@@ -610,7 +610,7 @@ func TestInitializeProject(t *testing.T) {
 		if result.Commit == "" || result.CommitError != "" || fixture.repository.Commits[len(fixture.repository.Commits)-1] != moveOutCommitMessage {
 			t.Fatalf("commit %q error %q commits %v", result.Commit, result.CommitError, fixture.repository.Commits)
 		}
-		record, _ := os.ReadFile(filepath.Join(fixture.repository.Published[created.Remote], "declarations", "organizations", "acme", "projects", "shop", "project.yaml"))
+		record, _ := os.ReadFile(filepath.Join(fixture.repository.Published[created.Remote], "declarations", "projects", "shop", "project.yaml"))
 		if !strings.Contains(string(record), rootCommit) {
 			t.Fatalf("the remote's record has no fingerprint: %q", record)
 		}
@@ -632,7 +632,7 @@ func TestInitializeProject(t *testing.T) {
 		if err != nil || !result.Created || result.Address != "organizations.acme.projects.shop" || result.Commit != "" || len(fixture.repository.Staged) != 0 {
 			t.Fatalf("result %+v err %v staged %v", result, err, fixture.repository.Staged)
 		}
-		record, _ := os.ReadFile(filepath.Join(fixture.repository.Published[created.Remote], "declarations", "organizations", "acme", "projects", "shop", "project.yaml"))
+		record, _ := os.ReadFile(filepath.Join(fixture.repository.Published[created.Remote], "declarations", "projects", "shop", "project.yaml"))
 		if !strings.Contains(string(record), rootCommit) || !strings.Contains(string(record), "- language:go") {
 			t.Fatalf("record %q", record)
 		}
@@ -721,7 +721,7 @@ func TestDistillHarness(t *testing.T) {
 			t.Fatalf("init: %v", err)
 		}
 		snapshotPath := claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", folder)
-		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "rules", "go.md")
+		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "rules", "go.md")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("Two-line errors.\n"), 0o644)
 		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Directory: folder})
@@ -770,11 +770,11 @@ func TestDistillHarness(t *testing.T) {
 		fixture, _ := withTeam(t)
 		snapshotPath := claudeCodeSnapshot(t, fixture, "", "")
 		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Home: true})
-		if err != nil || result.Level != "users.danidani23" || len(result.Proposal.Candidates) != 3 || filepath.Dir(result.File) != filepath.Join(fixture.home, "proposals", "pending") {
+		if err != nil || result.Level != "organizations.acme.users.danidani23" || len(result.Proposal.Candidates) != 3 || filepath.Dir(result.File) != filepath.Join(fixture.home, "proposals", "pending") {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		result, err = fixture.orchestrator().DistillHarness(DistillRequest{SnapshotPath: snapshotPath, Force: true})
-		if err != nil || result.Level != "users.danidani23" {
+		if err != nil || result.Level != "organizations.acme.users.danidani23" {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		_, err = fixture.orchestrator().DistillHarness(DistillRequest{Directory: projectClone(t)})
@@ -794,7 +794,7 @@ func TestProposeDeclarations(t *testing.T) {
 		fixture, created := withTeam(t)
 		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
 		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", "")
-		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "rules", "go.md")
+		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "rules", "go.md")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("Two-line errors.\n"), 0o644)
 		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
@@ -813,13 +813,13 @@ func TestProposeDeclarations(t *testing.T) {
 			t.Fatalf("pull request %+v", pullRequest)
 		}
 		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
-		for _, relative := range []string{"declarations/organizations/acme/projects/shop/rules/instructions.md", "declarations/organizations/acme/projects/shop/mcpservers/docs.yaml"} {
+		for _, relative := range []string{"declarations/projects/shop/rules/instructions.md", "declarations/projects/shop/mcpservers/docs.yaml"} {
 			_, err = os.Stat(filepath.Join(published, filepath.FromSlash(relative)))
 			if err != nil {
 				t.Fatalf("%s not on the branch: %v", relative, err)
 			}
 		}
-		_, err = os.Stat(filepath.Join(published, "declarations", "organizations", "acme", "projects", "shop", "rules", "go.md"))
+		_, err = os.Stat(filepath.Join(published, "declarations", "projects", "shop", "rules", "go.md"))
 		if err == nil {
 			t.Fatalf("the identical rule was proposed")
 		}
@@ -843,7 +843,7 @@ func TestProposeDeclarations(t *testing.T) {
 		fixture, created := withTeam(t)
 		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
 		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", "")
-		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "mcpservers", "docs.yaml")
+		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "mcpservers", "docs.yaml")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("description: the docs server\ntransport: http\nurl: https://docs.example/other\n"), 0o644)
 		fixture.judge = &fake.Judge{Answers: []string{`{"version":1,"candidates":[` +
@@ -891,17 +891,17 @@ func TestProposeDeclarations(t *testing.T) {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
-		instructionsFile, err := os.ReadFile(filepath.Join(published, "declarations", "organizations", "acme", "rules", "instructions.md"))
+		instructionsFile, err := os.ReadFile(filepath.Join(published, "declarations", "rules", "instructions.md"))
 		if err != nil || !strings.HasPrefix(string(instructionsFile), "---\napplyIf:\n    - language:go\n---\n") || !strings.Contains(string(instructionsFile), "Be brief.") {
 			t.Fatalf("instructions %q err %v", instructionsFile, err)
 		}
-		for _, present := range []string{"organizations/acme/projects/shop/rules/go.md", "organizations/acme/projects/shop/mcpservers/docs.yaml"} {
+		for _, present := range []string{"projects/shop/rules/go.md", "projects/shop/mcpservers/docs.yaml"} {
 			_, err = os.Stat(filepath.Join(published, "declarations", filepath.FromSlash(present)))
 			if err != nil {
 				t.Fatalf("%s is not on the branch: %v", present, err)
 			}
 		}
-		_, err = os.Stat(filepath.Join(published, "declarations", "organizations", "acme", "teams", "web", "rules", "go.md"))
+		_, err = os.Stat(filepath.Join(published, "declarations", "teams", "web", "rules", "go.md"))
 		if err == nil {
 			t.Fatalf("the edited level was ignored")
 		}
@@ -932,7 +932,7 @@ func TestProposeDeclarations(t *testing.T) {
 		_ = os.MkdirAll(filepath.Join(folder, "rules"), 0o755)
 		_ = os.WriteFile(filepath.Join(folder, "rules", "brief.md"), []byte("Be brief.\n"), 0o644)
 		result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: folder, Title: "My rules"})
-		if err != nil || len(result.Included) != 1 || result.Included[0].Level != "users.danidani23" || result.HistoryFile != "" || fixture.host.PullRequests[0].Title != "My rules" {
+		if err != nil || len(result.Included) != 1 || result.Included[0].Level != "organizations.acme.users.danidani23" || result.HistoryFile != "" || fixture.host.PullRequests[0].Title != "My rules" {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
@@ -978,7 +978,7 @@ func TestProposeDeclarations(t *testing.T) {
 		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "do not pass the lint") || !strings.Contains(err.Error(), "carrier-pigeon") {
 			t.Fatalf("err %v", err)
 		}
-		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "rules", "brief.md")
+		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "rules", "brief.md")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("Be brief.\n"), 0o644)
 		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: folder, Level: "organizations.acme.teams.web"})
@@ -1026,7 +1026,7 @@ func TestDistillWithTheJudge(t *testing.T) {
 		fixture, created := withTeam(t)
 		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
 		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", "")
-		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "rules", "go.md")
+		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "rules", "go.md")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("Two-line errors.\n"), 0o644)
 		return fixture, created
@@ -1084,17 +1084,17 @@ func TestResolveProject(t *testing.T) {
 		_ = os.MkdirAll(filepath.Dir(target), 0o755)
 		_ = os.WriteFile(target, []byte(content), 0o644)
 	}
-	write("organizations/acme/rules/style.md", "---\nenforcement: required\n---\nStyle.\n")
-	write("organizations/acme/rules/testing.md", "Org tests.\n")
-	write("organizations/acme/rules/py.md", "---\napplyIf: [language:python]\n---\nPython.\n")
-	write("organizations/acme/teams/web/rules/testing.md", "Web tests.\n")
-	write("organizations/acme/projects/shop/rules/testing.md", "Shop tests.\n")
+	write("rules/style.md", "---\nenforcement: required\n---\nStyle.\n")
+	write("rules/testing.md", "Org tests.\n")
+	write("rules/py.md", "---\napplyIf: [language:python]\n---\nPython.\n")
+	write("teams/web/rules/testing.md", "Web tests.\n")
+	write("projects/shop/rules/testing.md", "Shop tests.\n")
 	write("users/danidani23/rules/mine.md", "Mine.\n")
 	resolution, err := fixture.orchestrator().ResolveProject("", "shop")
 	if err != nil || resolution.Address != "organizations.acme.projects.shop" || resolution.User != "danidani23" || len(resolution.Result.Problems) != 0 {
 		t.Fatalf("resolution %+v err %v", resolution, err)
 	}
-	if addresses := addressesOf(resolution.Result.Chosen); addresses != "organizations.acme.rules.style,organizations.acme.projects.shop.rules.testing,users.danidani23.rules.mine" {
+	if addresses := addressesOf(resolution.Result.Chosen); addresses != "organizations.acme.rules.style,organizations.acme.projects.shop.rules.testing,organizations.acme.users.danidani23.rules.mine" {
 		t.Fatalf("chosen %s", addresses)
 	}
 	if strings.Join(resolution.Result.Chosen[1].Replaced, ",") != "organizations.acme.rules.testing,organizations.acme.teams.web.rules.testing" {
@@ -1146,10 +1146,10 @@ func withSyncableProject(t *testing.T) (*harness, CreateResult, string) {
 		_ = os.MkdirAll(filepath.Dir(target), 0o755)
 		_ = os.WriteFile(target, []byte(content), 0o644)
 	}
-	write("organizations/acme/rules/style.md", "---\nenforcement: required\n---\nHouse style.\n")
-	write("organizations/acme/rules/go.md", "---\npaths: [\"**/*.go\"]\napplyIf: [language:go]\n---\nTwo-line errors.\n")
-	write("organizations/acme/teams/web/skills/commit/SKILL.md", "---\nname: commit\ndescription: Draft commits.\n---\n")
-	write("organizations/acme/mcpservers/github.yaml", "transport: stdio\ncommand: npx\nenv:\n  GITHUB_PERSONAL_ACCESS_TOKEN: ${REIN_TEST_GITHUB_TOKEN}\nvariables:\n  REIN_TEST_GITHUB_TOKEN: a token\n")
+	write("rules/style.md", "---\nenforcement: required\n---\nHouse style.\n")
+	write("rules/go.md", "---\npaths: [\"**/*.go\"]\napplyIf: [language:go]\n---\nTwo-line errors.\n")
+	write("teams/web/skills/commit/SKILL.md", "---\nname: commit\ndescription: Draft commits.\n---\n")
+	write("mcpservers/github.yaml", "transport: stdio\ncommand: npx\nenv:\n  GITHUB_PERSONAL_ACCESS_TOKEN: ${REIN_TEST_GITHUB_TOKEN}\nvariables:\n  REIN_TEST_GITHUB_TOKEN: a token\n")
 	folder := claudeProjectClone(t)
 	_, err = fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
 	if err != nil {
@@ -1208,7 +1208,7 @@ func TestSyncClone(t *testing.T) {
 		if report.Clones[0].Modified != 1 {
 			t.Fatalf("status %+v", report.Clones)
 		}
-		_ = os.Remove(filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "rules", "go.md"))
+		_ = os.Remove(filepath.Join(created.Connected.OrgClonePath, "declarations", "rules", "go.md"))
 		result, err := fixture.orchestrator().SyncClone(SyncRequest{Directory: folder, Force: true})
 		if err != nil || result.Clones[0].SnapshotPath == "" || strings.Join(result.Clones[0].Modified, ",") != "CLAUDE.md" || strings.Join(result.Clones[0].Removed, ",") != ".claude/rules/go.md" {
 			t.Fatalf("forced %+v err %v", result.Clones[0], err)
@@ -1224,7 +1224,7 @@ func TestSyncClone(t *testing.T) {
 	})
 	t.Run("a resolution problem refuses before writing; --all reports a gone folder and goes on", func(t *testing.T) {
 		fixture, created, folder := withSyncableProject(t)
-		bad := filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "teams", "web", "rules", "style.md")
+		bad := filepath.Join(created.Connected.OrgClonePath, "declarations", "teams", "web", "rules", "style.md")
 		_ = os.MkdirAll(filepath.Dir(bad), 0o755)
 		_ = os.WriteFile(bad, []byte("Ours.\n"), 0o644)
 		_, err := fixture.orchestrator().SyncClone(SyncRequest{Directory: folder})
@@ -1280,7 +1280,7 @@ func TestEditProject(t *testing.T) {
 	if err != nil || result.Slug != "shop" || result.Name != "Shop" || strings.Join(result.Changed, ",") != "description,teams,labels,path" {
 		t.Fatalf("result %+v err %v", result, err)
 	}
-	content, _ := os.ReadFile(filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "projects", "shop", "project.yaml"))
+	content, _ := os.ReadFile(filepath.Join(created.Connected.OrgClonePath, "declarations", "projects", "shop", "project.yaml"))
 	record, problems := declaration.ParseProject("shop", content)
 	if len(problems) != 0 || record.Description != "the shop" || strings.Join(record.Teams, ",") != "web,ops" || strings.Join(record.Labels, ",") != "kind:service,language:go" || record.Path != "services/shop" || strings.Join(record.Fingerprint, ",") != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" || record.UpdatedAt.IsZero() || record.CreatedAt.IsZero() || record.ID == "" {
 		t.Fatalf("record %+v problems %v", record, problems)
@@ -1305,7 +1305,7 @@ func TestEditLabelRegistry(t *testing.T) {
 	fixture, created := withTeam(t)
 	_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}, Labels: []string{"kind:service"}})
 	registry := func(category string) declaration.LabelCategory {
-		content, _ := os.ReadFile(filepath.Join(created.Connected.OrgClonePath, "declarations", "organizations", "acme", "labels", category+".yaml"))
+		content, _ := os.ReadFile(filepath.Join(created.Connected.OrgClonePath, "declarations", "labels", category+".yaml"))
 		parsed, _ := declaration.ParseLabelCategory(category, content)
 		return parsed
 	}
@@ -1315,7 +1315,7 @@ func TestEditLabelRegistry(t *testing.T) {
 	}
 	yes, no := true, false
 	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelAdd, Category: "stack", Value: "aws", Description: "runs on AWS", Required: &yes, Multiple: &yes})
-	if err != nil || !result.CreatedCategory || !result.Required || !result.Multiple || result.RelativePath != "declarations/organizations/acme/labels/stack.yaml" || !registry("stack").Required || !registry("stack").Multiple || registry("stack").Labels["aws"] != "runs on AWS" {
+	if err != nil || !result.CreatedCategory || !result.Required || !result.Multiple || result.RelativePath != "declarations/labels/stack.yaml" || !registry("stack").Required || !registry("stack").Multiple || registry("stack").Labels["aws"] != "runs on AWS" {
 		t.Fatalf("create: result %+v err %v", result, err)
 	}
 	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelSet, Category: "stack", Required: &no})
@@ -1374,41 +1374,41 @@ func TestDeclarationEditAndRemove(t *testing.T) {
 		write("users/danidani23/user.yaml", "slug: danidani23\ngithub: Danidani23\nname: Dani\n")
 		write("users/danidani23/skills/commit/SKILL.md", "---\nname: commit\ndescription: Draft commits.\n---\n\n# Commit\n")
 		write("users/danidani23/skills/commit/references/format.md", "subject, body\n")
-		write("organizations/acme/rules/style.md", "---\napplyIf:\n  - language:go\n---\n\nHouse style.\n")
-		write("organizations/acme/rules/brief.md", "Be brief.\n")
-		write("organizations/acme/exceptions/shop-style.yaml", "declaration: organizations.acme.rules.style\ngrantee: organizations.acme.projects.shop\nreason: legacy\n")
+		write("rules/style.md", "---\napplyIf:\n  - language:go\n---\n\nHouse style.\n")
+		write("rules/brief.md", "Be brief.\n")
+		write("exceptions/shop-style.yaml", "declaration: organizations.acme.rules.style\ngrantee: organizations.acme.projects.shop\nreason: legacy\n")
 		// main holds the seeded files, as a merge would have left it
 		_ = fixture.repository.Push(ports.RemoteAccess{}, created.Connected.OrgClonePath)
 		return fixture, created, root
 	}
 	t.Run("a move carries the files with the selectors set, removes the old folder, and opens the pull request", func(t *testing.T) {
 		fixture, created, root := seed(t)
-		described, err := fixture.orchestrator().DescribeDeclaration("", "users.danidani23.skills.commit")
-		if err != nil || described.Level != "users.danidani23" || described.Kind != "skills" || strings.Join(described.Files, ",") != "skills/commit/SKILL.md,skills/commit/references/format.md" || len(described.Selectors.ApplyIf) != 0 {
+		described, err := fixture.orchestrator().DescribeDeclaration("", "organizations.acme.users.danidani23.skills.commit")
+		if err != nil || described.Level != "organizations.acme.users.danidani23" || described.Kind != "skills" || strings.Join(described.Files, ",") != "skills/commit/SKILL.md,skills/commit/references/format.md" || len(described.Selectors.ApplyIf) != 0 {
 			t.Fatalf("described %+v err %v", described, err)
 		}
 		listed, err := fixture.orchestrator().ListDeclarations("", "")
-		if err != nil || len(listed) != 3 || listed[0].Address != "organizations.acme.rules.brief" || listed[1].Address != "organizations.acme.rules.style" || strings.Join(listed[1].Selectors.ApplyIf, ",") != "language:go" || listed[2].Address != "users.danidani23.skills.commit" {
+		if err != nil || len(listed) != 3 || listed[0].Address != "organizations.acme.rules.brief" || listed[1].Address != "organizations.acme.rules.style" || strings.Join(listed[1].Selectors.ApplyIf, ",") != "language:go" || listed[2].Address != "organizations.acme.users.danidani23.skills.commit" {
 			t.Fatalf("listed %+v err %v", listed, err)
 		}
 		under, _ := fixture.orchestrator().ListDeclarations("", "organizations.acme")
 		if len(under) != 2 {
 			t.Fatalf("under %+v", under)
 		}
-		result, err := fixture.orchestrator().EditDeclaration(EditDeclarationRequest{Address: "users.danidani23.skills.commit", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"language:go"}}})
+		result, err := fixture.orchestrator().EditDeclaration(EditDeclarationRequest{Address: "organizations.acme.users.danidani23.skills.commit", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"language:go"}}})
 		if err != nil || result.NewAddress != "organizations.acme.skills.commit" || strings.Join(result.Changed, ",") != "level,applyIf" || !strings.HasPrefix(result.Branch, "rein/edit-commit-") || result.PullRequestURL != "https://github.com/Danidani23/acme-agent-settings/pull/1" {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		pullRequest := fixture.host.PullRequests[0]
-		if pullRequest.Title != "users.danidani23.skills.commit: moved to organizations.acme, applyIf language:go" || !strings.Contains(pullRequest.Body, "- declarations/users/danidani23/skills/commit/SKILL.md") {
+		if pullRequest.Title != "organizations.acme.users.danidani23.skills.commit: moved to organizations.acme, applyIf language:go" || !strings.Contains(pullRequest.Body, "- declarations/users/danidani23/skills/commit/SKILL.md") {
 			t.Fatalf("pull request %+v", pullRequest)
 		}
 		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
-		moved, err := os.ReadFile(filepath.Join(published, "declarations", "organizations", "acme", "skills", "commit", "SKILL.md"))
+		moved, err := os.ReadFile(filepath.Join(published, "declarations", "skills", "commit", "SKILL.md"))
 		if err != nil || !strings.Contains(string(moved), "rein-apply-if: language:go") || !strings.Contains(string(moved), "# Commit") {
 			t.Fatalf("moved %q err %v", moved, err)
 		}
-		_, err = os.Stat(filepath.Join(published, "declarations", "organizations", "acme", "skills", "commit", "references", "format.md"))
+		_, err = os.Stat(filepath.Join(published, "declarations", "skills", "commit", "references", "format.md"))
 		if err != nil {
 			t.Fatalf("the reference did not move: %v", err)
 		}
@@ -1431,14 +1431,14 @@ func TestDeclarationEditAndRemove(t *testing.T) {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
-		style, _ := os.ReadFile(filepath.Join(published, "declarations", "organizations", "acme", "rules", "style.md"))
+		style, _ := os.ReadFile(filepath.Join(published, "declarations", "rules", "style.md"))
 		if strings.Contains(string(style), "applyIf") || !strings.Contains(string(style), "doNotApplyIf:\n    - data:regulated\n") || !strings.Contains(string(style), "enforcement: required\n") || !strings.Contains(string(style), "House style.") {
 			t.Fatalf("style %q", style)
 		}
 		fixture.host.PullRequests = nil
 		_ = os.RemoveAll(filepath.Join(created.Connected.OrgClonePath, "declarations", "users"))
-		result, err = fixture.orchestrator().EditDeclaration(EditDeclarationRequest{Address: "organizations.acme.rules.brief", Level: "users.danidani23"})
-		if err != nil || result.NewAddress != "users.danidani23.rules.brief" {
+		result, err = fixture.orchestrator().EditDeclaration(EditDeclarationRequest{Address: "organizations.acme.rules.brief", Level: "organizations.acme.users.danidani23"})
+		if err != nil || result.NewAddress != "organizations.acme.users.danidani23.rules.brief" {
 			t.Fatalf("to the user: result %+v err %v", result, err)
 		}
 		published = fixture.repository.Published[created.Remote+"#"+result.Branch]
@@ -1456,16 +1456,16 @@ func TestDeclarationEditAndRemove(t *testing.T) {
 		_ = os.WriteFile(taken, []byte("mine\n"), 0o644)
 		_ = fixture.repository.Push(ports.RemoteAccess{}, created.Connected.OrgClonePath)
 		for expected, request := range map[string]EditDeclarationRequest{
-			"nothing changed on organizations.acme.rules.style":            {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"language:go"}}},
-			"no declaration at organizations.acme.rules.nope":              {Address: "organizations.acme.rules.nope", Level: "organizations.acme"},
-			"is not a declaration's address":                               {Address: "organizations.acme", Level: "organizations.acme"},
-			`"organizations.acme.rules.x" is not a level`:                  {Address: "organizations.acme.rules.style", Level: "organizations.acme.rules.x"},
-			"the level organizations.other is not in acme":                 {Address: "organizations.acme.rules.style", Level: "organizations.other"},
-			`team "ops" does not exist in acme`:                            {Address: "organizations.acme.rules.style", Level: "organizations.acme.teams.ops"},
-			`label "stack:aws" names no category`:                          {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"stack:aws"}}},
-			"applyIf data takes one value":                                 {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"data:public", "data:internal"}}},
-			`enforcement "maybe" is neither`:                               {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{Enforcement: "maybe"}},
-			"users.danidani23.rules.style already exists; remove it first": {Address: "organizations.acme.rules.style", Level: "users.danidani23", Selectors: declaration.Selectors{ApplyIf: []string{"language:go"}}},
+			"nothing changed on organizations.acme.rules.style":                               {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"language:go"}}},
+			"no declaration at organizations.acme.rules.nope":                                 {Address: "organizations.acme.rules.nope", Level: "organizations.acme"},
+			"is not a declaration's address":                                                  {Address: "organizations.acme", Level: "organizations.acme"},
+			`"organizations.acme.rules.x" is not a level`:                                     {Address: "organizations.acme.rules.style", Level: "organizations.acme.rules.x"},
+			"the level organizations.other is not in acme":                                    {Address: "organizations.acme.rules.style", Level: "organizations.other"},
+			`team "ops" does not exist in acme`:                                               {Address: "organizations.acme.rules.style", Level: "organizations.acme.teams.ops"},
+			`label "stack:aws" names no category`:                                             {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"stack:aws"}}},
+			"applyIf data takes one value":                                                    {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"data:public", "data:internal"}}},
+			`enforcement "maybe" is neither`:                                                  {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{Enforcement: "maybe"}},
+			"organizations.acme.users.danidani23.rules.style already exists; remove it first": {Address: "organizations.acme.rules.style", Level: "organizations.acme.users.danidani23", Selectors: declaration.Selectors{ApplyIf: []string{"language:go"}}},
 		} {
 			_, err := fixture.orchestrator().EditDeclaration(request)
 			if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), expected) {
@@ -1482,7 +1482,7 @@ func TestDeclarationEditAndRemove(t *testing.T) {
 		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "is named by the exception organizations.acme.exceptions.shop-style; take those out first") {
 			t.Fatalf("named by an exception: %v", err)
 		}
-		project := filepath.Join(root, "organizations", "acme", "projects", "shop", "project.yaml")
+		project := filepath.Join(root, "projects", "shop", "project.yaml")
 		content, _ := os.ReadFile(project)
 		_ = os.WriteFile(project, []byte(strings.Replace(string(content), "skip: []", "skip:\n    - organizations.acme.rules.brief", 1)), 0o644)
 		_ = fixture.repository.Push(ports.RemoteAccess{}, created.Connected.OrgClonePath)
@@ -1490,8 +1490,8 @@ func TestDeclarationEditAndRemove(t *testing.T) {
 		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "is named by the skip list of project shop") {
 			t.Fatalf("named by a skip list: %v", err)
 		}
-		result, err := fixture.orchestrator().RemoveDeclaration(RemoveDeclarationRequest{Address: "users.danidani23.skills.commit"})
-		if err != nil || strings.Join(result.Removed, ",") != "declarations/users/danidani23/skills/commit/SKILL.md,declarations/users/danidani23/skills/commit/references/format.md" || !strings.HasPrefix(result.Branch, "rein/remove-commit-") || fixture.host.PullRequests[0].Title != "users.danidani23.skills.commit: removed" {
+		result, err := fixture.orchestrator().RemoveDeclaration(RemoveDeclarationRequest{Address: "organizations.acme.users.danidani23.skills.commit"})
+		if err != nil || strings.Join(result.Removed, ",") != "declarations/users/danidani23/skills/commit/SKILL.md,declarations/users/danidani23/skills/commit/references/format.md" || !strings.HasPrefix(result.Branch, "rein/remove-commit-") || fixture.host.PullRequests[0].Title != "organizations.acme.users.danidani23.skills.commit: removed" {
 			t.Fatalf("result %+v err %v", result, err)
 		}
 		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
@@ -1504,4 +1504,34 @@ func TestDeclarationEditAndRemove(t *testing.T) {
 			t.Fatalf("missing: %v", err)
 		}
 	})
+}
+
+func TestEditTeamAndRefresh(t *testing.T) {
+	fixture, created := withTeam(t)
+	_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}, Labels: []string{"kind:service"}})
+	result, err := fixture.orchestrator().EditTeam(EditTeamRequest{Slug: "web", Description: "the web shop"})
+	if err != nil || result.Slug != "web" || result.Name != "Web" || result.RelativePath != "declarations/teams/web/team.yaml" {
+		t.Fatalf("result %+v err %v", result, err)
+	}
+	content, _ := os.ReadFile(filepath.Join(created.Connected.OrgClonePath, "declarations", "teams", "web", "team.yaml"))
+	team, problems := declaration.ParseTeam("web", content)
+	if len(problems) != 0 || team.Description != "the web shop" || team.ID == "" || team.CreatedAt.IsZero() {
+		t.Fatalf("record %+v problems %v", team, problems)
+	}
+	if !strings.Contains(fixture.repository.Commits[len(fixture.repository.Commits)-1], "team web: description (rein team edit)") {
+		t.Fatalf("commits %v", fixture.repository.Commits)
+	}
+	for expected, request := range map[string]EditTeamRequest{
+		"nothing changed on team web":                       {Slug: "web", Description: "the web shop"},
+		`team "nope" does not exist in acme; teams are web`: {Slug: "nope", Description: "x"},
+	} {
+		_, err = fixture.orchestrator().EditTeam(request)
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), expected) {
+			t.Fatalf("%s: err %v", expected, err)
+		}
+	}
+	refreshed, err := fixture.orchestrator().RefreshOrganization("")
+	if err != nil || len(refreshed.Teams) != 1 || refreshed.Teams[0].Description != "the web shop" || strings.Join(refreshed.Teams[0].Projects, ",") != "shop" || refreshed.UserLevel != "organizations.acme.users.danidani23" {
+		t.Fatalf("refreshed %+v err %v", refreshed, err)
+	}
 }

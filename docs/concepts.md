@@ -77,13 +77,35 @@ graph TD
   L["🏷️ Labels<br/>language go, kind service, client acme, chosen from the registry when a project is created, they pick which team and organisation declarations apply"] -.-> P
 ```
 
+## The org repository's layout
+
+One repository holds one organisation, so its folders leave the organisation out:
+
+```
+declarations/
+  organization.yaml      the organisation's record
+  labels/                the label registry, one file per category
+  rules/ skills/ ...     the organisation's own declarations
+  teams/<slug>/          team.yaml and the team's declarations
+  projects/<slug>/       project.yaml and the project's declarations
+  users/<slug>/          user.yaml and the person's declarations
+```
+
+Addresses keep the organisation in front, because a machine can be connected to several
+org repositories and `organizations.dani.skills.go-style` must name one thing wherever it is
+read: `organizations.<org>` is the organisation, `organizations.<org>.teams.<team>`,
+`organizations.<org>.projects.<project>` and `organizations.<org>.users.<user>` are its
+levels, and a declaration adds its kind and id, `organizations.dani.users.danidani23.rules.global`.
+A user level is a level of the organisation: a person with two organisations has one in each
+repository, and they may differ.
+
 ## Labels and the registry
 
 A project carries labels, `category:value`, chosen from the organisation's registry when the
 project is created and changed with `rein project edit`. Declarations say which projects they
 are for through `applyIf` and `doNotApplyIf` over these labels: a Go service receives the Go
 skills without anyone listing it. The registry is one file per category under
-`declarations/organizations/<org>/labels/`: its values with a one-line description each,
+`declarations/labels/`: its values with a one-line description each,
 `required: true` when every project must carry one of its values, and `multiple: true` when a
 project may carry several. A new organisation starts with `kind`, required and single,
 `language`, several allowed, and `data`, single. `rein label` changes the registry; the lint

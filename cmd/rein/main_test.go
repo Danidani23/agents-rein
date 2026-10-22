@@ -150,7 +150,7 @@ func scratchOrgRepository(t *testing.T) string {
 		}
 	}
 	git("init", "-q")
-	folder := filepath.Join(root, "declarations", "organizations", "acme")
+	folder := filepath.Join(root, "declarations")
 	_ = os.MkdirAll(folder, 0o755)
 	_ = os.WriteFile(filepath.Join(folder, "organization.yaml"), []byte("id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\nhost: github\n"), 0o644)
 	git("add", "declarations")

@@ -13,13 +13,13 @@ func TestLoadCorpus(t *testing.T) {
 		_ = os.MkdirAll(filepath.Dir(target), 0o755)
 		_ = os.WriteFile(target, []byte(content), 0o644)
 	}
-	write("organizations/acme/rules/style.md", "House style for everyone.")
-	write("organizations/acme/teams/web/rules/react.md", "React components stay small.")
-	write("organizations/acme/teams/data/rules/testing.md", "Tests are table-driven tests, always; coverage matters.")
-	write("organizations/acme/teams/data/rules/notebooks.md", "Notebooks never land on main.")
-	write("organizations/acme/teams/ops/mcpservers/pager.yaml", "description: pager\napplyIf: [kind:service]\ntransport: http\nurl: https://pager\n")
-	write("organizations/acme/projects/shop/skills/commit/SKILL.md", "---\nname: commit\n---\nDraft commits.")
-	write("organizations/acme/projects/shop/skills/commit/extra.md", "more")
+	write("rules/style.md", "House style for everyone.")
+	write("teams/web/rules/react.md", "React components stay small.")
+	write("teams/data/rules/testing.md", "Tests are table-driven tests, always; coverage matters.")
+	write("teams/data/rules/notebooks.md", "Notebooks never land on main.")
+	write("teams/ops/mcpservers/pager.yaml", "description: pager\napplyIf: [kind:service]\ntransport: http\nurl: https://pager\n")
+	write("projects/shop/skills/commit/SKILL.md", "---\nname: commit\n---\nDraft commits.")
+	write("projects/shop/skills/commit/extra.md", "more")
 	write("users/danidani23/rules/mine.md", "My own rule.")
 	candidates := []Candidate{
 		{Kind: "rules", ID: "go-testing", Files: map[string]string{"rules/go-testing.md": "Use table-driven tests only, and watch coverage."}},
@@ -45,7 +45,7 @@ func TestLoadCorpus(t *testing.T) {
 	if !present || !resolved {
 		t.Fatalf("project skill: %v %v", present, resolved)
 	}
-	resolved, present = found["users.danidani23.rules.mine"]
+	resolved, present = found["organizations.acme.users.danidani23.rules.mine"]
 	if !present || !resolved {
 		t.Fatalf("user rule: %v %v", present, resolved)
 	}

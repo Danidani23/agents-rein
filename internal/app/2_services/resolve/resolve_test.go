@@ -24,29 +24,29 @@ func orgClone(t *testing.T, projectDeclaresReact bool, expired bool) string {
 	if expired {
 		until = "2020-01-01T00:00:00Z"
 	}
-	write("organizations/acme/organization.yaml", "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\nhost: github\n")
-	write("organizations/acme/labels/language.yaml", "category: language\nlabels:\n  go: Go\n  python: Python\n")
-	write("organizations/acme/labels/kind.yaml", "category: kind\nlabels:\n  service: a service\n  library: a library\n")
-	write("organizations/acme/teams/web/team.yaml", "id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427\nslug: web\nname: Web\nskip: [organizations.acme.rules.nodocs]\n")
-	write("organizations/acme/teams/data/team.yaml", "id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: data\nname: Data\nskip: [organizations.acme.rules.style]\n")
-	write("organizations/acme/projects/shop/project.yaml", "id: 7ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: shop\nname: Shop\nteams: [web, data]\nlabels: [language:go, kind:service]\n")
-	write("organizations/acme/exceptions/data-style.yaml", "declaration: organizations.acme.rules.style\ngrantee: organizations.acme.teams.data\nreason: legacy\nuntil: "+until+"\n")
-	write("organizations/acme/rules/style.md", "---\nenforcement: required\n---\nHouse style.\n")
-	write("organizations/acme/rules/testing.md", "Tests at the organisation level.\n")
-	write("organizations/acme/rules/go.md", "---\napplyIf: [language:go]\n---\nGo rules.\n")
-	write("organizations/acme/rules/py.md", "---\napplyIf: [language:python]\n---\nPython rules.\n")
-	write("organizations/acme/rules/nodocs.md", "---\ndoNotApplyIf: [kind:library]\n---\nNo docs folder.\n")
-	write("organizations/acme/rules/security.md", "---\nenforcement: required\n---\nSecurity.\n")
-	write("organizations/acme/mcpservers/github.yaml", "enforcement: required\ntransport: stdio\ncommand: npx\n")
-	write("organizations/acme/skills/commit/SKILL.md", "---\nname: commit\ndescription: Draft commits.\nmetadata:\n  rein-apply-if: \"kind:service\"\n---\n")
-	write("organizations/acme/teams/web/rules/testing.md", "Tests the web way.\n")
-	write("organizations/acme/teams/web/rules/react.md", "React from web.\n")
-	write("organizations/acme/teams/web/mcpservers/github.yaml", "transport: stdio\ncommand: other\n")
-	write("organizations/acme/teams/data/rules/react.md", "React from data.\n")
-	write("organizations/acme/teams/ops/team.yaml", "id: 8ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: ops\nname: Ops\n")
-	write("organizations/acme/teams/ops/rules/pager.md", "Not this project's team.\n")
+	write("organization.yaml", "id: 0f8fad5b-d9cb-469f-a165-70867728950e\nslug: acme\nname: Acme\nhost: github\n")
+	write("labels/language.yaml", "category: language\nlabels:\n  go: Go\n  python: Python\n")
+	write("labels/kind.yaml", "category: kind\nlabels:\n  service: a service\n  library: a library\n")
+	write("teams/web/team.yaml", "id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427\nslug: web\nname: Web\nskip: [organizations.acme.rules.nodocs]\n")
+	write("teams/data/team.yaml", "id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: data\nname: Data\nskip: [organizations.acme.rules.style]\n")
+	write("projects/shop/project.yaml", "id: 7ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: shop\nname: Shop\nteams: [web, data]\nlabels: [language:go, kind:service]\n")
+	write("exceptions/data-style.yaml", "declaration: organizations.acme.rules.style\ngrantee: organizations.acme.teams.data\nreason: legacy\nuntil: "+until+"\n")
+	write("rules/style.md", "---\nenforcement: required\n---\nHouse style.\n")
+	write("rules/testing.md", "Tests at the organisation level.\n")
+	write("rules/go.md", "---\napplyIf: [language:go]\n---\nGo rules.\n")
+	write("rules/py.md", "---\napplyIf: [language:python]\n---\nPython rules.\n")
+	write("rules/nodocs.md", "---\ndoNotApplyIf: [kind:library]\n---\nNo docs folder.\n")
+	write("rules/security.md", "---\nenforcement: required\n---\nSecurity.\n")
+	write("mcpservers/github.yaml", "enforcement: required\ntransport: stdio\ncommand: npx\n")
+	write("skills/commit/SKILL.md", "---\nname: commit\ndescription: Draft commits.\nmetadata:\n  rein-apply-if: \"kind:service\"\n---\n")
+	write("teams/web/rules/testing.md", "Tests the web way.\n")
+	write("teams/web/rules/react.md", "React from web.\n")
+	write("teams/web/mcpservers/github.yaml", "transport: stdio\ncommand: other\n")
+	write("teams/data/rules/react.md", "React from data.\n")
+	write("teams/ops/team.yaml", "id: 8ba7b810-9dad-11d1-80b4-00c04fd430c8\nslug: ops\nname: Ops\n")
+	write("teams/ops/rules/pager.md", "Not this project's team.\n")
 	if projectDeclaresReact {
-		write("organizations/acme/projects/shop/rules/react.md", "React the shop way.\n")
+		write("projects/shop/rules/react.md", "React the shop way.\n")
 	}
 	write("users/danidani23/rules/mine.md", "My rule.\n")
 	write("users/danidani23/rules/security.md", "My security, which may not replace the required one.\n")
@@ -85,7 +85,7 @@ func TestResolve(t *testing.T) {
 			"organizations.acme.rules.security",
 			"organizations.acme.skills.commit",
 			"organizations.acme.teams.web.rules.testing",
-			"users.danidani23.rules.mine",
+			"organizations.acme.users.danidani23.rules.mine",
 		}
 		if addresses(result.Chosen) != strings.Join(expected, "\n") {
 			t.Fatalf("chosen:\n%s", addresses(result.Chosen))
@@ -103,7 +103,7 @@ func TestResolve(t *testing.T) {
 			messages = append(messages, problem.Address+": "+problem.Message)
 		}
 		joined := strings.Join(messages, "\n")
-		for _, expected := range []string{"organizations.acme.teams.data.rules.react: the same rules react is declared by organizations.acme.teams.web.rules.react", "organizations.acme.teams.web.rules.react: the same rules react is declared by organizations.acme.teams.data.rules.react", "organizations.acme.teams.web.mcpservers.github: redeclares organizations.acme.mcpservers.github, which is required", "users.danidani23.rules.security: redeclares organizations.acme.rules.security, which is required"} {
+		for _, expected := range []string{"organizations.acme.teams.data.rules.react: the same rules react is declared by organizations.acme.teams.web.rules.react", "organizations.acme.teams.web.rules.react: the same rules react is declared by organizations.acme.teams.data.rules.react", "organizations.acme.teams.web.mcpservers.github: redeclares organizations.acme.mcpservers.github, which is required", "organizations.acme.users.danidani23.rules.security: redeclares organizations.acme.rules.security, which is required"} {
 			if !strings.Contains(joined, expected) {
 				t.Fatalf("missing %q in:\n%s", expected, joined)
 			}

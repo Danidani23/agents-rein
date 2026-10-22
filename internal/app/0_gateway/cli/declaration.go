@@ -18,7 +18,7 @@ func newDeclarationCommand(environment *commandEnvironment) *cobra.Command {
 		Use:   "declaration",
 		Short: "List the declarations of an organisation, move one or change its labels, or remove one",
 		Long: "A declaration is a rule, a skill, a hook, a permission set or a tool server at a level of the\n" +
-			"org repository, addressed as organizations.acme.skills.commit or users.jane.rules.brief.\n" +
+			"org repository, addressed as organizations.acme.skills.commit or organizations.acme.users.jane.rules.brief.\n" +
 			"Its content enters and changes through rein propose; what is around it changes here: the\n" +
 			"level it lives at, the labels it applies to, its enforcement, and whether it exists. Every\n" +
 			"change is a pull request on the org repository.",
@@ -60,7 +60,7 @@ func newDeclarationListCommand(environment *commandEnvironment) *cobra.Command {
 		},
 	}
 	command.Flags().StringVar(&organizationSlug, "org", "", "the organisation's slug (default: the active one)")
-	command.Flags().StringVar(&level, "level", "", "only the declarations at or under this level")
+	command.Flags().StringVar(&level, "level", "", "only the declarations at this level")
 	return command
 }
 
@@ -126,7 +126,7 @@ func newDeclarationEditCommand(environment *commandEnvironment) *cobra.Command {
 			"the current value as the default; with flags only the given ones change. A new level carries\n" +
 			"the files over and removes the old ones in the same pull request. The content stays as it is:\n" +
 			"rein propose changes that.",
-		Example: "  rein declaration edit users.jane.skills.commit --level organizations.acme\n  rein declaration edit organizations.acme.skills.go-style --apply-if language:go --yes",
+		Example: "  rein declaration edit organizations.acme.users.jane.skills.commit --level organizations.acme\n  rein declaration edit organizations.acme.skills.go-style --apply-if language:go --yes",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
 			given := map[string]bool{}

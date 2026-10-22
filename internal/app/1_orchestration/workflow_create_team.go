@@ -38,7 +38,7 @@ func (orchestrator Orchestrator) CreateTeam(request CreateTeamRequest) (CreateTe
 		return CreateTeamResult{}, refusal.New("the name must contain at least one letter or digit")
 	}
 	team := declaration.Team{ID: scaffold.NewID(), Slug: slug, Name: request.Name, Description: request.Description, CreatedAt: services.Clock()}
-	relativePath, content, err := scaffold.TeamRecord(organization.Slug, team)
+	relativePath, content, err := scaffold.TeamRecord(team)
 	if err != nil {
 		return CreateTeamResult{}, err
 	}

@@ -25,7 +25,7 @@ func TestClaudeCode(t *testing.T) {
 		chosen("organizations.acme.permissions.safety", "permissions", "safety", "required", map[string]string{"safety.yaml": "format: claude-code\ndeny: [\"Bash(git push --force*)\"]\nallow: [\"Bash(go test*)\"]\n"}),
 		chosen("organizations.acme.mcpservers.github", "mcpservers", "github", "", map[string]string{"github.yaml": "transport: stdio\ncommand: npx\nargs: [\"-y\", \"server\"]\nenv:\n  GITHUB_PERSONAL_ACCESS_TOKEN: ${REIN_GITHUB_TOKEN}\nvariables:\n  REIN_GITHUB_TOKEN: a token\n"}),
 		chosen("organizations.acme.mcpservers.docs", "mcpservers", "docs", "", map[string]string{"docs.yaml": "transport: http\nurl: https://docs.example/mcp\n"}),
-		chosen("users.danidani23.rules.mine", "rules", "mine", "", map[string]string{"mine.md": "Mine.\n"}),
+		chosen("organizations.acme.users.danidani23.rules.mine", "rules", "mine", "", map[string]string{"mine.md": "Mine.\n"}),
 	}}
 	input := Input{OrganizationSlug: "acme", ProjectName: "Shop", ProjectSlug: "shop", Teams: []string{"web"}, UserSlug: "danidani23", ReinExecutable: "/usr/local/bin/rein", ExistingSettings: `{"permissions":{"allow":["Bash(git push --force origin main)","Read(docs/**)"],"additionalDirectories":["../shared"]},"model":"opus"}`}
 	output, err := ClaudeCode(input, result)

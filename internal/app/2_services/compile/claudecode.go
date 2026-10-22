@@ -63,7 +63,7 @@ func levelFile(level string, organization string) string {
 	switch {
 	case level == address.Organizations+"."+organization:
 		return "organization"
-	case strings.HasPrefix(level, address.Users+"."):
+	case strings.Contains(level, "."+address.Users+"."):
 		return "user"
 	case strings.Contains(level, ".teams."):
 		return "team-" + level[strings.LastIndex(level, ".")+1:]
@@ -76,12 +76,12 @@ func levelFile(level string, organization string) string {
 func levelTitle(level string) string {
 	segments := strings.Split(level, ".")
 	switch {
-	case len(segments) == 2 && segments[0] == address.Organizations:
-		return "Organisation " + segments[1]
-	case len(segments) == 2:
-		return "User " + segments[1]
+	case len(segments) < 4:
+		return "Organisation " + segments[len(segments)-1]
 	case segments[2] == address.Teams:
 		return "Team " + segments[3]
+	case segments[2] == address.Users:
+		return "User " + segments[3]
 	default:
 		return "Project " + segments[3]
 	}
