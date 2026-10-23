@@ -1870,3 +1870,12 @@ writes is read from the next session on, not in the same one.
   empty home folder and no git identity, green on macOS; vet and the tests compile for Linux
   and Windows. Not yet run on either. Left for the user: push, then the first run's failures
   come back here.
+- (2026-10-23) P2.33, the first run: Linux and macOS green, Windows red with eight failing
+  tests in seven packages. Six assumed Unix and are fixed in the tests: permission bits in
+  four, a `.gitignore` read with `\n` line endings where the Windows checkout has `\r\n`, and
+  a shell script standing in for `claude`, now a copy of the test binary itself. Two were
+  rein's own bugs on Windows, each caught by its existing test there: the machine lock took
+  over from a live holder, because Windows has no signal of zero, so two rein runs could
+  write the state at once; and `init` recorded removed paths with a `/` after a Windows
+  folder. Gate: `task rein:check` green on macOS, vet and the tests compile for Windows;
+  the second run on Windows is what flips P2.33.
