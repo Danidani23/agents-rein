@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -98,13 +99,15 @@ func TestHowInstalled(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	t.Setenv("GOPATH", "/go")
 	t.Setenv("GOBIN", "")
+	t.Setenv("LOCALAPPDATA", "C:/Users/dani/AppData/Local")
 	for executable, expected := range map[string]string{
-		"/opt/homebrew/bin/rein":                         InstallBrew,
-		"/usr/local/Cellar/rein/0.1.0/bin/rein":          InstallBrew,
-		"C:/Users/dani/scoop/apps/rein/current/rein.exe": InstallScoop,
-		"/go/bin/rein":                                   InstallGo,
-		filepath.Join(home, ".local", "bin", "rein"):     InstallScript,
-		"/usr/bin/rein":                                  InstallUnknown,
+		"/opt/homebrew/bin/rein":                             InstallBrew,
+		"/usr/local/Cellar/rein/0.1.0/bin/rein":              InstallBrew,
+		"C:/Users/dani/scoop/apps/rein/current/rein.exe":     InstallScoop,
+		"/go/bin/rein":                                       InstallGo,
+		filepath.Join(home, ".local", "bin", "rein"):         InstallScript,
+		"C:/Users/dani/AppData/Local/Programs/rein/rein.exe": InstallScript,
+		"/usr/bin/rein":                                      InstallUnknown,
 	} {
 		install := Service{Executable: executable}.HowInstalled()
 		if install.Kind != expected || (expected == InstallScript) != install.Self || (expected == InstallScript || expected == InstallUnknown) != (install.Command == "") {
@@ -155,5 +158,54 @@ func TestSelfUpdate(t *testing.T) {
 	}
 	if AssetName("v1.2.3", "darwin", "arm64") != "rein_1.2.3_darwin_arm64.tar.gz" || AssetName("v1.2.3", "windows", "amd64") != "rein_1.2.3_windows_amd64.zip" {
 		t.Fatalf("asset names")
+	}
+}
+
+// TestMain lets this test binary stand in for a running rein: started with
+// REIN_TEST_RUNNING_REIN set, it only waits to be killed.
+func TestMain(tests *testing.M) {
+	if os.Getenv("REIN_TEST_RUNNING_REIN") != "" {
+		time.Sleep(time.Minute)
+		os.Exit(0)
+	}
+	os.Exit(tests.Run())
+}
+
+// Windows refuses to replace a binary that is running, which rein update
+// always is, so the old binary runs while it is replaced.
+func TestSelfUpdateOfARunningBinary(t *testing.T) {
+	name := "rein"
+	if runtime.GOOS == "windows" {
+		name = "rein.exe"
+	}
+	executable := filepath.Join(t.TempDir(), name)
+	testBinary, err := os.Executable()
+	if err != nil {
+		t.Fatalf("test binary: %v", err)
+	}
+	content, err := os.ReadFile(testBinary)
+	if err != nil {
+		t.Fatalf("read the test binary: %v", err)
+	}
+	err = os.WriteFile(executable, content, 0o755)
+	if err != nil {
+		t.Fatalf("write the old binary: %v", err)
+	}
+	running := exec.Command(executable)
+	running.Env = append(os.Environ(), "REIN_TEST_RUNNING_REIN=1")
+	err = running.Start()
+	if err != nil {
+		t.Fatalf("start the old binary: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = running.Process.Kill()
+		_ = running.Wait()
+	})
+	archive := tarball(t, "rein", "new binary")
+	releases := &fake.Releases{Latest_: ports.Release{Version: "v0.2.0", Assets: map[string]string{"rein_0.2.0_linux_arm64.tar.gz": "asset", "rein_0.2.0_checksums.txt": "sums"}}, Files: map[string][]byte{"asset": archive, "sums": []byte(checksumLine(archive, "rein_0.2.0_linux_arm64.tar.gz"))}}
+	_, err = Service{Releases: releases, Executable: executable, OS: "linux", Arch: "arm64"}.SelfUpdate(releases.Latest_)
+	content, _ = os.ReadFile(executable)
+	if err != nil || string(content) != "new binary" {
+		t.Fatalf("err %v, %d bytes in place", err, len(content))
 	}
 }
