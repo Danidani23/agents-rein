@@ -271,7 +271,8 @@ func writeHarness(orchestrator Orchestrator, clone machine.ProjectClone, organiz
 			synced.Written = append(synced.Written, file.Path)
 		}
 		if strings.HasPrefix(file.Path, compile.ReinFolder+"/") {
-			alwaysOn.WriteString(file.Content + "\n")
+			alwaysOn.WriteString(file.Content)
+			alwaysOn.WriteString("\n")
 		}
 	}
 	synced.AlwaysOn = alwaysOn.String()
