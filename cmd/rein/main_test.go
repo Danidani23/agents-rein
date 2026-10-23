@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -338,7 +340,7 @@ func TestWiring(t *testing.T) {
 		}
 		// restore puts the project back and commits; the untracked local file returns untracked
 		code, out, errOut = run("restore", "--path", project, "--yes")
-		if code != cli.ExitWorked || !strings.Contains(out, "removed sync's files: .claude/settings.local.json, .claude/skills/rein/SKILL.md, CLAUDE.md") || !strings.Contains(out, "put back: .claude/rules/go.md, CLAUDE.md") || !strings.Contains(out, ".gitignore: rein block removed") || !strings.Contains(out, "committed ") {
+		if code != cli.ExitWorked || !strings.Contains(out, "removed sync's files: .claude/settings.local.json, .claude/skills/rein/SKILL.md, .mcp.json, CLAUDE.md") || !strings.Contains(out, "put back: .claude/rules/go.md, CLAUDE.md") || !strings.Contains(out, ".gitignore: rein block removed") || !strings.Contains(out, "committed ") {
 			t.Fatalf("restore: code %d out %q err %q", code, out, errOut)
 		}
 		_, err = os.Stat(filepath.Join(project, ".claude", "rein"))
@@ -392,4 +394,58 @@ func TestWiring(t *testing.T) {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
 	})
+}
+
+// TestMCPOverStandardStreams starts the MCP gateway the way an agent does,
+// through the command over stdin and stdout, opens with the handshake every
+// client still speaks, lists the tools and calls one, and ends by closing
+// the input. Nothing but protocol messages may reach stdout.
+func TestMCPOverStandardStreams(t *testing.T) {
+	isolate(t, "")
+	stdinReader, stdinWriter := io.Pipe()
+	stdoutReader, stdoutWriter := io.Pipe()
+	done := make(chan int, 1)
+	go func() {
+		var errOut bytes.Buffer
+		done <- cli.Run([]string{"mcp"}, stdinReader, stdoutWriter, &errOut, wire)
+		_ = stdoutWriter.Close()
+	}()
+	scanner := bufio.NewScanner(stdoutReader)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+	exchange := func(line string) map[string]any {
+		t.Helper()
+		_, err := io.WriteString(stdinWriter, line+"\n")
+		if err != nil {
+			t.Fatalf("stdin: %v", err)
+		}
+		if !scanner.Scan() {
+			t.Fatalf("no answer to %s", line)
+		}
+		var message map[string]any
+		err = json.Unmarshal(scanner.Bytes(), &message)
+		if err != nil {
+			t.Fatalf("stdout carries something that is not a message: %q", scanner.Text())
+		}
+		return message
+	}
+	opened := exchange(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}`)
+	encoded, _ := json.Marshal(opened)
+	if !strings.Contains(string(encoded), `"protocolVersion":"2025-11-25"`) || !strings.Contains(string(encoded), `"name":"rein"`) {
+		t.Fatalf("initialize answered %s", encoded)
+	}
+	_, _ = io.WriteString(stdinWriter, `{"jsonrpc":"2.0","method":"notifications/initialized"}`+"\n")
+	listed, _ := json.Marshal(exchange(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`))
+	for _, tool := range []string{"status", "resolve", "lint"} {
+		if !strings.Contains(string(listed), `"name":"`+tool+`"`) {
+			t.Fatalf("tools/list lacks %s: %s", tool, listed)
+		}
+	}
+	called, _ := json.Marshal(exchange(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"status","arguments":{}}}`))
+	if !strings.Contains(string(called), `"structuredContent"`) || strings.Contains(string(called), `"isError":true`) {
+		t.Fatalf("status answered %s", called)
+	}
+	_ = stdinWriter.Close()
+	if code := <-done; code != cli.ExitWorked {
+		t.Fatalf("mcp ended with %d", code)
+	}
 }

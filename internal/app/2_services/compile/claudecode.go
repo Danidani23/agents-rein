@@ -28,6 +28,10 @@ const ReinFolder = ".claude/rein"
 // deny and ask lists, and merges the developer's own allow entries.
 const SettingsFile = ".claude/settings.local.json"
 
+// ReinServerID names rein's own tool server in .mcp.json: the queries as
+// MCP tools, served by the executable the session-start hook calls.
+const ReinServerID = "rein"
+
 // Input is what the emitter needs besides the resolution.
 type Input struct {
 	OrganizationSlug string
@@ -196,7 +200,10 @@ func ClaudeCode(input Input, result resolve.Result) (Output, error) {
 	}
 	output.Notes = append(output.Notes, notes...)
 	output.Files = append(output.Files, File{Path: SettingsFile, Address: "generated", Content: settings})
-	// tool servers
+	// tool servers, rein's own among them
+	if input.ReinExecutable != "" {
+		servers[ReinServerID] = map[string]any{"command": input.ReinExecutable, "args": []string{"mcp"}}
+	}
 	if len(servers) > 0 {
 		encoded, err := json.MarshalIndent(map[string]any{"mcpServers": servers}, "", "  ")
 		if err != nil {

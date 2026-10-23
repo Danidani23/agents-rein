@@ -782,11 +782,11 @@ func TestSync(t *testing.T) {
 		}
 	}
 	code, out, _ = fixture.run("sync", "--path", folder, "--hook")
-	if code != ExitWorked || !strings.Contains(out, "rein: organizations.acme.projects.shop synced for fake-agent, 0 files written, 4 unchanged") || strings.Contains(out, "just written") {
+	if code != ExitWorked || !strings.Contains(out, "rein: organizations.acme.projects.shop synced for fake-agent, 0 files written, 5 unchanged") || strings.Contains(out, "just written") {
 		t.Fatalf("hook: code %d out %q", code, out)
 	}
 	code, out, _ = fixture.run("status")
-	if code != ExitWorked || !strings.Contains(out, "project clones  1") || !strings.Contains(out, "4 files from sync") {
+	if code != ExitWorked || !strings.Contains(out, "project clones  1") || !strings.Contains(out, "5 files from sync") {
 		t.Fatalf("status: code %d out %q", code, out)
 	}
 	_ = os.WriteFile(filepath.Join(folder, "CLAUDE.md"), []byte("mine"), 0o644)

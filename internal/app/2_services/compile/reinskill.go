@@ -64,4 +64,9 @@ shell lacks; ask the developer to export them. Never write a secret into a file.
 The agent runs the read-only commands itself: status, resolve, lint. sync, propose and
 restore change the machine or open pull requests, so the developer runs them, or the agent
 asks first.
+
+The same queries are tools of the MCP server ` + "`rein`" + `, which sync writes into ` + "`.mcp.json`" + `:
+` + "`status`, `resolve`, `declaration_list`, `declaration_describe`, `organization_describe`," + `
+` + "`proposals_pending` and `lint`" + `, addressed as ` + "`mcp__rein__<tool>`" + `. They are read-only and
+answer with structured JSON; prefer them over the shell where they are available.
 `
