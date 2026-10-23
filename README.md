@@ -7,6 +7,11 @@
 
 # Agents Rein
 
+[![check](https://github.com/Danidani23/agents-rein/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/Danidani23/agents-rein/actions/workflows/check.yml)
+[![release](https://img.shields.io/github/v/release/Danidani23/agents-rein)](https://github.com/Danidani23/agents-rein/releases/latest)
+[![Go](https://img.shields.io/github/go-mod/go-version/Danidani23/agents-rein)](go.mod)
+[![licence](https://img.shields.io/github/license/Danidani23/agents-rein)](LICENSE)
+
 Agents Rein keeps the settings of your AI coding agents in one place and brings them to every
 project you work in, whatever agent tool you use and whichever model provider it talks to.
 Switching tool or provider then changes nothing about how you work.
