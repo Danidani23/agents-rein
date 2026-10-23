@@ -75,10 +75,8 @@ homebrew_casks:
     # the binary is not signed yet, so the quarantine flag comes off at install
     hooks:
       post:
-        install: |
-          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/rein"]
-          end
+        install_steps: |
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/rein"]
 
 scoops:
   - name: rein

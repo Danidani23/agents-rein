@@ -16,7 +16,10 @@ repeats neither.
 | Claude Code, logged in | `rein distill`'s judge, which runs `claude -p` | `claude --version` |
 
 The code depends on cobra and yaml.v3 only; `go mod download` fetches them. GoReleaser is not
-installed: the release runs it with `go run` at its pinned version.
+installed: the release runs it with `go run` at one pinned version, named in
+[release.go](../cmd/reinctl/release.go) and in the `rein:release-check` task, and a test keeps
+the two the same. Raising it is a change to both, then `task rein:release-check`, which fails on
+a property the new version deprecates.
 
 ## The tasks
 

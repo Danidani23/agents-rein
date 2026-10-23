@@ -51,7 +51,7 @@ tasks:
   rein:release-check:
     desc: Validate the GoReleaser configuration without releasing anything
     cmds:
-      - GOFLAGS=-mod=mod go run github.com/goreleaser/goreleaser/v2@latest check
+      - GOFLAGS=-mod=mod go run github.com/goreleaser/goreleaser/v2@v2.19.0 check
 
   rein:release:
     desc: "Cut and publish the next version from this machine with reinctl: gate, changelog, commit, tag, push, build, GitHub Release; the human runs this"

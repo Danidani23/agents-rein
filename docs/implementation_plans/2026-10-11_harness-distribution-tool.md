@@ -1828,3 +1828,7 @@ writes is read from the next session on, not in the same one.
   `init` names both `rein sync` and `rein distill`; `rein status` says per project what became
   of its latest snapshot, not distilled yet, pending in a proposal, or proposed with the pull
   request, by the hash the proposal records over every agent's snapshot.
+- (2026-10-23) The first `v0.2.0` attempt was refused by the gate: GoReleaser ran at `@latest`,
+  and the day's new version deprecated the cask's install hook. GoReleaser is pinned to one
+  version in `reinctl` and in the Taskfile, a test keeps them together, and the hook is the
+  declarative `install_steps`.

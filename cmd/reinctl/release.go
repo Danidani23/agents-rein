@@ -17,9 +17,19 @@ import (
 // A test replaces them.
 var gateCommands = [][]string{{"task", "rein:check"}, {"task", "rein:release-check"}}
 
+// goReleaserVersion is the one GoReleaser that checks the configuration in
+// the gate and publishes the release; Taskfile.yml names the same version,
+// and a test keeps the two together. Raising it: change both, run
+// task rein:release-check, and follow its deprecation notices.
+const goReleaserVersion = "v2.19.0"
+
 // publishCommand builds every platform and publishes the GitHub Release
 // for the tag at HEAD; a test replaces it.
-var publishCommand = []string{"go", "run", "github.com/goreleaser/goreleaser/v2@latest", "release", "--clean"}
+var publishCommand = defaultPublishCommand()
+
+func defaultPublishCommand() []string {
+	return []string{"go", "run", "github.com/goreleaser/goreleaser/v2@" + goReleaserVersion, "release", "--clean"}
+}
 
 // tokenCommand prints the token gh holds for GitHub; a test replaces it.
 var tokenCommand = []string{"gh", "auth", "token"}

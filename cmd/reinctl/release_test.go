@@ -108,7 +108,7 @@ func TestReleaseOverABareOrigin(t *testing.T) {
 	repositoryExists = func(root string, fullName string) bool { return fullName == tapRepository }
 	defer func() {
 		gateCommands = [][]string{{"task", "rein:check"}, {"task", "rein:release-check"}}
-		publishCommand = []string{"go", "run", "github.com/goreleaser/goreleaser/v2@latest", "release", "--clean"}
+		publishCommand = defaultPublishCommand()
 		tokenCommand = []string{"gh", "auth", "token"}
 	}()
 	clone, origin := repository(t)
@@ -223,5 +223,20 @@ func TestBuildOutputIsIgnored(t *testing.T) {
 	}
 	if !strings.Contains("\n"+string(ignore), "\n/dist/\n") {
 		t.Fatalf(".gitignore does not ignore /dist/, where the publish writes its archives")
+	}
+}
+
+func TestGoReleaserIsPinnedToOneVersion(t *testing.T) {
+	module, version, found := strings.Cut(publishCommand[2], "@")
+	if !found || module != "github.com/goreleaser/goreleaser/v2" || !strings.HasPrefix(version, "v2.") {
+		t.Fatalf("the publish runs %q; it must run github.com/goreleaser/goreleaser/v2 at an exact v2 version, never @latest, so a new GoReleaser cannot break a release", publishCommand[2])
+	}
+	taskfile, err := os.ReadFile(filepath.Join("..", "..", "Taskfile.yml"))
+	if err != nil {
+		t.Fatalf("Taskfile: %v", err)
+	}
+	check := "go run github.com/goreleaser/goreleaser/v2@" + version + " check"
+	if !strings.Contains(string(taskfile), check) {
+		t.Fatalf("Taskfile.yml does not run %q; the gate must check the configuration with the GoReleaser that publishes", check)
 	}
 }
