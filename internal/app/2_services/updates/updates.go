@@ -153,6 +153,7 @@ func (service Service) Nudge() string {
 func (service Service) HowInstalled() Install {
 	executable := filepath.ToSlash(service.Executable)
 	home, _ := os.UserHomeDir()
+	localApplicationData := os.Getenv("LOCALAPPDATA")
 	switch {
 	case strings.Contains(executable, "/Cellar/") || strings.Contains(executable, "/homebrew/") || strings.Contains(executable, "/linuxbrew/"):
 		return Install{Kind: InstallBrew, Command: "brew upgrade --cask rein"}
@@ -161,6 +162,8 @@ func (service Service) HowInstalled() Install {
 	case strings.HasPrefix(executable, filepath.ToSlash(goBinFolder())+"/"):
 		return Install{Kind: InstallGo, Command: "go install github.com/Danidani23/agents-rein/cmd/rein@latest"}
 	case home != "" && strings.HasPrefix(executable, filepath.ToSlash(filepath.Join(home, ".local", "bin"))+"/"):
+		return Install{Kind: InstallScript, Self: true}
+	case localApplicationData != "" && strings.HasPrefix(executable, filepath.ToSlash(filepath.Join(localApplicationData, "Programs", "rein"))+"/"):
 		return Install{Kind: InstallScript, Self: true}
 	}
 	return Install{Kind: InstallUnknown}
@@ -190,7 +193,9 @@ func AssetName(releaseVersion string, operatingSystem string, architecture strin
 
 // SelfUpdate replaces the running binary with the release's build for this
 // machine, after checking the archive against the release's checksum file:
-// download, verify, extract, write beside the binary, rename over it.
+// download, verify, extract, write beside the binary, rename over it. Windows
+// refuses to replace a running binary but lets it be renamed, so there the old
+// one moves aside to .old first, and the next update replaces what it left.
 func (service Service) SelfUpdate(release ports.Release) (string, error) {
 	operatingSystem, architecture := service.OS, service.Arch
 	if operatingSystem == "" {
@@ -229,9 +234,20 @@ func (service Service) SelfUpdate(release ports.Release) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	setAside := service.Executable + ".old"
+	if runtime.GOOS == "windows" {
+		err = os.Rename(service.Executable, setAside)
+		if err != nil {
+			os.Remove(temporary)
+			return "", err
+		}
+	}
 	err = os.Rename(temporary, service.Executable)
 	if err != nil {
 		os.Remove(temporary)
+		if runtime.GOOS == "windows" {
+			os.Rename(setAside, service.Executable)
+		}
 		return "", err
 	}
 	return service.Executable, nil
