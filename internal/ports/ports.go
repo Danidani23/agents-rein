@@ -201,6 +201,10 @@ type Agent interface {
 	// Unplace removes one placement rein made, when it is still what rein
 	// made; removed is false with an empty reason when nothing is there.
 	Unplace(placed machine.Placement) (removed bool, reason string, err error)
+	// TrustsFolder says whether the agent has asked the developer to trust
+	// the folder and been told yes, which gates what it reads there; false
+	// when it never asked. An agent without such a dialog answers true.
+	TrustsFolder(folder string) (bool, error)
 }
 
 // Judge is the model that reads prose for rein: one brief in, one answer

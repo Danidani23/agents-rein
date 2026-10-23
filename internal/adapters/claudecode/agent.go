@@ -1,10 +1,12 @@
 package claudecode
 
 import (
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/ports"
@@ -33,6 +35,54 @@ func (Agent) Installed() bool {
 // Home is CLAUDE_CONFIG_DIR when set, else ~/.claude.
 func (Agent) Home() (string, error) {
 	return ClaudeHome()
+}
+
+// TrustsFolder reads Claude Code's own config, .claude.json, which records
+// per project folder whether the developer accepted the trust dialog; the
+// approvals in a local settings file apply only after that. The folder is
+// looked up as given and with its links resolved. No file, no entry, or a
+// file that does not parse all mean not trusted yet.
+func (Agent) TrustsFolder(folder string) (bool, error) {
+	configPath, err := claudeConfigFile()
+	if err != nil {
+		return false, err
+	}
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		return false, nil
+	}
+	var config struct {
+		Projects map[string]struct {
+			HasTrustDialogAccepted bool `json:"hasTrustDialogAccepted"`
+		} `json:"projects"`
+	}
+	err = json.Unmarshal(content, &config)
+	if err != nil {
+		return false, nil
+	}
+	candidates := []string{filepath.Clean(folder)}
+	if resolved, err := filepath.EvalSymlinks(folder); err == nil && resolved != candidates[0] {
+		candidates = append(candidates, resolved)
+	}
+	for _, candidate := range candidates {
+		if config.Projects[candidate].HasTrustDialogAccepted {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// claudeConfigFile is Claude Code's own config: .claude.json under
+// CLAUDE_CONFIG_DIR when set, else in the user's home folder.
+func claudeConfigFile() (string, error) {
+	if value := os.Getenv("CLAUDE_CONFIG_DIR"); value != "" {
+		return filepath.Join(value, ".claude.json"), nil
+	}
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(userHome, ".claude.json"), nil
 }
 
 // HarnessPaths are the settings under the home: the global instructions,

@@ -481,6 +481,13 @@ type Agent struct {
 	// HarnessFormat is what Format returns; "claude-code" makes sync compile
 	// for the fake as for Claude Code.
 	HarnessFormat string
+	// Untrusted makes TrustsFolder answer false for every folder.
+	Untrusted bool
+}
+
+// TrustsFolder is true unless the test set Untrusted.
+func (agent *Agent) TrustsFolder(string) (bool, error) {
+	return !agent.Untrusted, nil
 }
 
 // Name is the agent's name.

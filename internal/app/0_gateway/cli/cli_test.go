@@ -781,6 +781,12 @@ func TestSync(t *testing.T) {
 			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 		}
 	}
+	fixture.agent.Untrusted = true
+	code, out, _ = fixture.run("sync", "--path", folder)
+	if code != ExitWorked || !strings.Contains(out, "note: fake-agent has not trusted this folder yet: its first start here asks once, and rein's tool server connects after that") {
+		t.Fatalf("untrusted folder: code %d out %q", code, out)
+	}
+	fixture.agent.Untrusted = false
 	code, out, _ = fixture.run("sync", "--path", folder, "--hook")
 	if code != ExitWorked || !strings.Contains(out, "rein: organizations.acme.projects.shop synced for fake-agent, 0 files written, 5 unchanged") || strings.Contains(out, "just written") {
 		t.Fatalf("hook: code %d out %q", code, out)

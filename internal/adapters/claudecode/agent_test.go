@@ -1,6 +1,7 @@
 package claudecode
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -56,4 +57,30 @@ func TestUnplace(t *testing.T) {
 			t.Fatalf("removed %v reason %q err %v", removed, reason, err)
 		}
 	})
+}
+
+func TestTrustsFolderReadsClaudeCodesOwnConfig(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+	trusted := filepath.Join(t.TempDir(), "shop")
+	_ = os.MkdirAll(trusted, 0o755)
+	other := filepath.Join(t.TempDir(), "other")
+	answer, err := Agent{}.TrustsFolder(trusted)
+	if err != nil || answer {
+		t.Fatalf("without a config: %v %v", answer, err)
+	}
+	config := fmt.Sprintf(`{"projects":{%q:{"hasTrustDialogAccepted":true},%q:{"allowedTools":[]}}}`, trusted, other)
+	_ = os.WriteFile(filepath.Join(configDir, ".claude.json"), []byte(config), 0o600)
+	answer, err = Agent{}.TrustsFolder(trusted)
+	if err != nil || !answer {
+		t.Fatalf("the folder the developer trusted: %v %v", answer, err)
+	}
+	answer, err = Agent{}.TrustsFolder(other)
+	if err != nil || answer {
+		t.Fatalf("a folder Claude Code knows but never asked about: %v %v", answer, err)
+	}
+	answer, err = Agent{}.TrustsFolder(filepath.Join(t.TempDir(), "never"))
+	if err != nil || answer {
+		t.Fatalf("a folder Claude Code never saw: %v %v", answer, err)
+	}
 }

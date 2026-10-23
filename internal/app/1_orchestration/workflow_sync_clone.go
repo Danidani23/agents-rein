@@ -159,6 +159,9 @@ func syncOne(orchestrator Orchestrator, clone machine.ProjectClone, request Sync
 			return synced, err
 		}
 		synced.Notes = append(synced.Notes, output.Notes...)
+		if trusted, err := agent.TrustsFolder(clone.ClonePath); err == nil && !trusted {
+			synced.Notes = append(synced.Notes, agent.Name()+" has not trusted this folder yet: its first start here asks once, and rein's tool server connects after that")
+		}
 		synced.UnsetVariables = services.WorkingCopy.UnsetVariables(output.Variables)
 		err = writeHarness(orchestrator, clone, organization, output, request.Force, &synced)
 		if err != nil {
