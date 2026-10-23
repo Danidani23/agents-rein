@@ -100,6 +100,8 @@ so each is another output of the same compiler ([findings, Q4](docs/harness-mana
 - [docs/decisions/](docs/decisions/) — the Architecture Decision Records, the immutable "why".
 - [docs/architecture.md](docs/architecture.md) — how the code is organised and where a new
   piece goes.
+- [docs/developing.md](docs/developing.md) — building, testing and releasing rein: the tasks,
+  how a change is made, how a version is cut.
 - [docs/implementation_plans/](docs/implementation_plans/) — the live boards.
 - [docs/future-ideas.md](docs/future-ideas.md) — ideas parked on purpose.
 

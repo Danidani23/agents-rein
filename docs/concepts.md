@@ -152,4 +152,4 @@ the first agent is only the first.
 | Agent | State |
 |---|---|
 | Claude Code | supported: instructions, rules, skills, tool servers, hooks, permissions |
-| Codex, Cursor, GitHub Copilot, Gemini CLI, OpenCode | planned: each reads AGENTS.md and Agent Skills natively ([findings, Q4](docs/harness-management.md#harness-portability-across-tools)), so each is another output of the same compiler |
+| Codex, Cursor, GitHub Copilot, Gemini CLI, OpenCode | planned: each reads AGENTS.md and Agent Skills natively ([findings, Q4](harness-management.md#harness-portability-across-tools)), so each is another output of the same compiler |

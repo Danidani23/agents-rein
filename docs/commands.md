@@ -61,10 +61,11 @@ binary. The binaries are not signed yet; the cask removes macOS's quarantine fla
 and the script's download carries none. `task rein:release-check` validates the GoReleaser
 configuration, and runs as part of the gate before every release.
 
-The reasoning is the [ADR](docs/decisions/2026-10-11_harness-tool-compiler-and-linter.md); the
+The reasoning is the [ADR](decisions/2026-10-11_harness-tool-compiler-and-linter.md); the
 design, the decisions and what is next are on the
-[board](docs/implementation_plans/2026-10-11_harness-distribution-tool.md). The code is Go,
+[board](implementation_plans/2026-10-11_harness-distribution-tool.md). The code is Go,
 with cobra and yaml.v3 as the only dependencies. Every repeatable command is a task in
-[Taskfile.yml](Taskfile.yml): `task rein:install` installs the binary, `task rein:check` is the
-gate, format check, vet, tests and lint; `task rein:coverage` tests with statement coverage and
-writes the report to `.tmp/coverage.html`; `task --list` shows the rest.
+[Taskfile.yml](../Taskfile.yml): `task rein:install` installs the binary, `task rein:check` is
+the gate, format check, vet, tests and lint; `task rein:coverage` tests with statement coverage
+and writes the report to `.tmp/coverage.html`; `task --list` shows the rest. How a change is
+made and how a release is cut, for a developer, is [developing.md](developing.md).

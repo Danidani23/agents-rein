@@ -1821,3 +1821,10 @@ writes is read from the next session on, not in the same one.
   the bucket, `rein update`, the daily nudge and the organisation's minimum version at `sync`.
   release-please and a release workflow on the host were considered and declined: everything
   from the machine, as in the sibling repository.
+- (2026-10-23) After the first release: `docs/developing.md` is the developer's entry point,
+  the tasks, how a change is made, how a release is cut and what a version string means, with
+  a one-line `CONTRIBUTING.md` pointing at it; the logos say rein, not reins; every command
+  ends with its next step in bold after a blank line, `sync` and `restore` gained one, and
+  `init` names both `rein sync` and `rein distill`; `rein status` says per project what became
+  of its latest snapshot, not distilled yet, pending in a proposal, or proposed with the pull
+  request, by the hash the proposal records over every agent's snapshot.
