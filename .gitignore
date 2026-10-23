@@ -15,3 +15,11 @@
 
 # the archives reinctl release builds before it publishes them
 /dist/
+
+# >>> rein: agent settings are not repository settings; rein sync writes these, keep this block
+.rein/
+CLAUDE.md
+.claude
+.mcp.json
+CLAUDE.local.md
+# <<< rein
