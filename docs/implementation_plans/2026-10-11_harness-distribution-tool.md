@@ -1205,14 +1205,15 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
-- 🔨 **P2.33 — GitHub checks every push on the three platforms a release builds for.**
-  [IN PROGRESS] Approved 2026-10-23. [check.yml](../../.github/workflows/check.yml) runs
+- ✅ **P2.33 — GitHub checks every push on the three platforms a release builds for.**
+  [EXECUTED] 2026-10-23, as approved the same day. [check.yml](../../.github/workflows/check.yml) runs
   `task rein:check` and `task rein:release-check` on Linux and `task rein:test` on macOS and
   Windows, on every push to `main` and every pull request; it only checks, the release stays on
   the developer's machine (P2.8). The README carries four badges: the check, the latest
   release, the Go version and the licence; no coverage service. The tests had only ever run
   on macOS: every failure the first run shows on Linux or Windows is fixed test first
   (`bug-first-test` skill), one commit each. Gate: the first run on `main` green on all three.
+  Ran green on the second run, at `d8c8a93`, after the first run's Windows fixes.
 - ✅ **P2.32 — `rein mcp`: the queries as MCP tools, through the official SDK.** [EXECUTED]
   2026-10-23 (R51 to R54, D28). A second gateway, `0_gateway/mcp`, offers `status`,
   `resolve`, `declaration_list`, `declaration_describe`, `organization_describe`,
@@ -1879,3 +1880,13 @@ writes is read from the next session on, not in the same one.
   write the state at once; and `init` recorded removed paths with a `/` after a Windows
   folder. Gate: `task rein:check` green on macOS, vet and the tests compile for Windows;
   the second run on Windows is what flips P2.33.
+- (2026-10-23) P2.33 executed: the second run, at `d8c8a93`, green on Linux, macOS and
+  Windows. Found while reading the update path, which no test reached on Windows: `rein
+  update` refused a rein that `install.ps1` had put in `%LOCALAPPDATA%\Programs\rein`, since
+  only `~/.local/bin` counted as the install script's folder, and once past that it would
+  have renamed the new binary over the running `rein.exe`, which Windows refuses. Both have
+  a test first, the second with the old binary running while it is replaced; on Windows the
+  old binary now moves aside to `rein.exe.old`, which the next update replaces. Gate:
+  `task rein:check` green on macOS. The third run, at `908f22d`, the tests without the fix,
+  failed the install test on all three and the running binary on Windows alone, with
+  `Access is denied` on the rename; the fourth run, with the fix, is the gate.
