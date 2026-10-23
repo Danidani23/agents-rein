@@ -52,7 +52,8 @@ flowchart TB
 |---|---|---|---|
 | Composition root | `cmd/rein` | `main` and `wire`, the one place that knows every adapter | everything |
 | Operator CLI | `cmd/reinctl` | what a maintainer runs on this repository, `release`; never shipped to users, wraps the git commands the human runs | `adapters/execute` |
-| Gateway | `internal/app/0_gateway/cli` | cobra commands: read flags, ask through the prompter, call, print, map errors to exit codes | `1_orchestration`, `ports`, the libraries, `adapters/terminal`, `adapters/execute`, `version` |
+| Gateway | `internal/app/0_gateway/cli` | cobra commands: read flags, ask through the prompter, call, print, map errors to exit codes | `1_orchestration`, `ports`, the libraries, `adapters/terminal`, `adapters/execute`, `version`, `0_gateway/mcp` |
+| MCP gateway | `internal/app/0_gateway/mcp` | the queries as MCP tools over stdio through the official SDK, started by the CLI's `mcp` command; no lock, no printing | `1_orchestration`, `ports`, the libraries |
 | Orchestration | `internal/app/1_orchestration` | the one concrete `Orchestrator`, which embeds `Services`: the workflows, the queries, the saga runner, `NewServices` and `New` | `2_services`, `ports` |
 | Services | `internal/app/2_services/<service>` | one piece of state or one kind of side effect each, behind the ports | `ports`, the libraries |
 | Libraries | `internal/app/2_services/{address, declaration, lint, exchange, machine, refusal, scaffold, distill, proposal, resolve, compile, semver}` | pure logic and data types, no I/O beyond reading or writing files they are pointed at | the other libraries |

@@ -334,6 +334,10 @@ committed instead of gitignored (D4).
   reach its repositories; `org create` names the installation address when GitHub refuses.
   A GitHub Enterprise has its own registration, so the addresses and the client ID are
   overridable. `gh` is no longer required anywhere.
+- ✅ **D28 — `rein mcp` on the official Go SDK, the first module beyond cobra and yaml.v3.**
+  Decided 2026-10-23 by the user (R52 b). A dual-era MCP server by hand would chase a
+  specification that changed its shape within a year; the SDK tracks it. Every further module
+  is an ADR first. The [ADR](../decisions/2026-10-23_mcp-gateway-on-the-official-sdk.md).
 - ✅ **D27 — One organisation per repository, so its folders leave it out; a user level is a
   level of the organisation.** Decided 2026-10-22 by the user on the first look at the org
   repository on GitHub. The layout is `declarations/organization.yaml`, `labels/`, the
@@ -1201,6 +1205,13 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- ✅ **P2.32 — `rein mcp`: the queries as MCP tools, through the official SDK.** [EXECUTED]
+  2026-10-23 (R51 to R54, D28). A second gateway, `0_gateway/mcp`, offers `status`,
+  `resolve`, `declaration_list`, `declaration_describe`, `organization_describe`,
+  `proposals_pending` and `lint` as read-only tools over stdio, behind the login gate where
+  the command has one; `rein sync` writes the server into `.mcp.json` beside the hook; the
+  rein skill names the tools. `distill` and `propose` as tools wait for the pilot, with the
+  always-ask marker Claude Code honours.
 - ✅ **P2.31 — The flat layout, the user level under the organisation, `team list`, `team
   edit`, `project list`.** [EXECUTED] 2026-10-22 (R41, R42, D27). Every place that turned a
   level into a folder goes through the address library now; the lint reads the
@@ -1832,3 +1843,9 @@ writes is read from the next session on, not in the same one.
   and the day's new version deprecated the cask's install hook. GoReleaser is pinned to one
   version in `reinctl` and in the Taskfile, a test keeps them together, and the hook is the
   declarative `install_steps`.
+- (2026-10-23) P2.32 executed: `rein mcp` serves the seven queries as read-only MCP tools over
+  stdio through the official Go SDK, the first module beyond cobra and yaml.v3 (D28, its ADR);
+  sync writes the server into `.mcp.json`; the rein skill names the tools; a gateway test
+  over an in-memory transport and an end-to-end test over the standard streams. Left for the
+  user: `task rein:install`, then `rein sync` in a clone and `claude mcp list` to see the
+  server; the project instructions in the org repository still say cobra and yaml.v3 only.

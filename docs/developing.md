@@ -15,7 +15,9 @@ repeats neither.
 | the GitHub CLI, logged in | the release's token, read with `gh auth token` | `gh auth status` |
 | Claude Code, logged in | `rein distill`'s judge, which runs `claude -p` | `claude --version` |
 
-The code depends on cobra and yaml.v3 only; `go mod download` fetches them. GoReleaser is not
+The code depends on cobra, yaml.v3 and the official MCP SDK, no more: a further module is an
+[ADR](decisions/2026-10-23_mcp-gateway-on-the-official-sdk.md) before it is added, and `go.mod`
+records each one's exact version. `go mod download` fetches them. GoReleaser is not
 installed: the release runs it with `go run` at one pinned version, named in
 [release.go](../cmd/reinctl/release.go) and in the `rein:release-check` task, and a test keeps
 the two the same. Raising it is a change to both, then `task rein:release-check`, which fails on

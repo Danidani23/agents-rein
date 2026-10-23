@@ -31,6 +31,32 @@ GitHub account, and the agents on your machine are detected.
 Planned, in the board's order: `rein import` and `rein export`, which move a level into and
 out of an org repository; `rein review`; `rein migrate`.
 
+## The MCP server
+
+`rein mcp` serves rein's queries to an agent as tools of the MCP (the Model Context Protocol)
+over standard input and output. `rein sync` writes the entry into the project's `.mcp.json`
+beside any declared tool server, with the executable the session-start hook calls, so an
+agent that opens the clone finds the server `rein`; Claude Code asks once per project before
+it starts a project-scoped server. Every tool is a query: it takes no machine lock and changes
+nothing, says so with the read-only marker, and the agent's own permission rules decide which
+run unasked, by the names `mcp__rein__<tool>`.
+
+| Tool | Answers | Takes |
+|---|---|---|
+| `status` | what `rein status` prints, as data; runs without a login | nothing |
+| `resolve` | what `rein resolve` prints: the declarations a project resolves and why | `project`, `organization` |
+| `declaration_list` | what `rein declaration list` prints | `organization`, `level` |
+| `declaration_describe` | one declaration: level, kind, id, selectors, files | `address`, `organization` |
+| `organization_describe` | the organisation as its clone holds it: teams, projects, user level, labels | `organization` |
+| `proposals_pending` | the proposal files distill wrote and propose has not sent | `directory` |
+| `lint` | what `rein lint` reports for a folder | `path` |
+
+An answer is structured JSON, also rendered as text. A refusal, such as a missing login, is a
+tool error the agent can act on. `sync`, `distill`, `propose` and `restore` are not tools: they
+change the machine or open pull requests and stay the developer's commands. The server is built
+on the official Go SDK; the decision and what it changed about dependencies is the
+[ADR](decisions/2026-10-23_mcp-gateway-on-the-official-sdk.md).
+
 ## Installing and releasing
 
 A release is cut by hand, with `task rein:release`, which runs `reinctl release`, the operator
@@ -64,7 +90,8 @@ configuration, and runs as part of the gate before every release.
 The reasoning is the [ADR](decisions/2026-10-11_harness-tool-compiler-and-linter.md); the
 design, the decisions and what is next are on the
 [board](implementation_plans/2026-10-11_harness-distribution-tool.md). The code is Go,
-with cobra and yaml.v3 as the only dependencies. Every repeatable command is a task in
+with cobra, yaml.v3 and the official MCP SDK as its dependencies, each the subject of an
+[ADR](decisions/2026-10-23_mcp-gateway-on-the-official-sdk.md). Every repeatable command is a task in
 [Taskfile.yml](../Taskfile.yml): `task rein:install` installs the binary, `task rein:check` is
 the gate, format check, vet, tests and lint; `task rein:coverage` tests with statement coverage
 and writes the report to `.tmp/coverage.html`; `task --list` shows the rest. How a change is
