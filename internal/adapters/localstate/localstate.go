@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -213,11 +214,16 @@ func (store Store) Acquire(wait time.Duration) (release func(), err error) {
 
 // processAlive says whether a process with the pid is running: a signal of
 // zero reaches a live one, and a live one of another user answers that the
-// permission is missing, which is still alive.
+// permission is missing, which is still alive. Windows knows no signal of
+// zero; there finding the process opens it, which fails once it is gone.
 func processAlive(pid int) bool {
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return false
+	}
+	if runtime.GOOS == "windows" {
+		_ = process.Release()
+		return true
 	}
 	err = process.Signal(syscall.Signal(0))
 	if err == nil {
