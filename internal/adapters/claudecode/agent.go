@@ -72,6 +72,11 @@ func (Agent) TrustsFolder(folder string) (bool, error) {
 	return false, nil
 }
 
+// TrustCommand starts Claude Code in the folder, which asks for trust once.
+func (Agent) TrustCommand() string {
+	return "claude"
+}
+
 // claudeConfigFile is Claude Code's own config: .claude.json under
 // CLAUDE_CONFIG_DIR when set, else in the user's home folder.
 func claudeConfigFile() (string, error) {

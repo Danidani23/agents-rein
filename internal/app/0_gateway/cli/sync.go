@@ -120,4 +120,9 @@ func printSynced(environment *commandEnvironment, synced orchestration.CloneSync
 	if len(synced.UnsetVariables) > 0 {
 		fmt.Fprintf(environment.errOut, "%s\n", environment.style().Yellow(fmt.Sprintf("warning: the tool servers of %s need %s in your shell, not set", synced.Address, strings.Join(synced.UnsetVariables, ", "))))
 	}
+	if !hook {
+		for _, untrusted := range synced.Untrusted {
+			fmt.Fprintf(environment.errOut, "%s\n  %s\n", environment.style().Red(fmt.Sprintf("warning: %s has not trusted this folder yet, so rein's tool server stays pending; start it here once and accept the trust dialog:", untrusted.Agent)), fmt.Sprintf("cd %s && %s", synced.Folder, untrusted.Command))
+		}
+	}
 }

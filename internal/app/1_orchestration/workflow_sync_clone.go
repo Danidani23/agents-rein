@@ -27,6 +27,13 @@ type SyncRequest struct {
 }
 
 // CloneSync is what sync did to one clone.
+// UntrustedAgent is an agent that has not asked the developer to trust the
+// clone's folder yet, and the command that makes it ask.
+type UntrustedAgent struct {
+	Agent   string
+	Command string
+}
+
 type CloneSync struct {
 	Folder    string
 	Address   string
@@ -39,6 +46,10 @@ type CloneSync struct {
 	// Force they were snapshotted and overwritten, else they stopped the sync.
 	Modified     []string
 	SnapshotPath string
+	// Untrusted are the agents that have not been told to trust the folder
+	// yet, with the command that asks; their approval of rein's tool server
+	// waits for it.
+	Untrusted []UntrustedAgent
 	// UnsetVariables are the REIN_ variables the tool servers need and the
 	// shell does not set (D22).
 	UnsetVariables []string
@@ -160,7 +171,7 @@ func syncOne(orchestrator Orchestrator, clone machine.ProjectClone, request Sync
 		}
 		synced.Notes = append(synced.Notes, output.Notes...)
 		if trusted, err := agent.TrustsFolder(clone.ClonePath); err == nil && !trusted {
-			synced.Notes = append(synced.Notes, agent.Name()+" has not trusted this folder yet: its first start here asks once, and rein's tool server connects after that")
+			synced.Untrusted = append(synced.Untrusted, UntrustedAgent{Agent: agent.Name(), Command: agent.TrustCommand()})
 		}
 		synced.UnsetVariables = services.WorkingCopy.UnsetVariables(output.Variables)
 		err = writeHarness(orchestrator, clone, organization, output, request.Force, &synced)

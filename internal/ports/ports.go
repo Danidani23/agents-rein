@@ -205,6 +205,9 @@ type Agent interface {
 	// the folder and been told yes, which gates what it reads there; false
 	// when it never asked. An agent without such a dialog answers true.
 	TrustsFolder(folder string) (bool, error)
+	// TrustCommand is what the developer runs inside a folder to be asked
+	// for that trust: the agent's own command.
+	TrustCommand() string
 }
 
 // Judge is the model that reads prose for rein: one brief in, one answer

@@ -1854,6 +1854,6 @@ writes is read from the next session on, not in the same one.
   developer's entries, so the pending-approval step the pilot hit is gone after the next sync
   in a trusted folder.
 - (2026-10-23) R56: the agent port answers whether the agent has trusted a folder; Claude Code's
-  adapter reads it from `.claude.json`, and sync prints a note when the answer is no, because
-  Claude Code applies the server approval only after its trust dialog. rein never writes that
+  adapter reads it from `.claude.json`, and sync warns in red, with the command to run, when the
+  answer is no, because Claude Code applies the server approval only after its trust dialog. rein never writes that
   record: trust is the developer's decision about a folder.

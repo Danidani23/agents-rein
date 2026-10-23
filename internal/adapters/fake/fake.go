@@ -490,6 +490,11 @@ func (agent *Agent) TrustsFolder(string) (bool, error) {
 	return !agent.Untrusted, nil
 }
 
+// TrustCommand is the fake's own command.
+func (*Agent) TrustCommand() string {
+	return "fake-agent"
+}
+
 // Name is the agent's name.
 func (*Agent) Name() string {
 	return "fake-agent"
