@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0] - 2026-10-23
+
+### Features
+
+- **sync:** warn in red, with the command, when Claude Code has not trusted the folder (52407ca)
+- **sync:** say when Claude Code has not trusted the folder yet (6740776)
+- **sync:** approve rein's tool server in the settings file it owns (4ebd005)
+- **mcp:** rein mcp serves the queries as read-only MCP tools (fc5b3a3)
+
 ## [0.2.0] - 2026-10-23
 
 ### Features
