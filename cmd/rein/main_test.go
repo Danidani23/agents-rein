@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -18,6 +20,57 @@ import (
 
 // These are the end-to-end checks of the real wiring: adapters over a
 // stubbed gh and claude on the PATH, a scratch org repository, a temp home.
+
+// claudeStubFolder holds this test binary under the name claude, which
+// isolate puts first on the PATH.
+var claudeStubFolder string
+
+// TestMain makes the stub claude a copy of this test binary, because Windows
+// runs only executables and no shell script. Started as claude, the binary
+// answers a judge brief with the canned verdict for the rules of the init test.
+func TestMain(tests *testing.M) {
+	if strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe") == "claude" {
+		if len(os.Args) > 1 && os.Args[1] == "-p" {
+			_, _ = io.Copy(io.Discard, os.Stdin)
+			fmt.Print(stubJudgeAnswer)
+		}
+		os.Exit(0)
+	}
+	folder, err := claudeStub()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "stub claude: %v\n", err)
+		os.Exit(1)
+	}
+	claudeStubFolder = folder
+	code := tests.Run()
+	_ = os.RemoveAll(folder)
+	os.Exit(code)
+}
+
+// claudeStub copies this test binary into a new folder as claude.
+func claudeStub() (folder string, err error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	content, err := os.ReadFile(executable)
+	if err != nil {
+		return "", err
+	}
+	folder, err = os.MkdirTemp("", "rein-claude-stub")
+	if err != nil {
+		return "", err
+	}
+	name := "claude"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	err = os.WriteFile(filepath.Join(folder, name), content, 0o755)
+	if err != nil {
+		return "", err
+	}
+	return folder, nil
+}
 
 func run(arguments ...string) (code int, out string, errOut string) {
 	var outBuffer, errBuffer bytes.Buffer
@@ -109,14 +162,7 @@ func isolate(t *testing.T, login string) (reinHome string) {
 	t.Cleanup(server.Close)
 	t.Setenv("REIN_GITHUB_WEB", server.URL)
 	t.Setenv("REIN_GITHUB_API", server.URL)
-	directory := t.TempDir()
-	// the stub claude answers a judge brief with a canned verdict for the rules of the init test
-	claudeStub := "#!/bin/sh\nif [ \"$1\" = \"-p\" ]; then\n  cat >/dev/null\n  printf '%s' '" + stubJudgeAnswer + "'\nfi\nexit 0\n"
-	err := os.WriteFile(filepath.Join(directory, "claude"), []byte(claudeStub), 0o755)
-	if err != nil {
-		t.Fatalf("stub claude: %v", err)
-	}
-	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", claudeStubFolder+string(os.PathListSeparator)+os.Getenv("PATH"))
 	// git commits need an identity and must not read the machine's config
 	emptyConfig := filepath.Join(t.TempDir(), "gitconfig")
 	_ = os.WriteFile(emptyConfig, nil, 0o644)
