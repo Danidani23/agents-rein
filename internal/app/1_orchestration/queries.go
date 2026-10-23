@@ -1,7 +1,10 @@
 package orchestration
 
 import (
+	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/proposal"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -26,6 +29,9 @@ type CloneStatus struct {
 	Inserts  int
 	Modified int
 	Missing  int
+	// Snapshot is what became of the project's latest snapshot: not
+	// distilled, pending in a proposal, or proposed; "" without a snapshot.
+	Snapshot string
 }
 
 // StatusReport is everything status shows.
@@ -90,7 +96,7 @@ func (orchestrator Orchestrator) Status() (StatusReport, error) {
 		for _, entry := range pending {
 			report.Pending = append(report.Pending, PendingProposal{Path: entry.Path, ID: entry.Proposal.ID, Level: entry.Proposal.DistilledFrom, Candidates: len(entry.Proposal.Candidates), DistilledAt: entry.Proposal.DistilledAt})
 		}
-		status := CloneStatus{ProjectClone: clone}
+		status := CloneStatus{ProjectClone: clone, Snapshot: snapshotFate(services, clone, pending)}
 		inserts, err := services.Ledger.InsertsOf(clone.Organization, clone.ClonePath)
 		if err != nil {
 			return StatusReport{}, err
@@ -477,4 +483,38 @@ func (orchestrator Orchestrator) RefreshOrganization(slug string) (OrganizationD
 		return OrganizationDescription{}, err
 	}
 	return orchestrator.DescribeOrganization(organization.Slug)
+}
+
+// snapshotFate says what became of a project's latest snapshots, by the
+// hash a proposal records over all of them, one per agent in distill's
+// order: pending in the clone, proposed in the history, or not distilled yet.
+func snapshotFate(services Services, clone machine.ProjectClone, pending []proposalfiles.Pending) string {
+	stored, err := services.Snapshots.Latest(clone.Address)
+	if err != nil || len(stored) == 0 {
+		return ""
+	}
+	var contents [][]byte
+	for _, snapshot := range stored {
+		content, err := os.ReadFile(snapshot.Path)
+		if err != nil {
+			return ""
+		}
+		contents = append(contents, content)
+	}
+	digest := proposal.DigestOf(contents...)
+	for _, entry := range pending {
+		if entry.Proposal.Snapshot.SHA256 == digest {
+			return "snapshot distilled, proposal pending at " + entry.Path
+		}
+	}
+	parsed, err := address.Parse(clone.Address)
+	if err == nil {
+		history, _ := services.ProposalFiles.History(parsed.OrganizationSlug())
+		for _, entry := range history {
+			if entry.Proposal.Snapshot.SHA256 == digest {
+				return "snapshot distilled and proposed, " + entry.Proposal.PullRequest
+			}
+		}
+	}
+	return "snapshot not distilled yet; rein distill"
 }

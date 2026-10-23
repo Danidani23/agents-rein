@@ -726,6 +726,10 @@ func TestDistillHarness(t *testing.T) {
 		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "rules", "go.md")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("Two-line errors.\n"), 0o644)
+		before, _ := fixture.orchestrator().Status()
+		if len(before.Clones) != 1 || before.Clones[0].Snapshot != "snapshot not distilled yet; rein distill" {
+			t.Fatalf("status before distill %+v", before.Clones)
+		}
 		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Directory: folder})
 		if err != nil || result.Level != "organizations.acme.projects.shop" || len(result.Proposal.Candidates) != 3 || len(result.Proposal.Skipped) != 1 || result.Proposal.Snapshot.Path != snapshotPath || len(result.Proposal.ID) != 12 || result.Proposal.Status != proposal.StatusPending {
 			t.Fatalf("result %+v err %v", result, err)
@@ -764,8 +768,8 @@ func TestDistillHarness(t *testing.T) {
 			t.Fatalf("pending %+v err %v", pending, err)
 		}
 		report, err := fixture.orchestrator().Status()
-		if err != nil || len(report.Pending) != 1 || report.Pending[0].Path != result.File || report.Pending[0].Level != "organizations.acme.projects.shop" {
-			t.Fatalf("status pending %+v err %v", report.Pending, err)
+		if err != nil || len(report.Pending) != 1 || report.Pending[0].Path != result.File || report.Pending[0].Level != "organizations.acme.projects.shop" || report.Clones[0].Snapshot != "snapshot distilled, proposal pending at "+result.File {
+			t.Fatalf("status pending %+v clones %+v err %v", report.Pending, report.Clones, err)
 		}
 	})
 	t.Run("the home becomes the user's level under the home's pending folder, a named snapshot its own, and the refusals", func(t *testing.T) {
@@ -835,6 +839,21 @@ func TestProposeDeclarations(t *testing.T) {
 		history, err := fixture.orchestrator().ProposalFiles.History("acme")
 		if err != nil || len(history) != 1 || history[0].Proposal.Status != proposal.StatusProposed || history[0].Proposal.PullRequest != result.PullRequestURL || history[0].Proposal.Branch != result.Branch || history[0].Proposal.ProposedAt.IsZero() {
 			t.Fatalf("history %+v err %v", history, err)
+		}
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Bound", Teams: []string{"web"}})
+		clone := projectClone(t)
+		_, _ = fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: clone, Project: "bound"})
+		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.bound", clone)
+		boundProposal, _ := fixture.orchestrator().DistillHarness(DistillRequest{Directory: clone})
+		proposed, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: boundProposal.File})
+		if err != nil {
+			t.Fatalf("propose bound: %v", err)
+		}
+		after, _ := fixture.orchestrator().Status()
+		for _, status := range after.Clones {
+			if status.ClonePath == clone && status.Snapshot != "snapshot distilled and proposed, "+proposed.PullRequestURL {
+				t.Fatalf("status after propose %+v", status)
+			}
 		}
 		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: result.HistoryFile})
 		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "was proposed on") {

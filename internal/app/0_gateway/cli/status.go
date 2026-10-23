@@ -82,6 +82,9 @@ func printStatus(environment *commandEnvironment, report orchestration.StatusRep
 			}
 		}
 		fmt.Fprintf(environment.out, "  %s  %s  %s\n", clone.Address, clone.ClonePath, drift)
+		if clone.Snapshot != "" {
+			fmt.Fprintf(environment.out, "    %s\n", clone.Snapshot)
+		}
 	}
 	if len(report.Pending) > 0 {
 		fmt.Fprintf(environment.out, "\nproposals pending  %d\n", len(report.Pending))
