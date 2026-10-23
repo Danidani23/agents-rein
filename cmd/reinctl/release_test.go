@@ -221,7 +221,9 @@ func TestBuildOutputIsIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gitignore: %v", err)
 	}
-	if !strings.Contains("\n"+string(ignore), "\n/dist/\n") {
+	// a Windows checkout ends each line with \r\n
+	ignoreLines := strings.ReplaceAll(string(ignore), "\r\n", "\n")
+	if !strings.Contains("\n"+ignoreLines, "\n/dist/\n") {
 		t.Fatalf(".gitignore does not ignore /dist/, where the publish writes its archives")
 	}
 }
