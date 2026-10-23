@@ -218,7 +218,8 @@ func runDeclarationEdit(environment *commandEnvironment, declarationAddress stri
 		fmt.Fprintf(environment.out, "its address after the merge: %s\n", result.NewAddress)
 	}
 	style := environment.style()
-	fmt.Fprintf(environment.out, "\npull request: %s\nnext: review and merge it, then rein sync in each clone it reaches\n", style.Bold(style.Green(result.PullRequestURL)))
+	fmt.Fprintf(environment.out, "\npull request: %s\n", style.Bold(style.Green(result.PullRequestURL)))
+	printNext(environment, "review and merge it, then rein sync in each clone it reaches")
 	return nil
 }
 
@@ -349,7 +350,8 @@ func newDeclarationRemoveCommand(environment *commandEnvironment) *cobra.Command
 				return err
 			}
 			style := environment.style()
-			fmt.Fprintf(environment.out, "removed %s on branch %s: %s\n\npull request: %s\nnext: review and merge it, then rein sync in each clone it reached\n", result.Address, result.Branch, strings.Join(result.Removed, ", "), style.Bold(style.Green(result.PullRequestURL)))
+			fmt.Fprintf(environment.out, "removed %s on branch %s: %s\n\npull request: %s\n", result.Address, result.Branch, strings.Join(result.Removed, ", "), style.Bold(style.Green(result.PullRequestURL)))
+			printNext(environment, "review and merge it, then rein sync in each clone it reached")
 			return nil
 		},
 	}

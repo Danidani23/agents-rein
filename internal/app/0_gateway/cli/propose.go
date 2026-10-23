@@ -95,7 +95,7 @@ func runPropose(environment *commandEnvironment, request orchestration.ProposeRe
 	if result.HistoryFile != "" {
 		fmt.Fprintf(environment.out, "the proposal moved to %s\n", result.HistoryFile)
 	}
-	fmt.Fprintf(environment.out, "next: review and merge it, then rein sync in each clone of its projects\n")
+	printNext(environment, "review and merge it, then rein sync in each clone of its projects")
 	return nil
 }
 

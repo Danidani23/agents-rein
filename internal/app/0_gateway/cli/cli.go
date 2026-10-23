@@ -158,6 +158,12 @@ func (environment *commandEnvironment) orchestrateLocked() (orchestrator orchest
 	return orchestrator, release, nil
 }
 
+// printNext ends a command with what comes next, bold after a blank line,
+// the way the thing it produced stands out in green above it.
+func printNext(environment *commandEnvironment, text string) {
+	fmt.Fprintf(environment.out, "\n%s\n", environment.style().Bold("next: "+text))
+}
+
 // style paints for a terminal and not for a file.
 func (environment *commandEnvironment) style() terminal.Style {
 	return terminal.Style{Enabled: environment.terminal}

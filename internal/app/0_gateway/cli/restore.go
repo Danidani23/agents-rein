@@ -91,4 +91,5 @@ func printRestored(environment *commandEnvironment, result orchestration.Restore
 	default:
 		fmt.Fprintf(environment.out, "the put-back is staged, not committed\n")
 	}
+	printNext(environment, "the clone is as before rein init; rein init puts it under rein again, rein org destroy and rein reset take the rest off this machine")
 }

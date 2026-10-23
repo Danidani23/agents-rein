@@ -65,6 +65,7 @@ func runSync(environment *commandEnvironment, request orchestration.SyncRequest,
 		printSynced(environment, synced, hook)
 	}
 	if err == nil && !hook {
+		printNext(environment, "a new session in the clone reads the harness; a change to it is proposed with rein distill and rein propose, never edited here")
 		printNudge(environment, orchestrator)
 	}
 	return hookOrError(environment, hook, err)

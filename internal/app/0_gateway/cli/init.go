@@ -184,7 +184,7 @@ func printInitialized(environment *commandEnvironment, result orchestration.Init
 	default:
 		fmt.Fprintf(environment.out, "the move-out is staged, not committed\n")
 	}
-	fmt.Fprintf(environment.out, "next: rein sync writes the settings this project resolves\n")
+	printNext(environment, "rein sync receives what the organisation declares for this project; rein distill turns what was moved out into a proposal")
 }
 
 const moveOutCommitMessageShown = "move agent settings out to rein (rein init)"
