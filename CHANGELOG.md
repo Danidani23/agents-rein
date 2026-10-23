@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0] - 2026-10-23
+
+### Features
+
+- **status:** say what became of each project's latest snapshot (a350bce)
+- **cli:** every command ends with its next step in bold (7eeb40d)
+
+### Bug Fixes
+
+- **reinctl:** one pinned GoReleaser checks and publishes a release (4865aef)
+- **rein:** a build after a tag is newer than the tag; the comparison reads pre-releases and ignores build metadata (c5bb941)
+- **reinctl:** the archives of a release are ignored, so the next release finds a clean tree (161a112)
+
 ## [0.1.0] - 2026-10-22
 
 ### Features
