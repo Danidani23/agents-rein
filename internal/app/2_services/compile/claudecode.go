@@ -362,6 +362,21 @@ func mergeSettings(input Input, sets []declaration.PermissionSet, hooks []hookEn
 		hooksValue[event] = groups
 	}
 	settings["hooks"] = hooksValue
+	// rein's own tool server is approved here, beside what the developer
+	// approved, so Claude Code starts it without its once-per-project
+	// prompt: the prompt guards against a cloned .mcp.json, and this entry
+	// is written on this machine
+	if input.ReinExecutable != "" {
+		approved := map[string]bool{ReinServerID: true}
+		if existing, ok := settings["enabledMcpjsonServers"].([]any); ok {
+			for _, name := range existing {
+				if text, isString := name.(string); isString {
+					approved[text] = true
+				}
+			}
+		}
+		settings["enabledMcpjsonServers"] = sortedKeys(approved)
+	}
 	encoded, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return "", nil, err

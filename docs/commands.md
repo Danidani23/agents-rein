@@ -36,8 +36,9 @@ out of an org repository; `rein review`; `rein migrate`.
 `rein mcp` serves rein's queries to an agent as tools of the MCP (the Model Context Protocol)
 over standard input and output. `rein sync` writes the entry into the project's `.mcp.json`
 beside any declared tool server, with the executable the session-start hook calls, so an
-agent that opens the clone finds the server `rein`; Claude Code asks once per project before
-it starts a project-scoped server. Every tool is a query: it takes no machine lock and changes
+agent that opens the clone finds the server `rein`. sync also approves it in the settings file
+it owns, `.claude/settings.local.json`, so Claude Code starts it without its once-per-project
+prompt, once you have trusted the folder. Every tool is a query: it takes no machine lock and changes
 nothing, says so with the read-only marker, and the agent's own permission rules decide which
 run unasked, by the names `mcp__rein__<tool>`.
 

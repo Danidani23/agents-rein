@@ -70,7 +70,9 @@ every permission mode; the pilot decides.
 
 `rein sync` writes the server into the project's `.mcp.json` the way it writes the session-start
 hook, with the absolute path of the executable, because the path is per machine and not a
-declaration. Claude Code asks once per project before it starts a project-scoped server.
+declaration, and approves it in `.claude/settings.local.json`, which sync owns, so Claude Code
+starts it without its once-per-project prompt. That prompt guards against a cloned `.mcp.json`
+starting commands on a machine; this entry is written on the machine, by rein, and never cloned.
 
 ## Consequences
 

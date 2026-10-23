@@ -1211,7 +1211,8 @@ from that project's snapshot.
   `proposals_pending` and `lint` as read-only tools over stdio, behind the login gate where
   the command has one; `rein sync` writes the server into `.mcp.json` beside the hook; the
   rein skill names the tools. `distill` and `propose` as tools wait for the pilot, with the
-  always-ask marker Claude Code honours.
+  always-ask marker Claude Code honours. Added 2026-10-23 (R55): sync also approves the server
+  in `.claude/settings.local.json`, so Claude Code starts it without its per-project prompt.
 - ✅ **P2.31 — The flat layout, the user level under the organisation, `team list`, `team
   edit`, `project list`.** [EXECUTED] 2026-10-22 (R41, R42, D27). Every place that turned a
   level into a folder goes through the address library now; the lint reads the
@@ -1849,3 +1850,6 @@ writes is read from the next session on, not in the same one.
   over an in-memory transport and an end-to-end test over the standard streams. Left for the
   user: `task rein:install`, then `rein sync` in a clone and `claude mcp list` to see the
   server; the project instructions in the org repository still say cobra and yaml.v3 only.
+- (2026-10-23) R55: the compiler approves rein's own tool server in the settings file beside the
+  developer's entries, so the pending-approval step the pilot hit is gone after the next sync
+  in a trusted folder.

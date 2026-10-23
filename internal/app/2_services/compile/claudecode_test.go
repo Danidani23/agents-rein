@@ -27,7 +27,7 @@ func TestClaudeCode(t *testing.T) {
 		chosen("organizations.acme.mcpservers.docs", "mcpservers", "docs", "", map[string]string{"docs.yaml": "transport: http\nurl: https://docs.example/mcp\n"}),
 		chosen("organizations.acme.users.danidani23.rules.mine", "rules", "mine", "", map[string]string{"mine.md": "Mine.\n"}),
 	}}
-	input := Input{OrganizationSlug: "acme", ProjectName: "Shop", ProjectSlug: "shop", Teams: []string{"web"}, UserSlug: "danidani23", ReinExecutable: "/usr/local/bin/rein", ExistingSettings: `{"permissions":{"allow":["Bash(git push --force origin main)","Read(docs/**)"],"additionalDirectories":["../shared"]},"model":"opus"}`}
+	input := Input{OrganizationSlug: "acme", ProjectName: "Shop", ProjectSlug: "shop", Teams: []string{"web"}, UserSlug: "danidani23", ReinExecutable: "/usr/local/bin/rein", ExistingSettings: `{"permissions":{"allow":["Bash(git push --force origin main)","Read(docs/**)"],"additionalDirectories":["../shared"]},"model":"opus","enabledMcpjsonServers":["docs-local"]}`}
 	output, err := ClaudeCode(input, result)
 	if err != nil {
 		t.Fatalf("compile: %v", err)
@@ -57,6 +57,9 @@ func TestClaudeCode(t *testing.T) {
 		t.Fatalf("settings: %v", err)
 	}
 	permissions := settings["permissions"].(map[string]any)
+	if strings.Join(toStrings(settings["enabledMcpjsonServers"]), ",") != "docs-local,rein" {
+		t.Fatalf("rein's own server is not approved beside the developer's: %v", settings["enabledMcpjsonServers"])
+	}
 	if settings["model"] != "opus" || permissions["additionalDirectories"] == nil || strings.Join(toStrings(permissions["allow"]), ",") != "Bash(go test*),Read(docs/**)" || strings.Join(toStrings(permissions["deny"]), ",") != "Bash(git push --force*)" {
 		t.Fatalf("permissions %+v notes %v", permissions, output.Notes)
 	}
