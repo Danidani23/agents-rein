@@ -1205,6 +1205,14 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- 🔨 **P2.33 — GitHub checks every push on the three platforms a release builds for.**
+  [IN PROGRESS] Approved 2026-10-23. [check.yml](../../.github/workflows/check.yml) runs
+  `task rein:check` and `task rein:release-check` on Linux and `task rein:test` on macOS and
+  Windows, on every push to `main` and every pull request; it only checks, the release stays on
+  the developer's machine (P2.8). The README carries four badges: the check, the latest
+  release, the Go version and the licence; no coverage service. The tests had only ever run
+  on macOS: every failure the first run shows on Linux or Windows is fixed test first
+  (`bug-first-test` skill), one commit each. Gate: the first run on `main` green on all three.
 - ✅ **P2.32 — `rein mcp`: the queries as MCP tools, through the official SDK.** [EXECUTED]
   2026-10-23 (R51 to R54, D28). A second gateway, `0_gateway/mcp`, offers `status`,
   `resolve`, `declaration_list`, `declaration_describe`, `organization_describe`,
@@ -1857,3 +1865,8 @@ writes is read from the next session on, not in the same one.
   adapter reads it from `.claude.json`, and sync warns in red, with the command to run, when the
   answer is no, because Claude Code applies the server approval only after its trust dialog. rein never writes that
   record: trust is the developer's decision about a folder.
+- (2026-10-23) P2.33 started: the check workflow, the README badges and the CI paragraph in
+  `docs/developing.md`. Ran: `task rein:check` in a copy of the tracked files only, with an
+  empty home folder and no git identity, green on macOS; vet and the tests compile for Linux
+  and Windows. Not yet run on either. Left for the user: push, then the first run's failures
+  come back here.

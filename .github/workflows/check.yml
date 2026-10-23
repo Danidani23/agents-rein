@@ -1,0 +1,40 @@
+# The gate on every push to main and every pull request: the whole gate on Linux, vet and
+# tests on macOS and Windows, the other platforms a release builds for. It only checks;
+# a release is cut from the developer's machine (docs/developing.md).
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: gate (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go install github.com/go-task/task/v3/cmd/task@v3.54.0
+      - run: task rein:check
+      - run: task rein:release-check
+
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go install github.com/go-task/task/v3/cmd/task@v3.54.0
+      - run: task rein:test

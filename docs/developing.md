@@ -43,6 +43,11 @@ with their descriptions; the ones a developer reaches for:
 `task rein:check` runs before every handover and before every release; a red gate releases
 nothing.
 
+GitHub runs the checks as well, on every push to `main` and every pull request, on Linux, macOS
+and Windows, the three platforms a release builds for. [check.yml](../.github/workflows/check.yml)
+says which task runs where; the first badge in the [README](../README.md) shows how `main`
+stands. The workflow only checks: it holds no secret and releases nothing.
+
 ## The harness is not in the repository
 
 This repository is rein's own first pilot. `rein init` moved its agent settings into the
@@ -88,7 +93,7 @@ shipped.
 
 ## How a release works
 
-A release is cut from this machine, never on the host: no workflow, no secret on GitHub. It is
+A release is cut from this machine, never on the host: no release workflow, no secret on GitHub. It is
 one command, run by the human:
 
 ```
