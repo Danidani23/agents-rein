@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -45,7 +46,8 @@ func TestTakeAgentHomes(t *testing.T) {
 		if err != nil || snapshot.Agent != "fake-agent" || snapshot.Folder != agentHome || !snapshot.TakenAt.Equal(takenAt) {
 			t.Fatalf("snapshot %+v err %v", snapshot, err)
 		}
-		if len(snapshot.Files) != 2 || snapshot.Files["INSTRUCTIONS.md"] != "be brief" || snapshot.Files["skills/commit/SKILL.md"] == "" || info.Mode().Perm() != 0o600 {
+		// Windows keeps no Unix permission bits
+		if len(snapshot.Files) != 2 || snapshot.Files["INSTRUCTIONS.md"] != "be brief" || snapshot.Files["skills/commit/SKILL.md"] == "" || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 			t.Fatalf("files %v mode %v", snapshot.Files, info.Mode())
 		}
 		// a second snapshot in the same second gets its own file

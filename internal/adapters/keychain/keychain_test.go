@@ -3,6 +3,7 @@ package keychain
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/Danidani23/agents-rein/internal/ports"
@@ -19,7 +20,8 @@ func TestFileKeychain(t *testing.T) {
 		t.Fatalf("store: %v", err)
 	}
 	info, _ := os.Stat(store.Path)
-	if info.Mode().Perm() != 0o600 {
+	// Windows keeps no Unix permission bits
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("the token file is %v, not 0600", info.Mode())
 	}
 	token, found, err := store.Load("x")

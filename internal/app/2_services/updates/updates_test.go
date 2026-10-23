@@ -10,6 +10,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -125,7 +126,8 @@ func TestSelfUpdate(t *testing.T) {
 	replaced, err := service.SelfUpdate(releases.Latest_)
 	content, _ := os.ReadFile(executable)
 	info, _ := os.Stat(executable)
-	if err != nil || replaced != executable || string(content) != "new binary" || info.Mode()&0o100 == 0 {
+	// Windows keeps no Unix permission bits
+	if err != nil || replaced != executable || string(content) != "new binary" || (runtime.GOOS != "windows" && info.Mode()&0o100 == 0) {
 		t.Fatalf("replaced %q err %v content %q mode %v", replaced, err, content, info.Mode())
 	}
 	releases.Files["sums"] = []byte("0000 rein_0.2.0_linux_arm64.tar.gz\n")

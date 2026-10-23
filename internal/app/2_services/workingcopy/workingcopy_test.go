@@ -3,6 +3,7 @@ package workingcopy
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -97,7 +98,8 @@ func TestVerifyAndWriteFiles(t *testing.T) {
 		t.Fatalf("write: %v %v", err, previous)
 	}
 	info, _ := os.Stat(filepath.Join(folder, ".claude", "hooks", "x", "run.sh"))
-	if info.Mode().Perm()&0o100 == 0 {
+	// Windows keeps no Unix permission bits
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o100 == 0 {
 		t.Fatalf("the script is not executable: %v", info.Mode())
 	}
 	recorded := map[string]string{"CLAUDE.md": hashOf([]byte("one")), ".claude/hooks/x/run.sh": hashOf([]byte("#!/bin/sh\n")), "gone.md": hashOf([]byte("z"))}
