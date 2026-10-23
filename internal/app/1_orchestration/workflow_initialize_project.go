@@ -3,6 +3,7 @@ package orchestration
 import (
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/ledger"
@@ -139,7 +140,7 @@ func (orchestrator Orchestrator) InitializeProject(request InitializeProjectRequ
 					}
 					var removals []ledger.Removal
 					for _, removed := range moveOut.Paths {
-						removals = append(removals, ledger.Removal{Path: path.Join(location.Folder, removed), Scope: ledger.ScopeProject, Project: result.Address, Snapshot: moveOut.SnapshotPath, Tracked: moveOut.tracked[removed]})
+						removals = append(removals, ledger.Removal{Path: filepath.Join(location.Folder, removed), Scope: ledger.ScopeProject, Project: result.Address, Snapshot: moveOut.SnapshotPath, Tracked: moveOut.tracked[removed]})
 					}
 					return services.Ledger.RecordRemovals(agent.Name(), removals)
 				},
