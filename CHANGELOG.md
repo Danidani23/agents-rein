@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1] - 2026-10-24
+
+### Bug Fixes
+
+- **rein:** rein update replaces a script-installed rein on windows (64a29c5)
+- **rein:** init records removed paths with the platform's separator (ce638f7)
+- **rein:** the machine lock sees a live holder on windows (60384db)
+
 ## [0.3.0] - 2026-10-23
 
 ### Features
