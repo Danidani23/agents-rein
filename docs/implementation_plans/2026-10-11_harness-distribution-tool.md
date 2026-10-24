@@ -363,8 +363,8 @@ committed instead of gitignored (D4).
   sandbox already keeps `.codex` and `.agents` read-only
   ([docs](https://learn.chatgpt.com/docs/agent-approvals-security)) and Copilot has none; and
   `sync` naming every file under the settings folders that `rein` did not write. P2.43.
-- 💬 **D34 — `distill` cuts a harness into units of one concern, and the distiller shapes
-  each.** Decided in part 2026-10-24 by the user (Q13 M1, Q17 E1, Q14). Files, skills
+- ✅ **D34 — `distill` cuts a harness into units of one concern, and the distiller shapes
+  each.** Decided 2026-10-24 by the user (Q13 M1, Q17 E1, Q14, Q16, Q19 J1). Files, skills
   included, are cut at their `##` headings; the model, called the distiller in `distill`, may
   cut further and regroup, by whole verbatim lines only, adding no text but a name, a
   description, a heading, a line naming what a unit replaces and a line pointing at a
@@ -372,8 +372,14 @@ committed instead of gitignored (D4).
   repeat of a named declaration, or held in a conflict. A unit becomes a rule, always on or
   path-scoped, a skill, or a document for the project's repository. A conflict blocks
   `propose` until it is resolved: `drop`, `override`, refused against a `required`
-  declaration, or `amend` the existing one. Open: how a document reaches the project and the
-  agent. P2.44.
+  declaration, or `amend` the existing one. A document is knowledge a human contributor needs
+  too, such as architecture or a style guide: it belongs in the project's repository, versioned
+  with the code, not in the org repository. It is a candidate of kind `document` with its
+  content and a path the distiller proposes from the repository's tracked Markdown, which the
+  developer may change; `propose` writes it into the clone uncommitted, never over an existing
+  file, and says what to commit. Each document comes with a rule pointing at it, always on or
+  path-scoped, so every agent learns of it through its own instructions file; `sync` warns
+  when a pointer names a file the clone lacks. P2.44.
 - ✅ **D33 — Codex's TOML through a module, its ADR first.** Decided 2026-10-24 by the user
   (Q12 T1). `rein` writes `.codex/config.toml` and reads Codex's trust records from
   `~/.codex/config.toml`; reading another tool's file by scanning lines would break on its
@@ -1313,13 +1319,18 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
-- 💬 **P2.44 — `distill` cuts into units and the distiller shapes them (D34).** [PENDING]
-  Decided in part 2026-10-24. The answer format goes to version 2: per unit its lines, its
+- 🟢 **P2.44 — `distill` cuts into units and the distiller shapes them (D34).** [PENDING]
+  Approved 2026-10-24. The answer format goes to version 2: per unit its lines, its
   shape, its verdict and suggestion, a `merge` carrying its text into the unit's files, a
   conflict with its resolution; the proposal says `distiller:` where it said `judge:`.
   Includes, test first, the fix for a `merge` whose rewrite was dropped: `placeJudged` acts
-  only on `drop` and `lift`, and the proposal keeps no rewrite. Open: how a document reaches
-  the project and how the agent learns of it.
+  only on `drop` and `lift`, and the proposal keeps no rewrite. Documents as D34 says: the
+  distiller sees the repository's tracked Markdown files to propose a path, each document gets
+  its pointer rule, `propose` writes the documents into the clone, and `sync` checks the
+  pointers. Gate: the website's snapshot distilled again gives units instead of one
+  candidate, each repeat dropped against the declaration it repeats, the conflicts blocking
+  `propose` until resolved, and its architecture and privacy text as documents with their
+  pointer rules; `task rein:check` green.
 - 🟢 **P2.43 — Every agent knows its settings come from `rein` (D35).** [PENDING] Approved
   2026-10-24. For Claude Code now and for each agent as P2.40 to P2.42 land: the always-on
   line in the generated instructions file, as text, not a comment; the `rein` skill; deny
