@@ -172,6 +172,28 @@ func (Service) ReadFile(folder string, relative string) string {
 	return string(content)
 }
 
+// FilesUnder lists the files below the relative folders under folder, as
+// relative paths with forward slashes; a missing folder lists nothing.
+func (Service) FilesUnder(folder string, relativeFolders []string) []string {
+	var listed []string
+	for _, relativeFolder := range relativeFolders {
+		root := filepath.Join(folder, filepath.FromSlash(relativeFolder))
+		_ = filepath.WalkDir(root, func(current string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil || entry.IsDir() {
+				return nil
+			}
+			relative, err := filepath.Rel(folder, current)
+			if err != nil {
+				return nil
+			}
+			listed = append(listed, filepath.ToSlash(relative))
+			return nil
+		})
+	}
+	sort.Strings(listed)
+	return listed
+}
+
 // RemoveEmptyFolders deletes the folders under folder that the removed paths
 // left empty, deepest first, never folder itself.
 func (Service) RemoveEmptyFolders(folder string, relativePaths []string) {

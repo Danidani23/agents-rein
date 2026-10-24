@@ -1217,6 +1217,29 @@ func TestSyncClone(t *testing.T) {
 			t.Fatalf("status %+v", report.Clones)
 		}
 	})
+	t.Run("names a file under its folders that it did not write, leaves it, and snapshots it with force", func(t *testing.T) {
+		fixture, _, folder := withSyncableProject(t)
+		_, _ = fixture.orchestrator().SyncClone(SyncRequest{Directory: folder})
+		handMade := filepath.Join(folder, ".claude", "skills", "mine", "SKILL.md")
+		_ = os.MkdirAll(filepath.Dir(handMade), 0o755)
+		_ = os.WriteFile(handMade, []byte("---\nname: mine\n---\n"), 0o644)
+		result, err := fixture.orchestrator().SyncClone(SyncRequest{Directory: folder})
+		if err != nil || strings.Join(result.Clones[0].Foreign, ",") != ".claude/skills/mine/SKILL.md" || result.Clones[0].SnapshotPath != "" {
+			t.Fatalf("result %+v err %v", result.Clones, err)
+		}
+		_, err = os.Stat(handMade)
+		if err != nil {
+			t.Fatalf("the hand-made file was removed: %v", err)
+		}
+		result, err = fixture.orchestrator().SyncClone(SyncRequest{Directory: folder, Force: true})
+		if err != nil || result.Clones[0].SnapshotPath == "" {
+			t.Fatalf("forced %+v err %v", result.Clones, err)
+		}
+		snapshot, _ := os.ReadFile(result.Clones[0].SnapshotPath)
+		if !strings.Contains(string(snapshot), "name: mine") {
+			t.Fatalf("the snapshot lacks the hand-made skill: %s", snapshot)
+		}
+	})
 	t.Run("a hand edit stops the sync, --force snapshots it, and a stale file goes", func(t *testing.T) {
 		fixture, created, folder := withSyncableProject(t)
 		_, _ = fixture.orchestrator().SyncClone(SyncRequest{Directory: folder})

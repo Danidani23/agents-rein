@@ -34,7 +34,7 @@ func newSyncCommand(environment *commandEnvironment) *cobra.Command {
 	}
 	command.Flags().StringVar(&request.Directory, "path", ".", "the project's folder")
 	command.Flags().BoolVar(&request.All, "all", false, "sync every initialised clone on this machine")
-	command.Flags().BoolVar(&request.Force, "force", false, "overwrite files edited by hand, after snapshotting them")
+	command.Flags().BoolVar(&request.Force, "force", false, "overwrite files edited by hand, after snapshotting them with the files rein did not write")
 	command.Flags().BoolVar(&hook, "hook", false, "run as the session-start hook: one line, never a failure")
 	return command
 }
@@ -99,6 +99,10 @@ func printSynced(environment *commandEnvironment, synced orchestration.CloneSync
 		if synced.Created && synced.AlwaysOn != "" {
 			fmt.Fprintf(environment.out, "The settings below were just written and apply from now on:\n\n%s", synced.AlwaysOn)
 		}
+		// the agent reads this line at session start
+		if len(synced.Foreign) > 0 {
+			fmt.Fprintf(environment.out, "rein: not written by rein, so in no other clone and not in the organisation's repository: %s; settings change through rein, as the rein skill says\n", strings.Join(synced.Foreign, ", "))
+		}
 	} else {
 		fmt.Fprintf(environment.out, "synced %s for %s\n", synced.Address, synced.Agent)
 		for _, written := range synced.Written {
@@ -110,8 +114,17 @@ func printSynced(environment *commandEnvironment, synced orchestration.CloneSync
 		for _, removed := range synced.Removed {
 			fmt.Fprintf(environment.out, "  removed    %s\n", removed)
 		}
-		if synced.SnapshotPath != "" {
+		if synced.SnapshotPath != "" && len(synced.Modified) > 0 {
 			fmt.Fprintf(environment.out, "  your edits to %s were snapshotted to %s before being overwritten\n", strings.Join(synced.Modified, ", "), synced.SnapshotPath)
+		}
+		for _, foreign := range synced.Foreign {
+			fmt.Fprintf(environment.out, "  not from rein  %s\n", foreign)
+		}
+		switch {
+		case len(synced.Foreign) > 0 && synced.SnapshotPath != "":
+			fmt.Fprintf(environment.out, "  the files not from rein are in the snapshot %s; rein distill --snapshot %s turns them into a proposal\n", synced.SnapshotPath, synced.SnapshotPath)
+		case len(synced.Foreign) > 0:
+			fmt.Fprintf(environment.out, "  the files not from rein reach no other clone and not the organisation's repository; rein sync --force keeps them in a snapshot for rein distill\n")
 		}
 	}
 	for _, note := range synced.Notes {

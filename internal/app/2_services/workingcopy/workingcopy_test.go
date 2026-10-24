@@ -90,6 +90,16 @@ func TestCommit(t *testing.T) {
 	}
 }
 
+func TestFilesUnder(t *testing.T) {
+	folder := t.TempDir()
+	service := Service{}
+	_, _ = service.WriteFiles(folder, map[string]string{".claude/skills/mine/SKILL.md": "x", ".claude/skills/mine/notes/a.md": "y", ".claude/rules/go.md": "z", "main.go": "package main"})
+	listed := service.FilesUnder(folder, []string{".claude/skills", ".claude/hooks"})
+	if strings.Join(listed, ",") != ".claude/skills/mine/SKILL.md,.claude/skills/mine/notes/a.md" {
+		t.Fatalf("listed %v", listed)
+	}
+}
+
 func TestVerifyAndWriteFiles(t *testing.T) {
 	folder := t.TempDir()
 	service := Service{}

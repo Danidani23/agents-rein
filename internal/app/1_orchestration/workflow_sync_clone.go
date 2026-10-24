@@ -44,7 +44,10 @@ type CloneSync struct {
 	Removed   []string
 	// Modified are files a hand edit changed since the last sync; with
 	// Force they were snapshotted and overwritten, else they stopped the sync.
-	Modified     []string
+	Modified []string
+	// Foreign are files in rein's folders that rein did not write: left
+	// where they are, and snapshotted with Force so distill can propose them.
+	Foreign      []string
 	SnapshotPath string
 	// Untrusted are the agents that have not been told to trust the folder
 	// yet, with the command that asks; their approval of rein's tool server
@@ -208,13 +211,6 @@ func writeHarness(orchestrator Orchestrator, clone machine.ProjectClone, organiz
 	if len(verification.Modified) > 0 && !force {
 		return refusal.New(fmt.Sprintf("%s was edited by hand since the last sync: %s; rein distill --snapshot after rein sync --force keeps the edit as a proposal, or move it to CLAUDE.local.md, which rein never touches", clone.ClonePath, strings.Join(verification.Modified, ", ")))
 	}
-	if len(verification.Modified) > 0 {
-		snapshotPath, _, err := services.Snapshots.Take(synced.Agent, clone.Address, clone.ClonePath, verification.Modified)
-		if err != nil {
-			return err
-		}
-		synced.SnapshotPath = snapshotPath
-	}
 	files := map[string]string{}
 	var inserts []ledger.Insert
 	newPaths := map[string]bool{}
@@ -222,6 +218,26 @@ func writeHarness(orchestrator Orchestrator, clone machine.ProjectClone, organiz
 		files[file.Path] = file.Content
 		newPaths[file.Path] = true
 		inserts = append(inserts, ledger.Insert{Path: file.Path, Address: file.Address, SHA256: ledger.Hash([]byte(file.Content))})
+	}
+	inserted := map[string]bool{}
+	for _, insert := range previousInserts {
+		inserted[insert.Path] = true
+	}
+	for _, relative := range services.WorkingCopy.FilesUnder(clone.ClonePath, compile.OwnedFolders) {
+		if !inserted[relative] && !newPaths[relative] {
+			synced.Foreign = append(synced.Foreign, relative)
+		}
+	}
+	toSnapshot := append([]string{}, verification.Modified...)
+	if force {
+		toSnapshot = append(toSnapshot, synced.Foreign...)
+	}
+	if len(toSnapshot) > 0 {
+		snapshotPath, _, err := services.Snapshots.Take(synced.Agent, clone.Address, clone.ClonePath, toSnapshot)
+		if err != nil {
+			return err
+		}
+		synced.SnapshotPath = snapshotPath
 	}
 	var stale []string
 	for _, insert := range previousInserts {

@@ -29,6 +29,10 @@ those files; it is proposed to the org repository and comes back at the next syn
   the developer's own allow list.
 - Every generated file is recorded with its hash. An edit by hand stops the next sync with a
   message; ` + "`rein sync --force`" + ` snapshots the edit first.
+- The deny list keeps the agent from editing the generated files at all, and a file in those
+  folders that rein did not write, such as a skill made by hand, reaches no other clone: sync
+  names it, and ` + "`rein sync --force`" + ` keeps it in a snapshot that ` + "`rein distill --snapshot`" + `
+  turns into a proposal.
 - ` + "`CLAUDE.local.md`" + ` is the developer's own and never touched.
 
 ## Changing a setting
