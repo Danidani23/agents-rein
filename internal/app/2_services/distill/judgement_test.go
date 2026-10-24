@@ -22,7 +22,7 @@ func exampleCorpus() Corpus {
 const goodAnswer = `Here you go:
 ` + "```json" + `
 {"version": 1, "candidates": [
-  {"candidate": "rules/go-testing", "verdict": "overlaps", "related": ["organizations.acme.teams.platform.rules.go-style"], "quotes": [{"address": "organizations.acme.teams.platform.rules.go-style", "text": "table-driven   tests only"}], "suggestion": "merge", "rewrite": "Tests are table-driven, never ad hoc.", "reason": "the team rule already says it"},
+  {"candidate": "rules/go-testing", "verdict": "overlaps", "related": ["organizations.acme.teams.platform.rules.go-style"], "quotes": [{"address": "organizations.acme.teams.platform.rules.go-style", "text": "table-driven   tests only"}], "suggestion": "drop", "reason": "the team rule already says it"},
   {"candidate": "rules/brief", "verdict": "new", "suggestion": "lift", "level": "organization", "applyIf": [], "reason": "every project benefits"}
 ]}
 ` + "```"
@@ -33,6 +33,10 @@ func TestBrief(t *testing.T) {
 		if !strings.Contains(brief, expected) {
 			t.Fatalf("brief lacks %q:\n%s", expected, brief)
 		}
+	}
+	// the distiller selects; it never writes a setting's text, so there is no merge
+	if strings.Contains(brief, "merge") || strings.Contains(brief, "rewrite") {
+		t.Fatalf("the brief still offers a merge:\n%s", brief)
 	}
 }
 
@@ -47,7 +51,7 @@ func TestParseValidateApply(t *testing.T) {
 		t.Fatalf("problems %v", problems)
 	}
 	Apply(answer, candidates)
-	if candidates[0].Judgement == nil || candidates[0].Judgement.Suggestion != "merge" || candidates[1].Judgement.Level != "organization" {
+	if candidates[0].Judgement == nil || candidates[0].Judgement.Suggestion != "drop" || candidates[1].Judgement.Level != "organization" {
 		t.Fatalf("judgements %+v %+v", candidates[0].Judgement, candidates[1].Judgement)
 	}
 	_, err = ParseAnswer("no json here")
@@ -57,10 +61,11 @@ func TestParseValidateApply(t *testing.T) {
 	bad := Answer{Version: 2, Candidates: []AnswerCandidate{
 		{Candidate: "rules/go-testing", Judgement: Judgement{Verdict: "maybe", Related: []string{"organizations.acme.rules.nope"}, Quotes: []Quote{{Address: "organizations.acme.teams.platform.rules.go-style", Text: "never written there"}}, Suggestion: "lift", Reason: ""}},
 		{Candidate: "rules/unknown", Judgement: Judgement{Verdict: "new", Suggestion: "keep", Reason: "x"}},
+		{Candidate: "rules/brief", Judgement: Judgement{Verdict: "new", Suggestion: "merge", Reason: "x"}},
 	}}
 	problems = Validate(bad, candidates, exampleCorpus())
 	joined := strings.Join(problems, "\n")
-	for _, expected := range []string{"version 2", `verdict "maybe"`, `related "organizations.acme.rules.nope"`, "is not verbatim", "lift needs a level", "no reason", `"rules/unknown" is not a candidate`, "rules/brief is not answered"} {
+	for _, expected := range []string{"version 2", `verdict "maybe"`, `related "organizations.acme.rules.nope"`, "is not verbatim", "lift needs a level", "no reason", `"rules/unknown" is not a candidate`, `suggestion "merge" is not one of keep, drop, lift`} {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("missing %q in %v", expected, problems)
 		}
