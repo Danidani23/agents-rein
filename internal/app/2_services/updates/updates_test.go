@@ -107,10 +107,17 @@ func TestHowInstalled(t *testing.T) {
 		"/go/bin/rein":                                       InstallGo,
 		filepath.Join(home, ".local", "bin", "rein"):         InstallScript,
 		"C:/Users/dani/AppData/Local/Programs/rein/rein.exe": InstallScript,
-		"/usr/bin/rein":                                      InstallUnknown,
+		"C:/Users/dani/AppData/Local/Microsoft/WinGet/Packages/Danidani23.rein_Microsoft.Winget.Source_8wekyb3d8bbwe/rein.exe": InstallWinget,
+		"C:/Users/dani/AppData/Local/Microsoft/WinGet/Links/rein.exe":                                                          InstallWinget,
+		"/nix/store/0c5ak3d6l4mq-rein-0.4.0/bin/rein":                                                                          InstallNix,
+		"/usr/bin/rein":   InstallPackage,
+		"/opt/tools/rein": InstallUnknown,
 	} {
 		install := Service{Executable: executable}.HowInstalled()
-		if install.Kind != expected || (expected == InstallScript) != install.Self || (expected == InstallScript || expected == InstallUnknown) != (install.Command == "") {
+		// a manager with one command, or advice where no one command fits, or neither
+		advised := expected == InstallNix || expected == InstallPackage
+		managed := !advised && expected != InstallScript && expected != InstallUnknown
+		if install.Kind != expected || install.Self != (expected == InstallScript) || (install.Command != "") != managed || (install.Advice != "") != advised {
 			t.Fatalf("%s: %+v", executable, install)
 		}
 	}

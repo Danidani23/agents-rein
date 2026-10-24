@@ -60,10 +60,12 @@ type Check struct {
 
 // Install says how rein got onto this machine and how it is updated.
 type Install struct {
-	// Kind is brew, scoop, go, script or unknown.
+	// Kind is one of the install kinds below.
 	Kind string
 	// Command is what updates a managed install; "" otherwise.
 	Command string
+	// Advice says how to update an install no one command updates; "" otherwise.
+	Advice string
 	// Self says rein replaces the binary itself: a script install.
 	Self bool
 }
@@ -72,7 +74,10 @@ type Install struct {
 const (
 	InstallBrew    = "brew"
 	InstallScoop   = "scoop"
+	InstallWinget  = "winget"
 	InstallGo      = "go"
+	InstallNix     = "Nix"
+	InstallPackage = "a Linux package"
 	InstallScript  = "script"
 	InstallUnknown = "unknown"
 )
@@ -159,6 +164,14 @@ func (service Service) HowInstalled() Install {
 		return Install{Kind: InstallBrew, Command: "brew upgrade --cask rein"}
 	case strings.Contains(strings.ToLower(executable), "/scoop/"):
 		return Install{Kind: InstallScoop, Command: "scoop update rein"}
+	// winget starts rein through a link in its Links folder, which os.Executable may report
+	case strings.Contains(strings.ToLower(executable), "/winget/packages/") || strings.Contains(strings.ToLower(executable), "/winget/links/"):
+		return Install{Kind: InstallWinget, Command: "winget upgrade Danidani23.rein"}
+	case strings.HasPrefix(executable, "/nix/store/"):
+		return Install{Kind: InstallNix, Advice: "update it the way it was installed: nix profile upgrade rein, or the NixOS or home-manager configuration that lists it"}
+	// the .deb, .rpm and .apk of a release and the AUR's rein-bin all put rein here
+	case executable == "/usr/bin/rein":
+		return Install{Kind: InstallPackage, Advice: "install the new release's .deb, .rpm or .apk from https://github.com/Danidani23/agents-rein/releases/latest, or, for the AUR's rein-bin, upgrade with your AUR helper"}
 	case strings.HasPrefix(executable, filepath.ToSlash(goBinFolder())+"/"):
 		return Install{Kind: InstallGo, Command: "go install github.com/Danidani23/agents-rein/cmd/rein@latest"}
 	case home != "" && strings.HasPrefix(executable, filepath.ToSlash(filepath.Join(home, ".local", "bin"))+"/"):

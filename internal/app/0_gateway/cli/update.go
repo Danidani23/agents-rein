@@ -56,6 +56,10 @@ func runUpdate(environment *commandEnvironment, check bool, yes bool) error {
 		fmt.Fprintf(environment.out, "this rein was installed by %s, which updates it:\n\n  %s\n", install.Kind, install.Command)
 		return nil
 	}
+	if install.Advice != "" {
+		fmt.Fprintf(environment.out, "this rein at %s came from %s; %s\n", service.Executable, install.Kind, install.Advice)
+		return nil
+	}
 	if !install.Self {
 		return refusal.New(fmt.Sprintf("this rein at %s was not installed by a package manager or the install script, so rein does not replace it; install the new release the way this one was installed", service.Executable))
 	}
