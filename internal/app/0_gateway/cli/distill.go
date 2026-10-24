@@ -20,13 +20,14 @@ func newDistillCommand(environment *commandEnvironment) *cobra.Command {
 		Short: "Turn a snapshotted harness into candidate declarations and compare them with the organisation",
 		Long: "distill reads the snapshot rein took of a harness, the agent's files of an initialised project\n" +
 			"or of your agent's home, and turns it into candidate declarations at that level: CLAUDE.md and\n" +
-			"the rules become rules, skills stay skills, the settings' permissions and hooks become a\n" +
-			"permission set and hooks, .mcp.json becomes tool servers, with any literal secret replaced by a\n" +
-			"REIN_ reference. Each candidate is compared with what the organisation already declares, by\n" +
-			"content and by id; the judge says where each belongs; and everything is written as one\n" +
-			"proposal file, under .rein/proposals/ of the project's folder, or under ~/.rein/proposals/\n" +
-			"pending/ for your agent's home. Review and edit the file, then rein propose. Nothing is\n" +
-			"written into the org repository.",
+			"the rules become rules, one per ## section, skills stay skills, the settings' permissions\n" +
+			"and hooks become a permission set and hooks, .mcp.json becomes tool servers, with any literal\n" +
+			"secret replaced by a REIN_ reference. Each candidate is compared with what the organisation\n" +
+			"already declares, by content and by id; the judge says where each belongs; and everything is\n" +
+			"written as one proposal folder, proposal.yaml with every decision beside one entry per\n" +
+			"candidate with its content, under .rein/proposals/ of the project's folder, or under\n" +
+			"~/.rein/proposals/pending/ for your agent's home. Review and edit it, then rein propose.\n" +
+			"Nothing is written into the org repository.",
 		Example: "  rein distill\n  rein distill --project shop\n  rein distill --home\n  rein distill --snapshot ~/.rein/snapshots/claude-code-20261019-093000.json",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {

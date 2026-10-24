@@ -116,6 +116,7 @@ type claudeMCP struct {
 // servers. What it cannot place is listed as skipped.
 func ConvertClaudeCode(files map[string]string) (candidates []Candidate, skipped []string, err error) {
 	skills := map[string]map[string]string{}
+	taken := map[string]bool{}
 	var sorted []string
 	for relative := range files {
 		sorted = append(sorted, relative)
@@ -125,13 +126,12 @@ func ConvertClaudeCode(files map[string]string) (candidates []Candidate, skipped
 		content := files[relative]
 		switch {
 		case relative == "CLAUDE.md":
-			candidates = append(candidates, rule("instructions", content, relative, "the project's instructions; always on"))
+			candidates = append(candidates, ruleSections("instructions", "", content, relative, "always on", taken)...)
 		case relative == "CLAUDE.local.md":
-			candidates = append(candidates, rule("local-instructions", content, relative, "a personal file; consider proposing it at your user level instead"))
-		case strings.HasPrefix(relative, "rules/") && strings.HasSuffix(relative, ".md"):
-			candidates = append(candidates, rule(slugOf(strings.TrimSuffix(path.Base(relative), ".md")), content, relative, ""))
-		case strings.HasPrefix(relative, ".claude/rules/") && strings.HasSuffix(relative, ".md"):
-			candidates = append(candidates, rule(slugOf(strings.TrimSuffix(path.Base(relative), ".md")), content, relative, ""))
+			candidates = append(candidates, ruleSections("local-instructions", "local-", content, relative, "a personal file; consider proposing it at your user level instead", taken)...)
+		case (strings.HasPrefix(relative, "rules/") || strings.HasPrefix(relative, ".claude/rules/")) && strings.HasSuffix(relative, ".md"):
+			fileID := slugOf(strings.TrimSuffix(path.Base(relative), ".md"))
+			candidates = append(candidates, ruleSections(fileID, fileID+"-", content, relative, "", taken)...)
 		case strings.HasPrefix(relative, "skills/") || strings.HasPrefix(relative, ".claude/skills/"):
 			inside := strings.TrimPrefix(strings.TrimPrefix(relative, ".claude/"), "skills/")
 			name, rest, found := strings.Cut(inside, "/")
@@ -184,6 +184,102 @@ func ConvertClaudeCode(files map[string]string) (candidates []Candidate, skipped
 		candidates = append(candidates, candidate)
 	}
 	return candidates, skipped, nil
+}
+
+// section is a part of a Markdown file: the text before its first ##
+// heading, with an empty heading, or one heading with its text.
+type section struct {
+	heading string
+	text    string
+}
+
+// sectionsOf cuts a Markdown file at its ## headings, outside code fences.
+// The frontmatter is returned apart, for every part to carry, and each part
+// is trimmed of its trailing blank lines.
+func sectionsOf(content string) (frontmatter string, sections []section) {
+	body := content
+	if strings.HasPrefix(content, "---\n") {
+		end := strings.Index(content[4:], "\n---\n")
+		if end >= 0 {
+			frontmatter = content[:4+end+5]
+			body = content[4+end+5:]
+		}
+	}
+	current := section{}
+	inFence := false
+	for _, line := range strings.SplitAfter(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+		}
+		if !inFence && strings.HasPrefix(line, "## ") {
+			sections = append(sections, current)
+			current = section{heading: strings.TrimSpace(strings.TrimPrefix(line, "## "))}
+		}
+		current.text += line
+	}
+	sections = append(sections, current)
+	for index := range sections {
+		sections[index].text = strings.TrimRight(sections[index].text, " \t\n")
+		if sections[index].text != "" {
+			sections[index].text += "\n"
+		}
+	}
+	return frontmatter, sections
+}
+
+// ruleSections turns a file of rules into one candidate per ## section
+// (D34): the text before the first heading keeps the file's id, a section
+// is named after its heading, before a dash or a colon. A file without
+// sections stays one candidate, as it was. Ids are unique across the
+// harness, a repeated one numbered.
+func ruleSections(fileID string, sectionPrefix string, content string, source string, note string, taken map[string]bool) []Candidate {
+	unique := func(id string) string {
+		candidate := id
+		for count := 2; taken[candidate]; count++ {
+			candidate = fmt.Sprintf("%s-%d", id, count)
+		}
+		taken[candidate] = true
+		return candidate
+	}
+	frontmatter, sections := sectionsOf(content)
+	if len(sections) == 1 {
+		return []Candidate{rule(unique(fileID), content, source, noteFor(source, "", note))}
+	}
+	var candidates []Candidate
+	for _, part := range sections {
+		if strings.TrimSpace(part.text) == "" {
+			continue
+		}
+		id := fileID
+		if part.heading != "" {
+			name := part.heading
+			for _, separator := range []string{" — ", " – ", ": "} {
+				name, _, _ = strings.Cut(name, separator)
+			}
+			slug := slugOf(name)
+			if slug == "" {
+				slug = "section"
+			}
+			id = sectionPrefix + slug
+		}
+		candidates = append(candidates, rule(unique(id), frontmatter+part.text, source, noteFor(source, part.heading, note)))
+	}
+	return candidates
+}
+
+// noteFor says where a rule came from: the project's instructions, a
+// section of a file, and what else the file's kind adds.
+func noteFor(source string, heading string, note string) string {
+	switch {
+	case heading != "" && note != "":
+		return fmt.Sprintf("the section %q of %s; %s", heading, source, note)
+	case heading != "":
+		return fmt.Sprintf("the section %q of %s", heading, source)
+	case source == "CLAUDE.md":
+		return "the project's instructions; " + note
+	}
+	return note
 }
 
 func rule(id string, content string, source string, note string) Candidate {

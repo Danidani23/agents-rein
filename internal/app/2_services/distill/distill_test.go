@@ -59,6 +59,39 @@ func TestConvertClaudeCode(t *testing.T) {
 	}
 }
 
+func TestCutAtSections(t *testing.T) {
+	instructions := "# Website\n\nTwo sites in one repo.\n\n## Privacy posture — the invariant that matters most\n\nNothing links to the site.\n\n```markdown\n## not a heading, inside a fence\n```\n\n## Git\n\nThe user commits.\n\n## Git\n\nAgain.\n"
+	infra := "---\npaths:\n  - \"terraform/**\"\n---\nInfrastructure first.\n\n## State\n\nState is committed.\n"
+	mixed := "---\nname: mixed\ndescription: Two things.\n---\n\n## One\n\nA.\n\n## Two\n\nB.\n"
+	candidates, _, err := ConvertClaudeCode(map[string]string{"CLAUDE.md": instructions, ".claude/rules/infra.md": infra, ".claude/skills/mixed/SKILL.md": mixed})
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	indexed := byID(candidates)
+	// the text before the first section keeps the file's id; each section is a unit of its own
+	for key, content := range map[string]string{
+		"rules/instructions":    "# Website\n\nTwo sites in one repo.\n",
+		"rules/privacy-posture": "## Privacy posture — the invariant that matters most\n\nNothing links to the site.\n\n```markdown\n## not a heading, inside a fence\n```\n",
+		"rules/git":             "## Git\n\nThe user commits.\n",
+		"rules/git-2":           "## Git\n\nAgain.\n",
+		// a path-scoped rule stays path-scoped in every part
+		"rules/infra":       "---\npaths:\n  - \"terraform/**\"\n---\nInfrastructure first.\n",
+		"rules/infra-state": "---\npaths:\n  - \"terraform/**\"\n---\n## State\n\nState is committed.\n",
+	} {
+		candidate, found := indexed[key]
+		if !found || candidate.Files["rules/"+candidate.ID+".md"] != content {
+			t.Fatalf("%s: found %v content %q", key, found, candidate.Files)
+		}
+	}
+	if !strings.Contains(indexed["rules/privacy-posture"].Notes[0], `the section "Privacy posture — the invariant that matters most" of CLAUDE.md`) || strings.Join(indexed["rules/git-2"].Sources, ",") != "CLAUDE.md" {
+		t.Fatalf("notes %v sources %v", indexed["rules/privacy-posture"].Notes, indexed["rules/git-2"].Sources)
+	}
+	// a skill stays whole; the distiller splits one that mixes concerns
+	if len(indexed["skills/mixed"].Files) != 1 || len(candidates) != 7 {
+		t.Fatalf("skill %+v candidates %d", indexed["skills/mixed"], len(candidates))
+	}
+}
+
 func TestDistilledCandidatesPassTheLint(t *testing.T) {
 	candidates, _, _ := ConvertClaudeCode(harness)
 	root := t.TempDir()
