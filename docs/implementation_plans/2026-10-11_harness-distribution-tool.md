@@ -356,11 +356,17 @@ committed instead of gitignored (D4).
   JetBrains' 2026 survey ([findings](../harness-management.md#which-agents-developers-use)).
   Google's agents and OpenCode follow them. Each is designed on its item and approved before
   it is built.
-- 💬 **D39 — Whatever is committed to the org repository arrives as a proposal.** Proposed
-  2026-10-24 by the user, not decided (Q33, Q34). Today `propose` sends a proposal file as a
-  pull request, `declaration edit` and `declaration remove` open theirs directly, and
-  `team create`, `team edit`, `project create`, `project edit`, the label registry and
-  `init`'s binding push to `main` unreviewed. Holds P2.46's final shape.
+- ✅ **D39 — Whatever is committed to the org repository arrives as a pull request; what a
+  person writes, as a proposal first.** Decided 2026-10-24 by the user (Q31, Q33, Q34 R1).
+  Settings, their moves and removals, and the team, project and label records are written
+  into a `proposal-<id>/` folder the developer can edit, and `rein propose` sends it: no more
+  pull requests opened straight from `declaration edit` and `declaration remove`, and no more
+  unreviewed pushes to `main` from `team create`, `team edit`, `project create`,
+  `project edit` and the label registry. What `rein` writes for itself, `init`'s binding,
+  is a pull request it opens directly; the clone works at once, other clones find the
+  project once it is merged. A protected `main` that requires pull requests then refuses
+  nothing. `org create`'s first commit stays direct: before it there is no `main`. P2.46 to
+  P2.48.
 - ✅ **D38 — Apache 2.0 stays; the name is what is protected.** Decided 2026-10-24 by the user
   (Q27 K2). Anyone may use, change and sell `rein`, a fork included, but not under the names
   "rein" or "Agents Rein": the licence grants no use of the licensor's names beyond describing
@@ -381,8 +387,10 @@ committed instead of gitignored (D4).
   ([docs](https://learn.chatgpt.com/docs/agent-approvals-security)) and Copilot has none; and
   `sync` naming every file under the settings folders that `rein` did not write. P2.43.
 - ✅ **D34 — `distill` cuts a harness into units of one concern, and the distiller shapes
-  each.** Decided 2026-10-24 by the user (Q13 M1, Q17 E1, Q14, Q16, Q19 J1). Files, skills
-  included, are cut at their `##` headings; the model, called the distiller in `distill`, may
+  each.** Decided 2026-10-24 by the user (Q13 M1, Q17 E1, Q14, Q16, Q19 J1). `CLAUDE.md` and
+  rule files are cut at their `##` headings, a path-scoped rule's paths going with every part;
+  a skill stays whole unless the distiller splits one that mixes concerns into well-defined
+  skills, as the user put it (corrected 2026-10-24); the model, called the distiller in `distill`, may
   cut further and regroup, by whole verbatim lines only, adding no text but a name, a
   description, a heading, a line naming what a unit replaces and a line pointing at a
   document. `rein` checks that every source line is kept, moved to a document, dropped as a
@@ -1339,12 +1347,22 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- 🟢 **P2.48 — `init`'s binding is a pull request `rein` opens itself (D39).** [PENDING]
+  Approved 2026-10-24. The fingerprint and the path go into the project record on a branch;
+  `init` opens the pull request, registers the clone and finishes; `init` in another clone
+  of the same repository says the binding waits for that pull request.
+- 🟢 **P2.47 — Team, project and label records change through proposals (D39).** [PENDING]
+  Approved 2026-10-24. `team create`, `team edit`, `project create`, `project edit` and the
+  label registry write a record entry into a proposal folder instead of pushing to `main`;
+  `propose` sends it. A project created this way exists once its pull request is merged.
 - 🟢 **P2.46 — A setting's text is edited in a proposal.** [PENDING] Approved 2026-10-24
   (Q31). `rein declaration edit <address> --text` writes a `proposal-<id>/` folder holding the
   setting's current files as one candidate at its own address; the developer edits them there
   and `rein propose` sends the pull request, an unchanged candidate left out. This is how an
-  `amend` is done. After P2.44 step (b), which makes proposals folders. Its final shape waits
-  for D39.
+  `amend` is done. Final shape 2026-10-24 (D39): `declaration edit` moves a setting or changes
+  its labels and enforcement the same way, as fields of the candidate in `proposal.yaml`, and
+  `declaration remove` writes a removal entry; `propose` applies a move and a removal on its
+  branch. After P2.44 step (b), which makes proposals folders.
 - 🟢 **P2.45 — `rein reset project` and `rein reset machine` (D36).** [PENDING] Approved
   2026-10-24. The two subcommands replace `rein restore` and `rein reset`, with what each does
   unchanged; `rein reset` alone refuses and names them; the docs, the next-step hints and the
@@ -2154,3 +2172,18 @@ writes is read from the next session on, not in the same one.
   brief no longer offers them, and an answer that suggests one is sent back as a problem;
   test first, `task rein:check` green. D38 recorded; the README's licence section says the
   names are not covered (Q30).
+- (2026-10-24) P2.44 step (b) done: a proposal is the folder `proposal-<id>/`, its
+  `proposal.yaml` holding every field but the content and naming each candidate's entry beside
+  it, `rule_<id>.md`, `permission_<id>.yaml`, `mcpserver_<id>.yaml` or a folder such as
+  `skill_<id>/`, numbered when two candidates share a kind and an id. The folder is built
+  beside its place and renamed into it; an entry must sit right beside `proposal.yaml`; a
+  proposal written as one file before folders still reads, pending or in the history, and
+  `--force` replaces one of the same snapshot. `propose` takes the folder; the help, the
+  `rein` skill and the docs say folder. Test first; `task rein:check` green, `go vet` for
+  Windows green.
+- (2026-10-24) P2.44 step (c) done: `CLAUDE.md`, `CLAUDE.local.md` and every rule file are cut at
+  their `##` headings, outside code fences; the text before the first heading keeps the file's
+  id, a section is named after its heading before a dash or a colon, a repeated name numbered,
+  and a path-scoped rule's frontmatter goes with every part; a file without sections stays one
+  candidate as before, and a skill stays whole. D34 corrected: the user asked for skills to be
+  split by the distiller, not cut at their headings. Test first; `task rein:check` green.
