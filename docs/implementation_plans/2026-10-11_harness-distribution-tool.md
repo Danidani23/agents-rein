@@ -334,6 +334,40 @@ committed instead of gitignored (D4).
   reach its repositories; `org create` names the installation address when GitHub refuses.
   A GitHub Enterprise has its own registration, so the addresses and the client ID are
   overridable. `gh` is no longer required anywhere.
+- ✅ **D29 — A release needs GitHub's check green on the commit it releases; the release
+  commit is not checked again.** Decided 2026-10-24 by the user (Q6 S1, Q7 o). The tests on
+  Linux, macOS and Windows gate a release instead of following it, and the release commit,
+  which changes only `CHANGELOG.md`, is skipped by the check's path filter. P2.8 stands:
+  the release is cut on the machine, with no release workflow and no secret on GitHub. A
+  release workflow on the host waits for signing or a second maintainer; a `dev` branch
+  promoted to `main` was declined: one branch, and the tags mark the releases.
+- ✅ **D30 — Six package channels before rein is advertised.** Decided 2026-10-24 by the user
+  (Q8 q): the Homebrew tap, the Scoop bucket, `.deb`, `.rpm` and `.apk` on every release,
+  the AUR, winget and Nix through a NUR repository, each recognised by `rein update`. Later,
+  when someone asks: `pkg` and `msi` for MDM, which need GoReleaser Pro
+  ([MSI](https://goreleaser.com/customization/package/msi/), [Pro](https://goreleaser.com/pro/)),
+  and Chocolatey, which needs the `choco` tool on the releasing machine
+  ([docs](https://goreleaser.com/customization/chocolatey/)). Homebrew core once its
+  notability bar is met: 75 stars, 30 forks or 30 watchers, three times that for a
+  submission by the owner, and a repository at least 30 days old
+  ([policy](https://docs.brew.sh/Acceptable-Formulae)).
+- ✅ **D31 — The next agents: GitHub Copilot, OpenAI Codex, Cursor.** Decided 2026-10-24 by the
+  user (Q9 t). With Claude Code they are the top four of the Stack Overflow 2026 survey and of
+  JetBrains' 2026 survey ([findings](../harness-management.md#which-agents-developers-use)).
+  Google's agents and OpenCode follow them. Each is designed on its item and approved before
+  it is built.
+- ✅ **D33 — Codex's TOML through a module, its ADR first.** Decided 2026-10-24 by the user
+  (Q12 T1). `rein` writes `.codex/config.toml` and reads Codex's trust records from
+  `~/.codex/config.toml`; reading another tool's file by scanning lines would break on its
+  first unusual formatting. Built with P2.41.
+- ✅ **D32 — One agent per clone at a time, chosen by the developer.** Decided 2026-10-24 by
+  the user (Q11, Q15 V1). Each agent gets its own native files, and no clone holds two
+  agents' generated files, so no agent reads anything twice. A project or the organisation
+  may pin the agent or restrict the allowed ones; with none set, the one installed agent is
+  used, and `rein` asks when several are. A switch is one `sync`, which removes the previous
+  agent's files and writes the new one's: nothing generated is committed. A second agent in
+  the same clone gets nothing from `rein`, only what it reads of the chosen agent's files on
+  its own. The [layout](#one-agent-per-clone).
 - ✅ **D28 — `rein mcp` on the official Go SDK, the first module beyond cobra and yaml.v3.**
   Decided 2026-10-23 by the user (R52 b). A dual-era MCP server by hand would chase a
   specification that changed its shape within a year; the SDK tracks it. Every further module
@@ -774,6 +808,62 @@ reason, a warning without an end date; no `allow` matching an organisation `deny
 URLs on the allowlist; no `CLAUDE.md` inside a plugin; no personal declaration shadowing a
 `required` one; two project records with one fingerprint and one path; every organisation, team,
 project and user record carries a valid, unique UUID `id`, and a rename keeps it.
+
+### One agent per clone
+
+Decided 2026-10-24 (D32) for P2.40 to P2.42. A clone holds the generated files of one agent at
+a time, in that agent's own format, so no agent reads anything twice. Which agent: the one the
+project or the organisation pins; else the developer's choice among the allowed ones,
+remembered with the clone in the state; else the one installed agent, and `rein` asks when
+several are, refusing without a terminal and naming the flag. A switch is one `sync`: the
+previous agent's files come out, as recorded when they were written, the new agent's go in,
+and the `.gitignore` block follows. `init` moves out every known agent's files committed in a
+repository, whichever agent is chosen. CC is Claude Code, CP Copilot (the CLI and VS Code's
+default Copilot harness, which share a runtime), CX Codex, CU Cursor.
+
+| Piece | CC, as today | CP | CU | CX |
+|---|---|---|---|---|
+| Instructions | `CLAUDE.md` importing a file per level | `.github/copilot-instructions.md`, the levels inline | `.cursor/rules/rein-<level>.mdc`, `alwaysApply: true` | `AGENTS.md`, the levels inline |
+| Path-scoped rules | `.claude/rules/<id>.md`, `paths` | `.github/instructions/<id>.instructions.md`, `applyTo` | `.cursor/rules/<id>.mdc`, `globs` | stated in `AGENTS.md` under their globs |
+| Skills | `.claude/skills/` | `.github/skills/` | `.cursor/skills/` | `.agents/skills/` |
+| Tool servers | `.mcp.json` | `.github/mcp.json` | `.cursor/mcp.json`, `${env:NAME}` | `.codex/config.toml`, `[mcp_servers.<id>]` |
+| Hooks | `.claude/settings.local.json` | `.github/hooks/rein.json` | `.cursor/hooks.json` | `.codex/hooks.json` |
+| Permissions | `.claude/settings.local.json` | none | `.cursor/cli.json`, the CLI only | `.codex/rules/rein.rules`, shell prefixes only |
+
+What each translation costs or leaves open:
+
+- **Hooks change their event names** for Copilot and Cursor, which spell them in camelCase,
+  and Cursor names a prompt hook `beforeSubmitPrompt`; Codex keeps Claude Code's. A blocking
+  decision is read from a different field in Copilot
+  ([migration](https://code.visualstudio.com/docs/agent-customization/migrate-customizations)),
+  so a hook script that blocks in Claude Code may not block in Copilot: checked in the pilot
+  before a `required` hook is trusted there. Every agent gets the session-start sync.
+- **No place:** permissions in Copilot, which takes them only as flags or managed settings;
+  a deny list in Cursor's editor; Codex permissions beyond shell command prefixes, where `ask`
+  becomes `prompt`; path-scoped rules in Codex, which only states them. Each is a note in
+  `sync`'s report.
+- **Codex trusts per project:** its `.codex/` configuration, hooks and rules load only in a
+  trusted project, recorded in `~/.codex/config.toml`, and every hook is trusted once more by
+  its hash ([config](https://learn.chatgpt.com/docs/config-file/config-basic),
+  [hooks](https://learn.chatgpt.com/docs/hooks)). Codex's project instructions stop at 32 KiB
+  by default ([AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md)).
+- **A second agent in the clone** gets only what it reads of the chosen agent's files on its
+  own: with Claude Code chosen, Copilot and Cursor still read `CLAUDE.md`, its skills and its
+  hooks; Codex reads none of them.
+
+Sources, read 2026-10-24: Copilot
+([CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference),
+[config folder](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference),
+[hooks](https://docs.github.com/en/copilot/reference/hooks-reference)); Codex
+([AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md),
+[skills](https://learn.chatgpt.com/docs/build-skills), [MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli),
+[rules](https://learn.chatgpt.com/docs/agent-configuration/rules)); Cursor
+([rules](https://cursor.com/docs/context/rules), [skills](https://cursor.com/docs/context/skills),
+[MCP](https://cursor.com/docs/context/mcp), [hooks](https://cursor.com/docs/agent/hooks),
+[Claude Code hooks](https://cursor.com/docs/reference/third-party-hooks),
+[CLI permissions](https://cursor.com/docs/cli/reference/permissions)); Claude Code
+([skills](https://code.claude.com/docs/en/skills)).
+
 ## Dependency graph
 
 ```mermaid
@@ -1205,6 +1295,61 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- 💬 **P2.42 — Cursor as an agent (D31).** [PENDING] Chosen 2026-10-24; designed the same
+  day in the layout of [one agent per clone](#one-agent-per-clone) (D32), not approved.
+  Detected by `agent` or `cursor-agent` on the PATH
+  ([install](https://cursor.com/docs/cli/installation)); home `~/.cursor`, or
+  `CURSOR_CONFIG_DIR`. Writes `.cursor/rules/rein-<level>.mdc` with `alwaysApply: true`, one per
+  level, and `.cursor/rules/<id>.mdc` with `globs` for a path-scoped rule; `.cursor/skills/`;
+  `.cursor/mcp.json`, a variable as `${env:NAME}`; `.cursor/hooks.json`, the events renamed;
+  `.cursor/cli.json` with the permissions translated, `Bash(x)` to `Shell(x)`, `Edit` and
+  `Write` to `Write`, `WebFetch(domain:x)` to `WebFetch(x)`, a tool server's tool to
+  `Mcp(server:tool)`, and `ask` with no place. Init moves out `.cursorrules` and the settings
+  files under `.cursor/`. Trust: where Cursor records it is undocumented, so the adapter
+  answers trusted. Gate: a Cursor session in a synced clone lists every rule and skill once,
+  its tool servers and its hooks.
+- 💬 **P2.41 — OpenAI Codex as an agent (D31).** [PENDING] Chosen 2026-10-24; designed the
+  same day in the same layout, not approved. Detected by `codex` on the PATH; home `~/.codex`,
+  or `CODEX_HOME`. Writes `AGENTS.md` with the levels inline and the path-scoped rules stated
+  under their globs; `.agents/skills/`; `.codex/config.toml` with the tool servers, `rein`'s
+  among them, through a TOML module (D33); `.codex/hooks.json`, in nearly Claude Code's schema;
+  `.codex/rules/rein.rules`, `prefix_rule` lines from the shell entries, `allow`, `prompt` for
+  `ask`, `forbidden` for `deny`. Init moves out `AGENTS.md`, `AGENTS.override.md`,
+  `.agents/skills/` and `.codex/`. Trust: `[projects."<path>"] trust_level = "trusted"` in
+  `~/.codex/config.toml`; `codex` is the command that asks. Gate: a Codex session in a trusted
+  synced clone shows the instructions, the skills and the tool servers, and a forbidden
+  command is refused.
+- 💬 **P2.40 — GitHub Copilot as an agent (D31).** [PENDING] Chosen 2026-10-24; designed the
+  same day in the same layout, not approved. Detected by `copilot` on the PATH; a VS Code-only
+  user is not detected, and chooses Copilot by name. Home `~/.copilot`, or `COPILOT_HOME`.
+  Writes `.github/copilot-instructions.md` with the levels inline,
+  `.github/instructions/<id>.instructions.md` with `applyTo` for a path-scoped rule,
+  `.github/skills/`, `.github/mcp.json` and `.github/hooks/rein.json`, the events renamed;
+  never another path under `.github/`. Init moves out those and
+  `.github/copilot/settings.json`; `.github/copilot/settings.local.json` is the developer's.
+  Trust: `trustedFolders` in `~/.copilot/config.json`; `copilot` is the command that asks. No
+  place: permissions. Gate: a Copilot CLI session in a synced clone shows the instructions,
+  the path-scoped rules, the skills, the tool servers and the session-start sync.
+- 🔨 **P2.39 — Nix, through a NUR repository of the maintainer's (D30).** [IN PROGRESS] Approved
+  2026-10-24. GoReleaser writes the derivation on every release; `rein update` names the
+  Nix command for a binary in the Nix store. Needs (you) the repository.
+- 🔨 **P2.38 — winget (D30).** [IN PROGRESS] Approved 2026-10-24. GoReleaser writes the manifest
+  into a fork of `microsoft/winget-pkgs` and opens the pull request Microsoft reviews;
+  `rein update` names `winget upgrade` for a winget install. Needs (you) the fork.
+- 🔨 **P2.37 — The AUR package (D30).** [IN PROGRESS] Approved 2026-10-24. GoReleaser pushes the
+  `PKGBUILD` on every release; `rein update` names the AUR helper's upgrade for an AUR
+  install. Needs (you) an AUR account and its SSH key on the releasing machine.
+- 🔨 **P2.36 — `.deb`, `.rpm` and `.apk` on every release (D30).** [IN PROGRESS] Approved
+  2026-10-24. Built by nFPM beside the archives, with no package repository behind them;
+  `rein update` names the download for a package install, which no package manager updates.
+- 🔨 **P2.35 — The Homebrew tap and the Scoop bucket go live (D30).** [IN PROGRESS] Approved
+  2026-10-24. The two empty repositories (you); the cask's quarantine step runs on macOS
+  only, so the same cask installs on Linux. The first release after them fills both.
+- 🔨 **P2.34 — A release needs GitHub's check green on its commit (D29).** [IN PROGRESS]
+  Approved 2026-10-24. `reinctl release` asks GitHub how `check.yml` ended on `HEAD` and
+  refuses when it never ran, is still running, or did not succeed, before anything changes;
+  `reinctl publish` does not ask, its commit being the release commit. The check's push
+  trigger ignores `CHANGELOG.md`, so the release commit is not checked again.
 - ✅ **P2.33 — GitHub checks every push on the three platforms a release builds for.**
   [EXECUTED] 2026-10-23, as approved the same day. [check.yml](../../.github/workflows/check.yml) runs
   `task rein:check` and `task rein:release-check` on Linux and `task rein:test` on macOS and
@@ -1506,6 +1651,9 @@ from that project's snapshot.
   `Danidani23/agents-rein` as `origin` with `main` as the branch, `gh` logged in on the
   machine, and, for the two doors, the empty repositories `Danidani23/homebrew-tap` and
   `Danidani23/scoop-bucket`; without them the release still happens and the doors stay shut.
+  Corrected 2026-10-24: the `pkg` and `msi` for MDM were never built, and both need
+  GoReleaser Pro (D30); `install.ps1` installs into `%LOCALAPPDATA%\Programs\rein`, not
+  `~/.local/bin`, which `rein update` learnt to recognise after P2.33's first Windows run.
 - ✅ **P2.9 — Everything the tool does can be undone (part of B2).** Required 2026-10-12 so
   the whole experience can be rerun from scratch. [EXECUTED] 2026-10-21, in the shape D26
   gave it: `org destroy <slug>` disconnects the organisation on this machine, the same steps
@@ -1890,3 +2038,20 @@ writes is read from the next session on, not in the same one.
   `task rein:check` green on macOS. The third run, at `908f22d`, the tests without the fix,
   failed the install test on all three and the running binary on Windows alone, with
   `Access is denied` on the rename; the fourth run, with the fix, is the gate.
+- (2026-10-24) D29 to D31 decided; P2.34 to P2.42 on the board. P2.34 built: `reinctl release`
+  asks GitHub how `check.yml` stands on `HEAD` before anything changes, tested over the bare
+  origin for a run that never happened, one in progress and one that failed, and read live
+  against `422a2e3`; `check.yml` ignores a push that changes only `CHANGELOG.md`. P2.35 to
+  P2.39 built as configuration: the cask's quarantine step inside `on_macos`, nFPM for
+  `.deb`, `.rpm` and `.apk`, the AUR's `rein-bin`, the winget manifest as a pull request to
+  `microsoft/winget-pkgs`, the Nix derivation for `nur-packages`; each door has its own
+  variable, which `reinctl` sets when the repository, or for the AUR the key at
+  `~/.ssh/aur`, exists. `rein update` recognises winget, by its packages and its links
+  folder, and gives advice for Nix and for `/usr/bin/rein`, where the Linux packages and
+  the AUR all install. Gate: `task rein:check` and `task rein:release-check` green; a
+  snapshot release wrote every channel's files into `dist/`. Left for the user: the
+  repositories `homebrew-tap`, `scoop-bucket` and `nur-packages`, the fork of
+  `microsoft/winget-pkgs`, an AUR account with its key; then the next release, which shows
+  whether CI skips the release commit and opens each door. The maintainer address in the
+  packages is the one the commits carry. P2.40 to P2.42: the three agents' formats are
+  being researched for their designs.
