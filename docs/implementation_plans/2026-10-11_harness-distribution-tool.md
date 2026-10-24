@@ -356,6 +356,12 @@ committed instead of gitignored (D4).
   JetBrains' 2026 survey ([findings](../harness-management.md#which-agents-developers-use)).
   Google's agents and OpenCode follow them. Each is designed on its item and approved before
   it is built.
+- ✅ **D37 — A breaking change raises the major version, before 1.0 too.** Decided 2026-10-24
+  by the user (Q23 U2). `reinctl`'s rule stands, so the scoped reset (D36) makes `rein` v1.0.0.
+- ✅ **D36 — One reset verb with an explicit scope.** Decided 2026-10-24 by the user (Q22 Z1).
+  `rein reset project`, this clone or `--path`, replaces `rein restore`; `rein reset machine`
+  replaces `rein reset`; `rein reset` alone refuses and names the two, no silent default for a
+  destructive command. `rein org destroy` stays under `org`. P2.45.
 - ✅ **D35 — Every agent knows its settings come from `rein`, in four layers.** Decided
   2026-10-24 by the user (Q18 G1): a plain always-on line in every generated instructions
   file; the `rein` skill for every agent; a mechanical block on editing the generated paths
@@ -1319,6 +1325,10 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- 🟢 **P2.45 — `rein reset project` and `rein reset machine` (D36).** [PENDING] Approved
+  2026-10-24. The two subcommands replace `rein restore` and `rein reset`, with what each does
+  unchanged; `rein reset` alone refuses and names them; the docs, the next-step hints and the
+  `rein` skill follow. A breaking change, so its release is v1.0.0 (D37).
 - 🟢 **P2.44 — `distill` cuts into units and the distiller shapes them (D34).** [PENDING]
   Approved 2026-10-24. The answer format goes to version 2: per unit its lines, its
   shape, its verdict and suggestion, a `merge` carrying its text into the unit's files, a
@@ -1330,7 +1340,17 @@ from that project's snapshot.
   pointers. Gate: the website's snapshot distilled again gives units instead of one
   candidate, each repeat dropped against the declaration it repeats, the conflicts blocking
   `propose` until resolved, and its architecture and privacy text as documents with their
-  pointer rules; `task rein:check` green.
+  pointer rules; `task rein:check` green. Extended 2026-10-24 (Q24, Q25): the distiller also
+  reviews the labels, proposing a registry label a project lacks, a new one with its meaning
+  when a unit it lifts needs it and no other, and one that looks redundant, each a candidate
+  of kind `label` or a project-label change applied through the pull requests `rein` already
+  opens; and a proposal becomes the folder `.rein/proposals/proposal-<id>/`, its
+  `proposal.yaml` holding the snapshot, the distiller's run and every decision, beside one
+  entry per candidate named `<kind>_<id>` with exactly the files that would land. Built in
+  steps, each green before the next: (a) a `merge` lands as the related declaration rewritten;
+  (b) the proposal folder; (c) the cut at `##` headings; (d) the distiller's version 2 answer,
+  its line check and its name; (e) conflicts that block `propose`; (f) documents and their
+  pointer rules; (g) labels.
 - 🔨 **P2.43 — Every agent knows its settings come from `rein` (D35).** [IN PROGRESS] Approved
   2026-10-24; built for Claude Code the same day, the live gate waiting. For Claude Code now and for each agent as P2.40 to P2.42 land: the always-on
   line in the generated instructions file, as text, not a comment; the `rein` skill; deny
@@ -1340,8 +1360,8 @@ from that project's snapshot.
   it did not write, with the `distill` command that keeps it. Gate: in a synced clone, Claude
   Code asked to add a skill answers with `rein`'s way and cannot write one by hand, and a
   hand-made file shows in `sync`'s report.
-- 💬 **P2.42 — Cursor as an agent (D31).** [PENDING] Chosen 2026-10-24; designed the same
-  day in the layout of [one agent per clone](#one-agent-per-clone) (D32), not approved.
+- 🟢 **P2.42 — Cursor as an agent (D31).** [PENDING] Chosen 2026-10-24; designed the same
+  day in the layout of [one agent per clone](#one-agent-per-clone) (D32), approved the same day (Q21).
   Detected by `agent` or `cursor-agent` on the PATH
   ([install](https://cursor.com/docs/cli/installation)); home `~/.cursor`, or
   `CURSOR_CONFIG_DIR`. Writes `.cursor/rules/rein-<level>.mdc` with `alwaysApply: true`, one per
@@ -1353,8 +1373,8 @@ from that project's snapshot.
   files under `.cursor/`. Trust: where Cursor records it is undocumented, so the adapter
   answers trusted. Gate: a Cursor session in a synced clone lists every rule and skill once,
   its tool servers and its hooks.
-- 💬 **P2.41 — OpenAI Codex as an agent (D31).** [PENDING] Chosen 2026-10-24; designed the
-  same day in the same layout, not approved. Detected by `codex` on the PATH; home `~/.codex`,
+- 🟢 **P2.41 — OpenAI Codex as an agent (D31).** [PENDING] Chosen 2026-10-24; designed the
+  same day in the same layout, approved the same day (Q21). Detected by `codex` on the PATH; home `~/.codex`,
   or `CODEX_HOME`. Writes `AGENTS.md` with the levels inline and the path-scoped rules stated
   under their globs; `.agents/skills/`; `.codex/config.toml` with the tool servers, `rein`'s
   among them, through a TOML module (D33); `.codex/hooks.json`, in nearly Claude Code's schema;
@@ -1364,8 +1384,8 @@ from that project's snapshot.
   `~/.codex/config.toml`; `codex` is the command that asks. Gate: a Codex session in a trusted
   synced clone shows the instructions, the skills and the tool servers, and a forbidden
   command is refused.
-- 💬 **P2.40 — GitHub Copilot as an agent (D31).** [PENDING] Chosen 2026-10-24; designed the
-  same day in the same layout, not approved. Detected by `copilot` on the PATH; a VS Code-only
+- 🟢 **P2.40 — GitHub Copilot as an agent (D31).** [PENDING] Chosen 2026-10-24; designed the
+  same day in the same layout, approved the same day (Q21). Detected by `copilot` on the PATH; a VS Code-only
   user is not detected, and chooses Copilot by name. Home `~/.copilot`, or `COPILOT_HOME`.
   Writes `.github/copilot-instructions.md` with the levels inline,
   `.github/instructions/<id>.instructions.md` with `applyTo` for a path-scoped rule,
