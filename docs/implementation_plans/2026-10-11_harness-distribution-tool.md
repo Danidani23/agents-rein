@@ -356,6 +356,12 @@ committed instead of gitignored (D4).
   JetBrains' 2026 survey ([findings](../harness-management.md#which-agents-developers-use)).
   Google's agents and OpenCode follow them. Each is designed on its item and approved before
   it is built.
+- ✅ **D38 — Apache 2.0 stays; the name is what is protected.** Decided 2026-10-24 by the user
+  (Q27 K2). Anyone may use, change and sell `rein`, a fork included, but not under the names
+  "rein" or "Agents Rein": the licence grants no use of the licensor's names beyond describing
+  where the work comes from ([LICENSE](../../LICENSE), section 6). FSL-1.1-ALv2 and PolyForm
+  Shield were weighed and declined: either would end the open-source licence and with it
+  Homebrew core and the easiest path through a company's legal review.
 - ✅ **D37 — A breaking change raises the major version, before 1.0 too.** Decided 2026-10-24
   by the user (Q23 U2). `reinctl`'s rule stands, so the scoped reset (D36) makes `rein` v1.0.0.
 - ✅ **D36 — One reset verb with an explicit scope.** Decided 2026-10-24 by the user (Q22 Z1).
