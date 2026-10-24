@@ -47,8 +47,9 @@ those files; it is proposed to the org repository and comes back at the next syn
    ` + "`organizations.<org>.teams.<team>`" + `, ` + "`organizations.<org>.projects.<project>`" + ` or
    ` + "`organizations.<org>.users.<user>`" + `.
 4. A harness that was in a repository before rein is distilled: ` + "`rein distill`" + ` writes a
-   proposal file under ` + "`.rein/proposals/`" + ` with every candidate, its level and the judge's
-   reason; a person reviews and edits it; ` + "`rein propose`" + ` opens the pull request from it.
+   proposal folder under ` + "`.rein/proposals/`" + `: ` + "`proposal.yaml`" + ` with every candidate, its level and
+   the judge's reason, beside one entry per candidate with its content; a person reviews and
+   edits it; ` + "`rein propose`" + ` opens the pull request from it.
 5. A setting for this developer on this machine only goes into ` + "`CLAUDE.local.md`" + `, or into
    the allow list of ` + "`.claude/settings.local.json`" + `, which sync keeps.
 

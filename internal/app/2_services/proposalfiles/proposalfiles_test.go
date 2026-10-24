@@ -20,9 +20,22 @@ func TestPendingAndHistory(t *testing.T) {
 	if folder != filepath.Join(clone, ".rein", "proposals") || service.HomePendingFolder() != filepath.Join(home, "proposals", "pending") {
 		t.Fatalf("folders %s %s", folder, service.HomePendingFolder())
 	}
-	written, err := service.WritePending(folder, document, false)
-	if err != nil || written != filepath.Join(folder, "proposal-abc123abc123.yaml") {
-		t.Fatalf("written %s err %v", written, err)
+	// a pending proposal of the same snapshot from before folders is refused, and replaced with force
+	legacyPath := filepath.Join(folder, "proposal-abc123abc123.yaml")
+	_ = os.MkdirAll(folder, 0o700)
+	_ = os.WriteFile(legacyPath, []byte("version: 1\nid: abc123abc123\nstatus: pending\norganization: acme\n"), 0o600)
+	_, err := service.WritePending(folder, document, false)
+	if err == nil || !strings.Contains(err.Error(), "is pending at "+legacyPath) {
+		t.Fatalf("over a legacy file: %v", err)
+	}
+	written, err := service.WritePending(folder, document, true)
+	_, legacyErr := os.Stat(legacyPath)
+	if err != nil || written != filepath.Join(folder, "proposal-abc123abc123") || legacyErr == nil {
+		t.Fatalf("written %s err %v legacy %v", written, err, legacyErr)
+	}
+	_, err = os.Stat(filepath.Join(written, proposal.IndexFile))
+	if err != nil {
+		t.Fatalf("no index in %s: %v", written, err)
 	}
 	_, err = service.WritePending(folder, document, false)
 	if err == nil || !strings.Contains(err.Error(), "is pending at "+written) {
@@ -45,12 +58,12 @@ func TestPendingAndHistory(t *testing.T) {
 	}
 	document.MarkProposed("rein/propose-x", "https://github.com/acme/settings/pull/1", when.Add(2*time.Hour))
 	historyPath, err := service.MoveToHistory(written, document)
-	if err != nil || historyPath != filepath.Join(home, "proposals", "acme", "20261022-182213-abc123abc123.yaml") {
+	if err != nil || historyPath != filepath.Join(home, "proposals", "acme", "20261022-182213-abc123abc123") {
 		t.Fatalf("history %s err %v", historyPath, err)
 	}
 	_, err = os.Stat(written)
 	if err == nil {
-		t.Fatalf("the pending file stayed")
+		t.Fatalf("the pending proposal stayed")
 	}
 	pending, _ = service.ListPending(folder)
 	proposed, err := service.History("acme")

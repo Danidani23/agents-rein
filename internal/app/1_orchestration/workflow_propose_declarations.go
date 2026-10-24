@@ -252,21 +252,24 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 	return prepared, nil
 }
 
-// loadProposal reads the source as a proposal file when it is one, and
-// otherwise turns a level folder or an export zip into a proposal of its
-// files at the requested level, the user's own by default.
+// loadProposal reads the source as a proposal when it is one, a folder
+// holding proposal.yaml or a file from before folders, and otherwise turns
+// a level folder or an export zip into a proposal of its files at the
+// requested level, the user's own by default.
 func loadProposal(services Services, request ProposeRequest) (document proposal.Proposal, isFile bool, err error) {
 	info, err := os.Stat(request.Source)
 	if err != nil {
 		return proposal.Proposal{}, false, refusal.New(fmt.Sprintf("cannot read %s: %v", request.Source, err))
 	}
-	if !info.IsDir() && strings.HasSuffix(request.Source, ".yaml") {
+	_, indexErr := os.Stat(filepath.Join(request.Source, proposal.IndexFile))
+	isProposal := (info.IsDir() && indexErr == nil) || (!info.IsDir() && strings.HasSuffix(request.Source, ".yaml"))
+	if isProposal {
 		document, err := services.ProposalFiles.Read(request.Source)
 		if err != nil {
 			return proposal.Proposal{}, false, refusal.New(err.Error())
 		}
 		if request.Level != "" {
-			return proposal.Proposal{}, false, refusal.New("a proposal file says where each candidate goes; edit its level fields instead of --level")
+			return proposal.Proposal{}, false, refusal.New("a proposal says where each candidate goes; edit its level fields in proposal.yaml instead of --level")
 		}
 		return document, true, nil
 	}

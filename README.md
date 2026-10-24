@@ -78,7 +78,7 @@ rein team create
 cd <a project clone> && rein init
 ```
 
-Deliver the settings, then turn the harness `init` moved out into a proposal file, review it,
+Deliver the settings, then turn the harness `init` moved out into a proposal, review it,
 and open the pull request:
 
 ```sh

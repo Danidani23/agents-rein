@@ -17,19 +17,20 @@ func newProposeCommand(environment *commandEnvironment) *cobra.Command {
 	var request orchestration.ProposeRequest
 	var yes bool
 	command := &cobra.Command{
-		Use:   "propose [proposal file, folder or zip]",
+		Use:   "propose [proposal, level folder or zip]",
 		Short: "Open a pull request that adds declarations to the org repository",
-		Long: "propose is the one way declarations enter an org repository. It takes the proposal file rein\n" +
-			"distill wrote, which says for every candidate whether it goes, to which level and with which\n" +
-			"labels, and does exactly that: lints the candidates, leaves out the ones identical to what the\n" +
-			"organisation has, writes the rest on a branch of the organisation's clone at their levels,\n" +
-			"pushes it and opens the pull request with the comparison as its body. The proposal is then\n" +
-			"marked proposed and moved to ~/.rein/proposals/ as the history. Inside a project folder with\n" +
-			"one pending proposal, no argument is needed; with several, it asks which.\n\n" +
+		Long: "propose is the one way declarations enter an org repository. It takes the proposal rein\n" +
+			"distill wrote, a folder whose proposal.yaml says for every candidate whether it goes, to\n" +
+			"which level and with which labels, beside the candidates' content, and does exactly that:\n" +
+			"lints the candidates, leaves out the ones identical to what the organisation has, writes the\n" +
+			"rest on a branch of the organisation's clone at their levels, pushes it and opens the pull\n" +
+			"request with the comparison as its body. The proposal is then marked proposed and moved to\n" +
+			"~/.rein/proposals/ as the history. Inside a project folder with one pending proposal, no\n" +
+			"argument is needed; with several, it asks which.\n\n" +
 			"A plain level folder with rules/, skills/, mcpservers/, permissions/ and hooks/, or an export\n" +
 			"zip, goes whole to your user level unless --level says otherwise. Your user record is added\n" +
 			"when the org repository has none.",
-		Example: "  rein propose\n  rein propose .rein/proposals/proposal-3f9c2e1a7b4d.yaml\n  rein propose ./my-rules --level organizations.acme.teams.web\n  rein propose export.zip",
+		Example: "  rein propose\n  rein propose .rein/proposals/proposal-3f9c2e1a7b4d\n  rein propose ./my-rules --level organizations.acme.teams.web\n  rein propose export.zip",
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, arguments []string) error {
 			if len(arguments) == 1 {
@@ -112,7 +113,7 @@ func pendingProposalSource(prompter ports.Prompter, orchestrator orchestration.O
 	}
 	switch {
 	case len(pending) == 0:
-		return "", refusal.New("no pending proposal here; rein distill writes one, or name a proposal file, a folder or a zip")
+		return "", refusal.New("no pending proposal here; rein distill writes one, or name a proposal, a level folder or a zip")
 	case len(pending) == 1:
 		return pending[0].Path, nil
 	case !prompter.CanAsk():

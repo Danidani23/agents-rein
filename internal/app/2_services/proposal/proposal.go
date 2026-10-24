@@ -1,13 +1,15 @@
-// Package proposal is the format of a proposal: one YAML document that
-// holds every candidate with its content, where it goes and why. distill
-// writes it, a person edits it, propose reads it and does what it says, and
-// afterwards it is kept as history.
+// Package proposal is the format of a proposal: a folder whose
+// proposal.yaml says where every candidate goes and why, beside one entry
+// per candidate with its content (P2.44). distill writes it, a person edits
+// it, propose reads it and does what it says, and afterwards it is kept as
+// history. A proposal written before folders, one YAML document, still reads.
 package proposal
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -22,8 +24,15 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 )
 
-// Version is the format version this build writes and reads.
-const Version = 1
+// Version is the format version this build writes: a folder.
+const Version = 2
+
+// FileVersion is the format of a proposal written before folders, one YAML
+// file holding the content too, which this build still reads.
+const FileVersion = 1
+
+// IndexFile holds everything of a proposal folder but the content.
+const IndexFile = "proposal.yaml"
 
 // Status is where a proposal stands.
 type Status string
@@ -34,10 +43,11 @@ const (
 	StatusProposed Status = "proposed"
 )
 
-// Header is the comment at the top of every proposal file.
+// Header is the comment at the top of every proposal.yaml.
 const Header = `# Written by rein distill. Review and edit it, then rein propose. A candidate with
-# include: false stays out; level, applyIf, doNotApplyIf, enforcement and the files
-# are yours to change. Never edit a proposed one; distill again instead.
+# include: false stays out; level, applyIf, doNotApplyIf and enforcement are yours to
+# change here, its content in the entry beside this file that it names. Never edit a
+# proposed one; distill again instead.
 `
 
 // Proposal is the document.
@@ -68,18 +78,21 @@ type Snapshot struct {
 // judge said, and its files, keyed by their name inside the declaration's
 // folder: SKILL.md, hook.yaml, or docs.md for the rule docs.
 type Candidate struct {
-	Kind         string            `yaml:"kind"`
-	ID           string            `yaml:"id"`
-	Include      bool              `yaml:"include"`
-	Level        string            `yaml:"level"`
-	ApplyIf      []string          `yaml:"applyIf"`
-	DoNotApplyIf []string          `yaml:"doNotApplyIf"`
-	Enforcement  string            `yaml:"enforcement"`
-	Sources      []string          `yaml:"sources"`
-	Compared     Comparison        `yaml:"compared"`
-	Judge        *Judgement        `yaml:"judge"`
-	Notes        []string          `yaml:"notes"`
-	Files        map[string]string `yaml:"files"`
+	Kind         string     `yaml:"kind"`
+	ID           string     `yaml:"id"`
+	Include      bool       `yaml:"include"`
+	Level        string     `yaml:"level"`
+	ApplyIf      []string   `yaml:"applyIf"`
+	DoNotApplyIf []string   `yaml:"doNotApplyIf"`
+	Enforcement  string     `yaml:"enforcement"`
+	Sources      []string   `yaml:"sources"`
+	Compared     Comparison `yaml:"compared"`
+	Judge        *Judgement `yaml:"judge"`
+	Notes        []string   `yaml:"notes"`
+	// Entry names the file or folder beside proposal.yaml that holds the
+	// content; a proposal written before folders has Files inline instead.
+	Entry string            `yaml:"entry,omitempty"`
+	Files map[string]string `yaml:"files,omitempty"`
 }
 
 // Comparison is what the organisation already has, by content or by id.
@@ -113,15 +126,36 @@ func IDOf(snapshotContents ...[]byte) string {
 	return DigestOf(snapshotContents...)[:12]
 }
 
-// FileName is a pending proposal's file name.
-func FileName(id string) string {
-	return "proposal-" + id + ".yaml"
+// FolderName is a pending proposal's folder name.
+func FolderName(id string) string {
+	return "proposal-" + id
 }
 
-// HistoryName is a proposed proposal's file name, the time first so the
-// folder lists in order.
+// FileName is the name a pending proposal had before folders.
+func FileName(id string) string {
+	return FolderName(id) + ".yaml"
+}
+
+// HistoryName is a proposed proposal's folder name, the time first so the
+// history lists in order.
 func HistoryName(id string, proposedAt time.Time) string {
-	return proposedAt.UTC().Format("20060102-150405") + "-" + id + ".yaml"
+	return proposedAt.UTC().Format("20060102-150405") + "-" + id
+}
+
+// entryName is where a candidate's content goes in a proposal folder:
+// <kind>_<id>, a file for a declaration of one file, a folder otherwise.
+func entryName(candidate Candidate) string {
+	name := strings.TrimSuffix(candidate.Kind, "s") + "_" + candidate.ID
+	if len(candidate.Files) != 1 {
+		return name
+	}
+	switch candidate.Kind {
+	case address.Rules:
+		return name + ".md"
+	case address.Permissions, address.MCPServers:
+		return name + ".yaml"
+	}
+	return name
 }
 
 // FileKeyOf is the key a candidate file has inside the document: the path
@@ -158,8 +192,20 @@ func FromCandidate(candidate distill.Candidate, level string, include bool, appl
 	}
 }
 
-// Read parses a proposal file.
-func Read(filePath string) (Proposal, error) {
+// Load reads a proposal: a folder, or a file written before folders.
+func Load(proposalPath string) (Proposal, error) {
+	info, err := os.Stat(proposalPath)
+	if err != nil {
+		return Proposal{}, err
+	}
+	if info.IsDir() {
+		return readFolder(proposalPath)
+	}
+	return readFile(proposalPath)
+}
+
+// readFile parses a proposal written before folders.
+func readFile(filePath string) (Proposal, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return Proposal{}, err
@@ -169,29 +215,134 @@ func Read(filePath string) (Proposal, error) {
 	if err != nil {
 		return Proposal{}, fmt.Errorf("%s is not a proposal: %w", filePath, err)
 	}
-	if document.Version != Version {
-		return Proposal{}, fmt.Errorf("%s is a proposal of version %d; this rein reads version %d", filePath, document.Version, Version)
+	if document.Version != FileVersion {
+		return Proposal{}, fmt.Errorf("%s is a proposal of version %d; this rein reads a file of version %d", filePath, document.Version, FileVersion)
 	}
 	return document, nil
 }
 
-// Write writes the document with its header, through a temporary file so
-// a reader never sees half of it.
-func (proposal Proposal) Write(filePath string) error {
-	encoded, err := yaml.Marshal(proposal)
+// readFolder parses proposal.yaml and reads each candidate's entry.
+func readFolder(folder string) (Proposal, error) {
+	indexPath := filepath.Join(folder, IndexFile)
+	content, err := os.ReadFile(indexPath)
+	if err != nil {
+		return Proposal{}, err
+	}
+	var document Proposal
+	err = yaml.Unmarshal(content, &document)
+	if err != nil {
+		return Proposal{}, fmt.Errorf("%s is not a proposal: %w", indexPath, err)
+	}
+	if document.Version != Version {
+		return Proposal{}, fmt.Errorf("%s is a proposal of version %d; this rein reads version %d", indexPath, document.Version, Version)
+	}
+	for index := range document.Candidates {
+		candidate := &document.Candidates[index]
+		files, err := readEntry(folder, *candidate)
+		if err != nil {
+			return Proposal{}, err
+		}
+		candidate.Files = files
+	}
+	return document, nil
+}
+
+// readEntry reads the file or the folder a candidate's entry names, which
+// must sit right beside proposal.yaml.
+func readEntry(folder string, candidate Candidate) (map[string]string, error) {
+	if candidate.Entry == "" || candidate.Entry != filepath.Base(candidate.Entry) || candidate.Entry == ".." || candidate.Entry == IndexFile {
+		return nil, fmt.Errorf("%s/%s: the entry %q is not a name beside %s", candidate.Kind, candidate.ID, candidate.Entry, IndexFile)
+	}
+	target := filepath.Join(folder, candidate.Entry)
+	info, err := os.Stat(target)
+	if err != nil {
+		return nil, fmt.Errorf("%s/%s: the entry %s is missing: %w", candidate.Kind, candidate.ID, candidate.Entry, err)
+	}
+	files := map[string]string{}
+	if !info.IsDir() {
+		content, err := os.ReadFile(target)
+		if err != nil {
+			return nil, err
+		}
+		files[strings.TrimPrefix(candidate.Entry, strings.TrimSuffix(candidate.Kind, "s")+"_")] = string(content)
+		return files, nil
+	}
+	err = filepath.WalkDir(target, func(current string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		relative, err := filepath.Rel(target, current)
+		if err != nil {
+			return err
+		}
+		content, err := os.ReadFile(current)
+		if err != nil {
+			return err
+		}
+		files[filepath.ToSlash(relative)] = string(content)
+		return nil
+	})
+	return files, err
+}
+
+// WriteFolder writes the document as a folder: proposal.yaml with every
+// field but the content, and each candidate's files in its entry beside
+// it. The folder is built beside its place and renamed into it, so a
+// reader never sees half of it.
+func (proposal Proposal) WriteFolder(folder string) error {
+	building := folder + ".writing"
+	err := os.RemoveAll(building)
 	if err != nil {
 		return err
 	}
-	err = os.MkdirAll(filepath.Dir(filePath), 0o700)
+	err = os.MkdirAll(building, 0o700)
 	if err != nil {
 		return err
 	}
-	temporary := filePath + ".writing"
-	err = os.WriteFile(temporary, append([]byte(Header), encoded...), 0o600)
+	index := proposal
+	index.Candidates = make([]Candidate, len(proposal.Candidates))
+	taken := map[string]bool{}
+	for position, candidate := range proposal.Candidates {
+		entry := entryName(candidate)
+		extension := path.Ext(entry)
+		for count := 2; taken[entry]; count++ {
+			entry = fmt.Sprintf("%s-%d%s", strings.TrimSuffix(entryName(candidate), extension), count, extension)
+		}
+		taken[entry] = true
+		for key, content := range candidate.Files {
+			target := filepath.Join(building, entry)
+			if extension == "" {
+				target = filepath.Join(building, entry, filepath.FromSlash(key))
+			}
+			err = os.MkdirAll(filepath.Dir(target), 0o700)
+			if err != nil {
+				return err
+			}
+			err = os.WriteFile(target, []byte(content), 0o600)
+			if err != nil {
+				return err
+			}
+		}
+		candidate.Entry = entry
+		candidate.Files = nil
+		index.Candidates[position] = candidate
+	}
+	encoded, err := yaml.Marshal(index)
 	if err != nil {
 		return err
 	}
-	return os.Rename(temporary, filePath)
+	err = os.WriteFile(filepath.Join(building, IndexFile), append([]byte(Header), encoded...), 0o600)
+	if err != nil {
+		return err
+	}
+	err = os.RemoveAll(folder)
+	if err != nil {
+		return err
+	}
+	return os.Rename(building, folder)
 }
 
 // Check says what is wrong with a proposal before propose: a proposed one

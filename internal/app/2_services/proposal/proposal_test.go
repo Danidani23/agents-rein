@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 )
@@ -28,31 +30,59 @@ func sample() Proposal {
 
 func TestProposalRoundTrip(t *testing.T) {
 	document := sample()
-	filePath := filepath.Join(t.TempDir(), FileName(document.ID))
-	err := document.Write(filePath)
+	folder := filepath.Join(t.TempDir(), FolderName(document.ID))
+	err := document.WriteFolder(folder)
 	if err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	content, _ := os.ReadFile(filePath)
-	text := string(content)
-	for _, expected := range []string{Header, "id: 3f9c2e1a7b4d\n", "status: pending\n", "pull_request: \"\"\n", "      include: true\n      level: organizations.acme\n      applyIf:\n        - language:go\n      doNotApplyIf: []\n      enforcement: \"\"\n", "      files:\n        SKILL.md: |", "references/errors.md:", "      include: false\n"} {
+	index, _ := os.ReadFile(filepath.Join(folder, IndexFile))
+	text := string(index)
+	for _, expected := range []string{Header, "version: 2\n", "id: 3f9c2e1a7b4d\n", "status: pending\n", "pull_request: \"\"\n", "      include: true\n      level: organizations.acme\n      applyIf:\n        - language:go\n      doNotApplyIf: []\n      enforcement: \"\"\n", "      entry: skill_go-style\n", "      entry: rule_docs.md\n", "      include: false\n"} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("missing %q in %s", expected, text)
 		}
 	}
-	if strings.Contains(text, "proposed_at") {
-		t.Fatalf("a time that has not happened is written: %s", text)
+	// the content lives beside the index, one entry per candidate
+	if strings.Contains(text, "files:") || strings.Contains(text, "proposed_at") {
+		t.Fatalf("the index holds content or a time that has not happened: %s", text)
 	}
-	read, err := Read(filePath)
+	reference, _ := os.ReadFile(filepath.Join(folder, "skill_go-style", "references", "errors.md"))
+	rule, _ := os.ReadFile(filepath.Join(folder, "rule_docs.md"))
+	if string(reference) != "two lines\n" || !strings.HasPrefix(string(rule), "---\npaths:") {
+		t.Fatalf("entries: %q %q", reference, rule)
+	}
+	read, err := Load(folder)
 	if err != nil || read.ID != document.ID || len(read.Candidates) != 2 || read.Candidates[0].Files["references/errors.md"] != "two lines\n" || read.Candidates[0].Judge.Level != "organizations.acme" || !read.Snapshot.TakenAt.Equal(document.Snapshot.TakenAt) {
 		t.Fatalf("read %+v err %v", read, err)
 	}
-	_ = os.WriteFile(filePath, []byte("version: 2\n"), 0o600)
-	_, err = Read(filePath)
-	if err == nil || !strings.Contains(err.Error(), "version 2") {
+	// an edit in an entry is what propose reads
+	_ = os.WriteFile(filepath.Join(folder, "rule_docs.md"), []byte("Cite every source.\n"), 0o600)
+	read, _ = Load(folder)
+	if read.Candidates[1].Files["docs.md"] != "Cite every source.\n" {
+		t.Fatalf("the edit was not read: %+v", read.Candidates[1].Files)
+	}
+	// an entry outside the folder is refused
+	_ = os.WriteFile(filepath.Join(folder, IndexFile), []byte(strings.Replace(text, "entry: rule_docs.md", "entry: ../secret.md", 1)), 0o600)
+	_, err = Load(folder)
+	if err == nil || !strings.Contains(err.Error(), "../secret.md") {
+		t.Fatalf("an entry outside the folder: %v", err)
+	}
+	// a proposal written before folders, one YAML file, still reads
+	legacy := sample()
+	legacy.Version = FileVersion
+	encoded, _ := yaml.Marshal(legacy)
+	legacyPath := filepath.Join(t.TempDir(), "proposal-"+legacy.ID+".yaml")
+	_ = os.WriteFile(legacyPath, encoded, 0o600)
+	read, err = Load(legacyPath)
+	if err != nil || read.Candidates[0].Files["references/errors.md"] != "two lines\n" {
+		t.Fatalf("legacy %+v err %v", read, err)
+	}
+	_ = os.WriteFile(filepath.Join(folder, IndexFile), []byte("version: 3\n"), 0o600)
+	_, err = Load(folder)
+	if err == nil || !strings.Contains(err.Error(), "version 3") {
 		t.Fatalf("version: %v", err)
 	}
-	if IDOf([]byte("a"), []byte("b")) != IDOf([]byte("ab")) || len(IDOf([]byte("x"))) != 12 || FileName("abc") != "proposal-abc.yaml" || HistoryName("abc", document.DistilledAt) != "20261022-162213-abc.yaml" {
+	if IDOf([]byte("a"), []byte("b")) != IDOf([]byte("ab")) || len(IDOf([]byte("x"))) != 12 || FolderName("abc") != "proposal-abc" || HistoryName("abc", document.DistilledAt) != "20261022-162213-abc" {
 		t.Fatalf("names: %s %s", IDOf([]byte("x")), HistoryName("abc", document.DistilledAt))
 	}
 }

@@ -744,12 +744,13 @@ func TestDistillHarness(t *testing.T) {
 		if verdicts["rules/go"] != "identical" || verdicts["rules/instructions"] != "new" || verdicts["mcpservers/docs"] != "new" {
 			t.Fatalf("verdicts %v", verdicts)
 		}
-		if result.File != filepath.Join(folder, ".rein", "proposals", "proposal-"+result.Proposal.ID+".yaml") {
+		if result.File != filepath.Join(folder, ".rein", "proposals", "proposal-"+result.Proposal.ID) {
 			t.Fatalf("file %q", result.File)
 		}
-		content, _ := os.ReadFile(result.File)
-		if !strings.Contains(string(content), "distilled_from: organizations.acme.projects.shop") || !strings.Contains(string(content), "verdict: identical") || !strings.Contains(string(content), "Be brief.") {
-			t.Fatalf("proposal %q", content)
+		content, _ := os.ReadFile(filepath.Join(result.File, "proposal.yaml"))
+		instructions, _ := os.ReadFile(filepath.Join(result.File, "rule_instructions.md"))
+		if !strings.Contains(string(content), "distilled_from: organizations.acme.projects.shop") || !strings.Contains(string(content), "verdict: identical") || !strings.Contains(string(instructions), "Be brief.") {
+			t.Fatalf("proposal %q instructions %q", content, instructions)
 		}
 		ignore, _ := os.ReadFile(filepath.Join(folder, ".gitignore"))
 		if !strings.Contains(string(ignore), "\n.rein/\n") {
@@ -896,8 +897,8 @@ func TestProposeDeclarations(t *testing.T) {
 		if plan.Included[0].Level != "organizations.acme" || plan.Included[0].ID != "instructions" || plan.Included[1].Level != "organizations.acme.teams.web" || plan.Excluded[0].ID != "docs" || !strings.Contains(plan.Excluded[0].Judge, "drop: already declared") {
 			t.Fatalf("placed %+v excluded %+v", plan.Included, plan.Excluded)
 		}
-		// the person edits the file: the team rule moves to the project, the docs server is included after all
-		edited, _ := proposal.Read(distilled.File)
+		// the person edits proposal.yaml: the team rule moves to the project, the docs server is included after all
+		edited, _ := proposal.Load(distilled.File)
 		for index := range edited.Candidates {
 			switch edited.Candidates[index].ID {
 			case "go":
@@ -906,7 +907,7 @@ func TestProposeDeclarations(t *testing.T) {
 				edited.Candidates[index].Include = true
 			}
 		}
-		_ = edited.Write(distilled.File)
+		_ = edited.WriteFolder(distilled.File)
 		result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.File})
 		if err != nil || len(result.Included) != 3 || !strings.Contains(fixture.host.PullRequests[0].Title, "Propose 3 declarations to 2 levels of acme") {
 			t.Fatalf("result %+v err %v", result, err)
@@ -982,8 +983,8 @@ func TestProposeDeclarations(t *testing.T) {
 			}
 		}
 		broken := proposal.Proposal{Version: proposal.Version, Status: proposal.StatusPending, Organization: "acme", DistilledFrom: "organizations.acme", Candidates: []proposal.Candidate{{Kind: "rules", ID: "x", Include: true, Level: "nowhere", ApplyIf: []string{"stack:aws"}, Files: map[string]string{"x.md": "x"}}}}
-		brokenPath := filepath.Join(t.TempDir(), "proposal-abc.yaml")
-		_ = broken.Write(brokenPath)
+		brokenPath := filepath.Join(t.TempDir(), "proposal-abc")
+		_ = broken.WriteFolder(brokenPath)
 		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: brokenPath})
 		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "cannot go as it is") || !strings.Contains(err.Error(), `level "nowhere" is not one`) || !strings.Contains(err.Error(), `label "stack:aws" names no category`) {
 			t.Fatalf("broken: %v", err)
@@ -1030,7 +1031,7 @@ func TestProposeDeclarations(t *testing.T) {
 		if len(fixture.repository.RemoteDeleted) != 1 || len(fixture.repository.Deleted) != 1 || fixture.repository.Current != "main" || len(fixture.repository.Published) != 1 {
 			t.Fatalf("repository %+v remote %s", fixture.repository, created.Remote)
 		}
-		still, err := proposal.Read(distilled.File)
+		still, err := proposal.Load(distilled.File)
 		if err != nil || still.Status != proposal.StatusPending {
 			t.Fatalf("pending file: %+v err %v", still, err)
 		}
@@ -1069,7 +1070,7 @@ func TestDistillWithTheJudge(t *testing.T) {
 		if judged["rules/go"].Judge == nil || judged["rules/go"].Judge.Verdict != "duplicate" || judged["rules/go"].Include || judged["mcpservers/docs"].Level != "organizations.acme" || len(judged["rules/go"].Judge.Quotes) != 1 {
 			t.Fatalf("judged %+v", judged)
 		}
-		content, _ := os.ReadFile(result.File)
+		content, _ := os.ReadFile(filepath.Join(result.File, "proposal.yaml"))
 		if !strings.Contains(string(content), "status: answered") || !strings.Contains(string(content), "session: fake-session") {
 			t.Fatalf("proposal %q", content)
 		}
