@@ -383,6 +383,33 @@ portable, the control layer is not.
   permissions); [`npx skills add`](https://github.com/vercel-labs/skills) installs a SKILL.md
   folder into 75+ agents' paths.
 
+### Which agents developers use
+
+Which tools a portable harness must reach first, by two 2026 surveys (read 2026-10-24):
+
+| Agent | Used in the past year, Stack Overflow 2026 | Used at work, JetBrains 2026 |
+|---|---|---|
+| Claude Code | 65.5% | 39% |
+| GitHub Copilot | 58.7% | 21% |
+| OpenAI Codex | 29.5% | 16% |
+| Cursor | 25.5% | 12% |
+| Google Antigravity | 16.0% | — |
+| Gemini Code Assist | 14.6% | — |
+| OpenCode | 13.6% | — |
+| JetBrains AI | 12.8% | — |
+| Windsurf | 6.5% | — |
+
+- Stack Overflow asked 12,255 developers which coding agents or assistants they used in the
+  past year ([data](https://survey.stackoverflow.co/2026/ai/data/ai-code-agent)); Gemini CLI
+  is not one of its answers.
+- JetBrains asked about work use from May to July 2026
+  ([report](https://blog.jetbrains.com/research/2026/08/ai-coding-agent-adoption-2026/)). The
+  report refused an automated read; its figures here come from a
+  [secondary summary](https://uvik.net/blog/claude-code-vs-cursor-vs-copilot-vs-codex-2026/)
+  and are unverified against it.
+- Both put the same four first, in the same order. The measures differ, any use against work
+  use, so the percentages do not compare across the columns.
+
 ### Open-weight reality check (context only)
 
 Aggregator figures, not checked against model cards **[unverified]**: on Terminal-Bench 2 the
