@@ -1331,8 +1331,8 @@ from that project's snapshot.
   candidate, each repeat dropped against the declaration it repeats, the conflicts blocking
   `propose` until resolved, and its architecture and privacy text as documents with their
   pointer rules; `task rein:check` green.
-- 🟢 **P2.43 — Every agent knows its settings come from `rein` (D35).** [PENDING] Approved
-  2026-10-24. For Claude Code now and for each agent as P2.40 to P2.42 land: the always-on
+- 🔨 **P2.43 — Every agent knows its settings come from `rein` (D35).** [IN PROGRESS] Approved
+  2026-10-24; built for Claude Code the same day, the live gate waiting. For Claude Code now and for each agent as P2.40 to P2.42 land: the always-on
   line in the generated instructions file, as text, not a comment; the `rein` skill; deny
   rules on `Edit` and `Write` of `CLAUDE.md`, `.claude/rules/`, `.claude/skills/`,
   `.claude/hooks/`, `.claude/rein/`, `.claude/settings.local.json` and `.mcp.json`, with
@@ -2100,3 +2100,14 @@ writes is read from the next session on, not in the same one.
   whether CI skips the release commit and opens each door. The maintainer address in the
   packages is the one the commits carry. P2.40 to P2.42: the three agents' formats are
   being researched for their designs.
+- (2026-10-24) P2.43 built for Claude Code: `CLAUDE.md` says, as text, never to create or edit a
+  rule, skill, hook, permission or tool server by hand; the deny list in
+  `.claude/settings.local.json` holds `Edit` of `CLAUDE.md`, `.claude/rein/`, `.claude/rules/`,
+  `.claude/skills/`, `.claude/hooks/`, the settings file itself and `.mcp.json`, an `Edit` rule
+  covering every file tool and the shell's file commands but not a script that opens the file
+  itself ([permissions](https://code.claude.com/docs/en/permissions)); `sync` names every file
+  in those folders it did not write, in the session-start line too, leaves it, and with
+  `--force` snapshots it for `rein distill --snapshot`; the `rein` skill says so. Gate:
+  `task rein:check` green, with tests for the line, the deny rules, the listing and the
+  report. Left for the user: `task rein:install`, `rein sync` in a clone, then ask Claude Code
+  to add a skill, and drop a hand-made skill into `.claude/skills/` to see the report.
