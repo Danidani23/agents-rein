@@ -103,13 +103,21 @@ func TestVersionsAndClassification(t *testing.T) {
 func TestReleaseOverABareOrigin(t *testing.T) {
 	isolate(t)
 	gateCommands = [][]string{{"true"}}
-	publishCommand = []string{"sh", "-c", "test \"$GITHUB_TOKEN\" = the-token && test -z \"$HOMEBREW_TAP_GITHUB_TOKEN\""}
+	publishCommand = []string{"sh", "-c", "test \"$GITHUB_TOKEN\" = the-token && test \"$REIN_TAP_TOKEN\" = the-token && test -z \"$REIN_BUCKET_TOKEN\" && test -z \"$REIN_AUR_KEY\""}
 	tokenCommand = []string{"echo", "the-token"}
 	repositoryExists = func(root string, fullName string) bool { return fullName == tapRepository }
+	aurKey = filepath.Join(t.TempDir(), "no-key")
+	checkedCommit := ""
+	checkRunOn = func(root string, commit string) (string, string, error) {
+		checkedCommit = commit
+		return "completed", "success", nil
+	}
 	defer func() {
 		gateCommands = [][]string{{"task", "rein:check"}, {"task", "rein:release-check"}}
 		publishCommand = defaultPublishCommand()
 		tokenCommand = []string{"gh", "auth", "token"}
+		checkRunOn = gitHubCheckRunOn
+		aurKey = defaultAURKey()
 	}()
 	clone, origin := repository(t)
 	now := time.Date(2026, 10, 22, 18, 0, 0, 0, time.UTC)
@@ -137,7 +145,7 @@ func TestReleaseOverABareOrigin(t *testing.T) {
 		t.Fatalf("release: %v\n%s", err, out.String())
 	}
 	text := out.String()
-	for _, expected := range []string{"releasing v0.1.0 (since the start: 0 breaking, 1 feat, 0 fix, 0 perf, 2 other)", "## [0.1.0] - 2026-10-22", "- **rein:** the first feature (", "running the gate: true", "the cask and the Scoop manifest are skipped", "building every platform and publishing the GitHub Release: sh -c", "released v0.1.0: main and the tag are pushed, the binaries are on the GitHub Release"} {
+	for _, expected := range []string{"releasing v0.1.0 (since the start: 0 breaking, 1 feat, 0 fix, 0 perf, 2 other)", "## [0.1.0] - 2026-10-22", "- **rein:** the first feature (", "running the gate: true", "the Scoop manifest is skipped: Danidani23/scoop-bucket does not exist on GitHub", "the AUR package is skipped: no SSH key at ", "building every platform and publishing the GitHub Release: sh -c", "released v0.1.0: main and the tag are pushed, the binaries are on the GitHub Release"} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("missing %q in %q", expected, text)
 		}
@@ -147,6 +155,9 @@ func TestReleaseOverABareOrigin(t *testing.T) {
 	}
 	if git(t, origin, "tag", "-l", "v0.1.0") != "v0.1.0" || git(t, origin, "log", "-1", "--format=%s", "main") != "chore(release): v0.1.0" {
 		t.Fatalf("origin: tags %q main %q", git(t, origin, "tag", "-l"), git(t, origin, "log", "-1", "--format=%s", "main"))
+	}
+	if checkedCommit != git(t, clone, "rev-parse", "HEAD~1") {
+		t.Fatalf("GitHub was asked about %q, not the commit the release was cut from", checkedCommit)
 	}
 	changelog, _ := os.ReadFile(filepath.Join(clone, "CHANGELOG.md"))
 	if !strings.HasPrefix(string(changelog), "# Changelog\n\n## [0.1.0] - 2026-10-22\n\n### Features\n\n- **rein:** the first feature (") {
@@ -182,7 +193,29 @@ func TestReleaseOverABareOrigin(t *testing.T) {
 	if strings.Contains(string(changelog), "0.2.0") {
 		t.Fatalf("the changelog changed under a red gate")
 	}
-	// a failed publish leaves the tag pushed and says how to finish; both doors open hand the tap token over
+	// a commit GitHub's check has not passed on releases nothing
+	gateCommands = [][]string{{"true"}}
+	for _, check := range []struct {
+		status     string
+		conclusion string
+		expected   string
+	}{
+		{"", "", "check.yml has not run on"},
+		{"in_progress", "", "check.yml is in_progress on"},
+		{"completed", "failure", "check.yml ended failure on"},
+	} {
+		checkRunOn = func(root string, commit string) (string, string, error) {
+			return check.status, check.conclusion, nil
+		}
+		err = release(&out, clone, now)
+		if err == nil || !strings.Contains(err.Error(), check.expected) || git(t, origin, "tag", "-l", "v0.2.0") != "" {
+			t.Fatalf("check %s %s: %v tags %q", check.status, check.conclusion, err, git(t, origin, "tag", "-l"))
+		}
+	}
+	checkRunOn = func(root string, commit string) (string, string, error) {
+		return "completed", "success", nil
+	}
+	// a failed publish leaves the tag pushed and says how to finish; every door open hands over its variable
 	gateCommands = [][]string{{"true"}}
 	publishCommand = []string{"false"}
 	err = release(&out, clone, now)
@@ -190,7 +223,9 @@ func TestReleaseOverABareOrigin(t *testing.T) {
 		t.Fatalf("failed publish: %v tags %q", err, git(t, origin, "tag", "-l"))
 	}
 	repositoryExists = func(root string, fullName string) bool { return true }
-	publishCommand = []string{"sh", "-c", "test \"$HOMEBREW_TAP_GITHUB_TOKEN\" = the-token"}
+	aurKey = filepath.Join(t.TempDir(), "aur")
+	_ = os.WriteFile(aurKey, []byte("key"), 0o600)
+	publishCommand = []string{"sh", "-c", "test \"$REIN_TAP_TOKEN\" = the-token && test \"$REIN_BUCKET_TOKEN\" = the-token && test \"$REIN_WINGET_TOKEN\" = the-token && test \"$REIN_NUR_TOKEN\" = the-token && test \"$REIN_AUR_KEY\" = \"" + aurKey + "\""}
 	out.Reset()
 	err = publish(&out, clone, "the-token")
 	if err != nil || strings.Contains(out.String(), "skipped") {

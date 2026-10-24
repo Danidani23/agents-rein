@@ -46,7 +46,9 @@ nothing.
 GitHub runs the checks as well, on every push to `main` and every pull request, on Linux, macOS
 and Windows, the three platforms a release builds for. [check.yml](../.github/workflows/check.yml)
 says which task runs where; the first badge in the [README](../README.md) shows how `main`
-stands. The workflow only checks: it holds no secret and releases nothing.
+stands. The workflow only checks: it holds no secret and releases nothing. A release needs
+its run green on the commit it is cut from, and the release commit, which changes only
+`CHANGELOG.md`, is not checked again.
 
 ## The harness is not in the repository
 
@@ -103,8 +105,9 @@ task rein:release
 It runs `reinctl release`, which:
 
 1. **Checks the ground.** Refuses off `main`, on a dirty working tree, without a remote named
-   `origin`, when `main` is not what `origin/main` has, and when the tag it would make already
-   exists locally or on `origin`. Versions are immutable.
+   `origin`, when `main` is not what `origin/main` has, when GitHub's check has not passed on
+   that commit on Linux, macOS and Windows, or is still running, and when the tag it would
+   make already exists locally or on `origin`. Versions are immutable.
 2. **Plans the version** from the conventional commits since the last tag, and refuses when
    none of them releases. The first release was `v0.1.0`.
 3. **Runs the gate**, `task rein:check` and `task rein:release-check`, before anything changes.
@@ -112,10 +115,11 @@ It runs `reinctl release`, which:
    tags it, and pushes `main` and the tag.
 5. **Builds and publishes.** GoReleaser builds rein for macOS, Linux and Windows on amd64 and
    arm64, and publishes the GitHub Release with the archives and the checksum file. The token
-   is what `gh auth token` returns, handed to that run and written nowhere. The Homebrew cask
-   goes into `Danidani23/homebrew-tap` and the Scoop manifest into `Danidani23/scoop-bucket`
-   when both repositories exist; until then it says that they were skipped, and the install
-   scripts and `go install` still work.
+   is what `gh auth token` returns, handed to that run and written nowhere. The `.deb`, `.rpm`
+   and `.apk` are attached to the release; the Homebrew cask, the Scoop manifest, the winget
+   manifest, the Nix package and the AUR package each go out when the repository or the key
+   they need exists, and are said to be skipped otherwise. Which needs what is in
+   [commands.md](commands.md#installing-and-releasing).
 
 When a push fails after the commit and the tag, the message says what to push by hand; when the
 publish fails after the push, `task rein:publish` repeats it once the cause is fixed. The

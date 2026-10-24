@@ -60,23 +60,26 @@ release:
     or `curl -fsSL https://raw.githubusercontent.com/Danidani23/agents-rein/main/install.sh | sh`.
 
 # The tap and the bucket are written only when reinctl found their
-# repositories and set the token; without it, the release still happens.
+# repositories and set their variables; without them, the release still happens.
 homebrew_casks:
   - name: rein
     ids: [rein]
     repository:
       owner: Danidani23
       name: homebrew-tap
-      token: '{{ index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}'
-    skip_upload: '{{ if index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
+      token: '{{ index .Env "REIN_TAP_TOKEN" }}'
+    skip_upload: '{{ if index .Env "REIN_TAP_TOKEN" }}false{{ else }}true{{ end }}'
     directory: Casks
     homepage: https://github.com/Danidani23/agents-rein
     description: Keeps the settings of AI coding agents in one repository per organisation and brings them to every project
-    # the binary is not signed yet, so the quarantine flag comes off at install
+    # the binary is not signed yet, so the quarantine flag comes off at install;
+    # macOS only, so the same cask installs on Linux
     hooks:
       post:
         install_steps: |
-          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/rein"]
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/rein"]
+          end
 
 scoops:
   - name: rein
@@ -84,8 +87,74 @@ scoops:
     repository:
       owner: Danidani23
       name: scoop-bucket
-      token: '{{ index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}'
-    skip_upload: '{{ if index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
+      token: '{{ index .Env "REIN_BUCKET_TOKEN" }}'
+    skip_upload: '{{ if index .Env "REIN_BUCKET_TOKEN" }}false{{ else }}true{{ end }}'
     homepage: https://github.com/Danidani23/agents-rein
     description: Keeps the settings of AI coding agents in one repository per organisation and brings them to every project
     license: Apache-2.0
+
+# .deb, .rpm and .apk beside the archives, with no package repository behind
+# them, so no package manager updates them (P2.36)
+nfpms:
+  - id: rein
+    ids: [rein]
+    package_name: rein
+    file_name_template: "{{ .ConventionalFileName }}"
+    formats: [deb, rpm, apk]
+    maintainer: Dani Molnar <daniel@peakstride.com>
+    homepage: https://github.com/Danidani23/agents-rein
+    description: Keeps the settings of AI coding agents in one repository per organisation and brings them to every project
+    license: Apache-2.0
+
+# The AUR, winget and Nix doors open the same way as the tap and the bucket:
+# reinctl sets each variable only when what the door needs exists (P2.37 to P2.39).
+aurs:
+  - name: rein-bin
+    ids: [rein]
+    homepage: https://github.com/Danidani23/agents-rein
+    description: Keeps the settings of AI coding agents in one repository per organisation and brings them to every project
+    maintainers: ["Dani Molnar <daniel at peakstride dot com>"]
+    license: Apache-2.0
+    provides: [rein]
+    conflicts: [rein]
+    private_key: '{{ index .Env "REIN_AUR_KEY" }}'
+    git_url: ssh://aur@aur.archlinux.org/rein-bin.git
+    skip_upload: '{{ if index .Env "REIN_AUR_KEY" }}false{{ else }}true{{ end }}'
+    package: |-
+      install -Dm755 "./rein" "${pkgdir}/usr/bin/rein"
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/rein/LICENSE"
+
+winget:
+  - name: rein
+    ids: [rein]
+    publisher: Danidani23
+    publisher_url: https://github.com/Danidani23
+    package_identifier: Danidani23.rein
+    homepage: https://github.com/Danidani23/agents-rein
+    short_description: Keeps the settings of AI coding agents in one repository per organisation and brings them to every project
+    license: Apache-2.0
+    path: manifests/d/Danidani23/rein/{{ .Version }}
+    repository:
+      owner: Danidani23
+      name: winget-pkgs
+      branch: rein-{{ .Version }}
+      token: '{{ index .Env "REIN_WINGET_TOKEN" }}'
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
+    skip_upload: '{{ if index .Env "REIN_WINGET_TOKEN" }}false{{ else }}true{{ end }}'
+
+nix:
+  - name: rein
+    ids: [rein]
+    homepage: https://github.com/Danidani23/agents-rein
+    description: Keeps the settings of AI coding agents in one repository per organisation and brings them to every project
+    license: asl20
+    repository:
+      owner: Danidani23
+      name: nur-packages
+      token: '{{ index .Env "REIN_NUR_TOKEN" }}'
+    skip_upload: '{{ if index .Env "REIN_NUR_TOKEN" }}false{{ else }}true{{ end }}'

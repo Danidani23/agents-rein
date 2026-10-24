@@ -6,6 +6,9 @@ name: check
 on:
   push:
     branches: [main]
+    # the release commit changes only CHANGELOG.md, and reinctl release cut it
+    # from a commit this workflow had passed on
+    paths-ignore: [CHANGELOG.md]
   pull_request:
 
 permissions:

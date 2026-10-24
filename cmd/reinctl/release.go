@@ -47,6 +47,52 @@ const (
 	bucketRepository = "Danidani23/scoop-bucket"
 )
 
+// door is a package channel written into a GitHub repository beside the
+// GitHub Release: open when the repository exists, through the variable
+// .goreleaser.yaml reads (D30).
+type door struct {
+	name       string
+	repository string
+	variable   string
+}
+
+var doors = []door{
+	{name: "the Homebrew cask", repository: tapRepository, variable: "REIN_TAP_TOKEN"},
+	{name: "the Scoop manifest", repository: bucketRepository, variable: "REIN_BUCKET_TOKEN"},
+	{name: "the winget manifest", repository: "Danidani23/winget-pkgs", variable: "REIN_WINGET_TOKEN"},
+	{name: "the Nix package", repository: "Danidani23/nur-packages", variable: "REIN_NUR_TOKEN"},
+}
+
+// aurKey is the SSH key the AUR knows the maintainer by; the AUR package
+// is pushed only when it exists. A test replaces it.
+var aurKey = defaultAURKey()
+
+func defaultAURKey() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".ssh", "aur")
+}
+
+// productRepository is rein's own repository, whose check workflow must
+// have passed on the commit a release is cut from (D29).
+const (
+	productRepository = "Danidani23/agents-rein"
+	checkWorkflow     = "check.yml"
+)
+
+// checkRunOn says how the latest run of the check workflow on a commit
+// stands: an empty status when it never ran; a test replaces it.
+var checkRunOn = gitHubCheckRunOn
+
+func gitHubCheckRunOn(root string, commit string) (status string, conclusion string, err error) {
+	runs := fmt.Sprintf("repos/%s/actions/workflows/%s/runs?head_sha=%s&per_page=1", productRepository, checkWorkflow, commit)
+	latest, err := capture(root, "gh", "api", runs, "--jq", `.workflow_runs[0] // empty | .status + " " + (.conclusion // "")`)
+	if err != nil {
+		return "", "", fmt.Errorf("asking GitHub about %s on %s: %w", checkWorkflow, commit, err)
+	}
+	status, conclusion, _ = strings.Cut(latest, " ")
+	return status, conclusion, nil
+}
+
 // releaseBranch is the one branch releases are cut from.
 const releaseBranch = "main"
 
@@ -61,13 +107,14 @@ func newReleaseCommand(out io.Writer) *cobra.Command {
 		Short: "Cut the next version on main: gate, changelog, commit, tag, push; the human runs this",
 		Long: "release reads the conventional commits since the last tag: a breaking change raises the\n" +
 			"major version, a feat the minor, a fix or a perf the patch; anything else releases nothing.\n" +
-			"It refuses off main, on a dirty tree, when main is not what origin has, and when the tag\n" +
-			"exists. The gate runs before anything changes. Then CHANGELOG.md gets its section, the\n" +
-			"commit chore(release): vX.Y.Z and the annotated tag are made, and main and the tag are\n" +
-			"pushed. Then GoReleaser builds every platform on this machine and publishes the GitHub\n" +
-			"Release with the archives and the checksums, with the token gh holds; the cask and the\n" +
-			"Scoop manifest are written when their repositories exist. A publish that failed after the\n" +
-			"tag was pushed is run again with reinctl publish.",
+			"It refuses off main, on a dirty tree, when main is not what origin has, when GitHub's\n" +
+			"check.yml has not passed on that commit, and when the tag exists. The gate runs before\n" +
+			"anything changes. Then CHANGELOG.md gets its section, the commit chore(release): vX.Y.Z\n" +
+			"and the annotated tag are made, and main and the tag are pushed. Then GoReleaser builds\n" +
+			"every platform and the Linux packages on this machine and publishes the GitHub Release\n" +
+			"with the token gh holds; the Homebrew, Scoop, winget, Nix and AUR packages are written\n" +
+			"when the repository or the key each needs exists. A publish that failed after the tag\n" +
+			"was pushed is run again with reinctl publish.",
 		Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
 			root, err := repositoryRoot()
@@ -127,6 +174,19 @@ func release(out io.Writer, root string, now time.Time) error {
 	}
 	if head != originHead {
 		return refuse("%s is not what origin/%s has; push or pull first", releaseBranch, releaseBranch)
+	}
+	fmt.Fprintf(out, "asking GitHub how %s stands on %s\n", checkWorkflow, head)
+	status, conclusion, err := checkRunOn(root, head)
+	if err != nil {
+		return err
+	}
+	switch {
+	case status == "":
+		return refuse("%s has not run on %s; a release needs it green on Linux, macOS and Windows", checkWorkflow, head)
+	case status != "completed":
+		return refuse("%s is %s on %s; release once it has passed", checkWorkflow, status, head)
+	case conclusion != "success":
+		return refuse("%s ended %s on %s; a release needs it green on Linux, macOS and Windows", checkWorkflow, conclusion, head)
 	}
 	plan, err := planRelease(root, now)
 	if err != nil {
@@ -208,23 +268,25 @@ func gitHubToken(root string) (string, error) {
 }
 
 // publish builds every platform on this machine and makes the GitHub
-// Release for the tag at HEAD, the cask and the manifest included when
-// their repositories exist.
+// Release for the tag at HEAD, each package channel included when what it
+// needs exists.
 func publish(out io.Writer, root string, token string) error {
 	environment := []string{"GITHUB_TOKEN=" + token}
-	var doors []string
-	for _, fullName := range []string{tapRepository, bucketRepository} {
-		if repositoryExists(root, fullName) {
-			doors = append(doors, fullName)
+	for _, door := range doors {
+		if !repositoryExists(root, door.repository) {
+			fmt.Fprintf(out, "%s is skipped: %s does not exist on GitHub\n", door.name, door.repository)
+			continue
 		}
+		environment = append(environment, door.variable+"="+token)
 	}
-	if len(doors) == 2 {
-		environment = append(environment, "HOMEBREW_TAP_GITHUB_TOKEN="+token)
+	_, err := os.Stat(aurKey)
+	if err != nil {
+		fmt.Fprintf(out, "the AUR package is skipped: no SSH key at %s\n", aurKey)
 	} else {
-		fmt.Fprintf(out, "the cask and the Scoop manifest are skipped: %s and %s must both exist on GitHub\n", tapRepository, bucketRepository)
+		environment = append(environment, "REIN_AUR_KEY="+aurKey)
 	}
 	fmt.Fprintf(out, "building every platform and publishing the GitHub Release: %s\n", strings.Join(publishCommand, " "))
-	_, err := execute.RunWith(execute.Options{Directory: root, Timeout: execute.NetworkTimeout, Environment: environment}, publishCommand[0], publishCommand[1:]...)
+	_, err = execute.RunWith(execute.Options{Directory: root, Timeout: execute.NetworkTimeout, Environment: environment}, publishCommand[0], publishCommand[1:]...)
 	return err
 }
 

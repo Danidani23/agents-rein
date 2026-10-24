@@ -25,7 +25,7 @@ GitHub account, and the agents on your machine are detected.
 | `rein lint <path>` | Checks skills against the Agent Skills specification, rule files, permission rules, skills that share a name, and in an org repository every record: organisation, teams, projects, users and the label registry, with their references. Needs no identity, so CI runs it on an org repository. |
 | `rein restore` | Reverses `init` for one clone: the files it moved out come back from their snapshots, the rein block leaves `.gitignore`, the clone is forgotten on this machine, and the put-back is committed as the move-out was. |
 | `rein reset` | Restores every initialised project first, then removes everything rein placed into an agent's home, forgets the organisations and deletes their clones, and removes the ledger, the snapshots and the proposals: the machine as before rein. A restore that fails stops it before anything is wiped. |
-| `rein update` | Asks GitHub for the latest release. A rein installed by Homebrew, Scoop or `go install` is updated by that tool, and `update` prints its command; a rein from the install script is replaced by rein itself after the archive passed the release's checksum. `--check` only reports. `sync` and `status` print one line when a newer release exists, at most once a day; an organisation's `minimum_rein_version` makes an older rein refuse to `sync`. |
+| `rein update` | Asks GitHub for the latest release. A rein installed by Homebrew, Scoop, winget or `go install` is updated by that tool, and `update` prints its command; one from a Linux package, the AUR or Nix gets the way to update it; a rein from the install script is replaced by rein itself after the archive passed the release's checksum. `--check` only reports. `sync` and `status` print one line when a newer release exists, at most once a day; an organisation's `minimum_rein_version` makes an older rein refuse to `sync`. |
 | `rein version` | Prints the version. |
 
 Planned, in the board's order: `rein import` and `rein export`, which move a level into and
@@ -64,23 +64,33 @@ A release is cut by hand, with `task rein:release`, which runs `reinctl release`
 CLI of this repository under `cmd/reinctl`. It reads the conventional commits since the last
 tag, a breaking change raising the major version, a `feat` the minor, a `fix` or a `perf` the
 patch, and nothing else releasing; refuses off `main`, on a dirty tree, when `main` is not what
-`origin` has, and when the tag exists; runs the gate before anything changes; then writes the
+`origin` has, when GitHub's check has not passed on that commit, and when the tag exists; runs
+the gate before anything changes; then writes the
 section into `CHANGELOG.md`, commits `chore(release): vX.Y.Z`, tags, and pushes `main` and the
 tag; then GoReleaser builds rein for macOS, Linux and Windows on amd64 and arm64 on the same
 machine, and publishes the GitHub Release with the archives and a checksum file, with the token
-`gh` holds, handed to the build for that run and never written anywhere. The Homebrew cask goes
-into `Danidani23/homebrew-tap` and the Scoop manifest into `Danidani23/scoop-bucket` when both
-repositories exist; otherwise they are skipped and said so. Everything happens on the machine
-and nothing on the host: no workflow, no secret on GitHub. `task rein:publish` repeats the last
-step for a release whose publish failed after the tag was pushed. The doors, all pointing at
-the release:
+`gh` holds, handed to the build for that run and never written anywhere. The `.deb`, `.rpm` and
+`.apk` are attached to every release. Each further channel is written when what it needs
+exists, and skipped with a line otherwise: the Homebrew cask into `Danidani23/homebrew-tap`, the
+Scoop manifest into `Danidani23/scoop-bucket`, the winget manifest as a pull request to
+`microsoft/winget-pkgs` from the fork `Danidani23/winget-pkgs`, the Nix package into
+`Danidani23/nur-packages`, and the AUR package `rein-bin` with the SSH key at `~/.ssh/aur`.
+Everything happens on the machine and nothing on the host: no release workflow, no secret on
+GitHub. `task rein:publish` repeats the last step for a release whose publish failed after the
+tag was pushed. The doors, all pointing at the release; a channel's row works once its
+repository exists, which the
+[board](implementation_plans/2026-10-11_harness-distribution-tool.md) tracks (P2.35 to P2.39):
 
 | How | Command |
 |---|---|
 | the script, macOS and Linux | `curl -fsSL https://raw.githubusercontent.com/Danidani23/agents-rein/main/install.sh \| sh` |
 | the script, Windows | `irm https://raw.githubusercontent.com/Danidani23/agents-rein/main/install.ps1 \| iex` |
-| Homebrew | `brew install --cask Danidani23/tap/rein` |
+| Homebrew, macOS and Linux | `brew install --cask Danidani23/tap/rein` |
 | Scoop | `scoop bucket add danidani23 https://github.com/Danidani23/scoop-bucket` then `scoop install rein` |
+| winget | `winget install Danidani23.rein` |
+| a Linux package | the `.deb`, `.rpm` or `.apk` from the [latest release](https://github.com/Danidani23/agents-rein/releases/latest), installed with the system's package manager |
+| the AUR | `rein-bin`, with an AUR helper such as `yay -S rein-bin` |
+| Nix | `nix profile install github:Danidani23/nur-packages#rein` |
 | Go | `go install github.com/Danidani23/agents-rein/cmd/rein@latest` |
 
 `REIN_VERSION` pins the script to a release, `REIN_INSTALL_DIR` changes where it puts the

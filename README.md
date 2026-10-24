@@ -60,7 +60,7 @@ the start of every chat session with the agent.
 ## Quick start
 
 Install the latest release, on macOS or Linux with the script, which verifies the checksum and
-puts `rein` into `~/.local/bin`, or with Homebrew; Windows, Scoop and `go install` are in
+puts `rein` into `~/.local/bin`, or with Homebrew; Windows, Linux packages, Nix and `go install` are in
 [docs/commands.md](docs/commands.md). Then sign in to GitHub through the Agents Rein app:
 
 ```sh
