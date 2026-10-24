@@ -356,6 +356,24 @@ committed instead of gitignored (D4).
   JetBrains' 2026 survey ([findings](../harness-management.md#which-agents-developers-use)).
   Google's agents and OpenCode follow them. Each is designed on its item and approved before
   it is built.
+- ✅ **D35 — Every agent knows its settings come from `rein`, in four layers.** Decided
+  2026-10-24 by the user (Q18 G1): a plain always-on line in every generated instructions
+  file; the `rein` skill for every agent; a mechanical block on editing the generated paths
+  where the agent has one, Claude Code's deny rules and the Cursor CLI's, while Codex's
+  sandbox already keeps `.codex` and `.agents` read-only
+  ([docs](https://learn.chatgpt.com/docs/agent-approvals-security)) and Copilot has none; and
+  `sync` naming every file under the settings folders that `rein` did not write. P2.43.
+- 💬 **D34 — `distill` cuts a harness into units of one concern, and the distiller shapes
+  each.** Decided in part 2026-10-24 by the user (Q13 M1, Q17 E1, Q14). Files, skills
+  included, are cut at their `##` headings; the model, called the distiller in `distill`, may
+  cut further and regroup, by whole verbatim lines only, adding no text but a name, a
+  description, a heading, a line naming what a unit replaces and a line pointing at a
+  document. `rein` checks that every source line is kept, moved to a document, dropped as a
+  repeat of a named declaration, or held in a conflict. A unit becomes a rule, always on or
+  path-scoped, a skill, or a document for the project's repository. A conflict blocks
+  `propose` until it is resolved: `drop`, `override`, refused against a `required`
+  declaration, or `amend` the existing one. Open: how a document reaches the project and the
+  agent. P2.44.
 - ✅ **D33 — Codex's TOML through a module, its ADR first.** Decided 2026-10-24 by the user
   (Q12 T1). `rein` writes `.codex/config.toml` and reads Codex's trust records from
   `~/.codex/config.toml`; reading another tool's file by scanning lines would break on its
@@ -1295,6 +1313,22 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- 💬 **P2.44 — `distill` cuts into units and the distiller shapes them (D34).** [PENDING]
+  Decided in part 2026-10-24. The answer format goes to version 2: per unit its lines, its
+  shape, its verdict and suggestion, a `merge` carrying its text into the unit's files, a
+  conflict with its resolution; the proposal says `distiller:` where it said `judge:`.
+  Includes, test first, the fix for a `merge` whose rewrite was dropped: `placeJudged` acts
+  only on `drop` and `lift`, and the proposal keeps no rewrite. Open: how a document reaches
+  the project and how the agent learns of it.
+- 🟢 **P2.43 — Every agent knows its settings come from `rein` (D35).** [PENDING] Approved
+  2026-10-24. For Claude Code now and for each agent as P2.40 to P2.42 land: the always-on
+  line in the generated instructions file, as text, not a comment; the `rein` skill; deny
+  rules on `Edit` and `Write` of `CLAUDE.md`, `.claude/rules/`, `.claude/skills/`,
+  `.claude/hooks/`, `.claude/rein/`, `.claude/settings.local.json` and `.mcp.json`, with
+  `CLAUDE.local.md` left the developer's; `sync` naming every file under those folders that
+  it did not write, with the `distill` command that keeps it. Gate: in a synced clone, Claude
+  Code asked to add a skill answers with `rein`'s way and cannot write one by hand, and a
+  hand-made file shows in `sync`'s report.
 - 💬 **P2.42 — Cursor as an agent (D31).** [PENDING] Chosen 2026-10-24; designed the same
   day in the layout of [one agent per clone](#one-agent-per-clone) (D32), not approved.
   Detected by `agent` or `cursor-agent` on the PATH
