@@ -7,6 +7,8 @@
 
 # Agents Rein
 
+*The harness of all harnesses.*
+
 [![check](https://github.com/Danidani23/agents-rein/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/Danidani23/agents-rein/actions/workflows/check.yml)
 [![release](https://img.shields.io/github/v/release/Danidani23/agents-rein)](https://github.com/Danidani23/agents-rein/releases/latest)
 [![Go](https://img.shields.io/github/go-mod/go-version/Danidani23/agents-rein)](go.mod)
@@ -112,4 +114,5 @@ so each is another output of the same compiler ([findings, Q4](docs/harness-mana
 
 ## Licence
 
-Apache-2.0, see [LICENSE](LICENSE).
+Apache-2.0, see [LICENSE](LICENSE). The licence does not cover the names "rein" and "Agents Rein"
+(its section 6): a fork may use, change and sell the code, under a name of its own.
