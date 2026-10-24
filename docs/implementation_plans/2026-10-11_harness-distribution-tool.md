@@ -356,6 +356,11 @@ committed instead of gitignored (D4).
   JetBrains' 2026 survey ([findings](../harness-management.md#which-agents-developers-use)).
   Google's agents and OpenCode follow them. Each is designed on its item and approved before
   it is built.
+- 💬 **D39 — Whatever is committed to the org repository arrives as a proposal.** Proposed
+  2026-10-24 by the user, not decided (Q33, Q34). Today `propose` sends a proposal file as a
+  pull request, `declaration edit` and `declaration remove` open theirs directly, and
+  `team create`, `team edit`, `project create`, `project edit`, the label registry and
+  `init`'s binding push to `main` unreviewed. Holds P2.46's final shape.
 - ✅ **D38 — Apache 2.0 stays; the name is what is protected.** Decided 2026-10-24 by the user
   (Q27 K2). Anyone may use, change and sell `rein`, a fork included, but not under the names
   "rein" or "Agents Rein": the licence grants no use of the licensor's names beyond describing
@@ -1334,6 +1339,12 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- 🟢 **P2.46 — A setting's text is edited in a proposal.** [PENDING] Approved 2026-10-24
+  (Q31). `rein declaration edit <address> --text` writes a `proposal-<id>/` folder holding the
+  setting's current files as one candidate at its own address; the developer edits them there
+  and `rein propose` sends the pull request, an unchanged candidate left out. This is how an
+  `amend` is done. After P2.44 step (b), which makes proposals folders. Its final shape waits
+  for D39.
 - 🟢 **P2.45 — `rein reset project` and `rein reset machine` (D36).** [PENDING] Approved
   2026-10-24. The two subcommands replace `rein restore` and `rein reset`, with what each does
   unchanged; `rein reset` alone refuses and names them; the docs, the next-step hints and the
