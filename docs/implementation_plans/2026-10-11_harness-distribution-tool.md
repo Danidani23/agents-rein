@@ -381,7 +381,10 @@ committed instead of gitignored (D4).
   cut further and regroup, by whole verbatim lines only, adding no text but a name, a
   description, a heading, a line naming what a unit replaces and a line pointing at a
   document. `rein` checks that every source line is kept, moved to a document, dropped as a
-  repeat of a named declaration, or held in a conflict. A unit becomes a rule, always on or
+  repeat of a named declaration, or held in a conflict. The distiller selects and never writes
+  a setting's text, so there is no `merge` (Q28): a unit that would add to an existing setting
+  is marked `overlaps` and points at it, and changing that setting is the developer's own
+  edit. A unit becomes a rule, always on or
   path-scoped, a skill, or a document for the project's repository. A conflict blocks
   `propose` until it is resolved: `drop`, `override`, refused against a `required`
   declaration, or `amend` the existing one. A document is knowledge a human contributor needs
@@ -1337,10 +1340,9 @@ from that project's snapshot.
   `rein` skill follow. A breaking change, so its release is v1.0.0 (D37).
 - 🟢 **P2.44 — `distill` cuts into units and the distiller shapes them (D34).** [PENDING]
   Approved 2026-10-24. The answer format goes to version 2: per unit its lines, its
-  shape, its verdict and suggestion, a `merge` carrying its text into the unit's files, a
-  conflict with its resolution; the proposal says `distiller:` where it said `judge:`.
-  Includes, test first, the fix for a `merge` whose rewrite was dropped: `placeJudged` acts
-  only on `drop` and `lift`, and the proposal keeps no rewrite. Documents as D34 says: the
+  shape, its verdict and suggestion, a conflict with its resolution; the proposal says `distiller:` where it said `judge:`.
+  A `merge`'s rewrite used to be dropped, `placeJudged` acting only on `drop` and `lift`;
+  step (a) removes `merge` instead (Q28). Documents as D34 says: the
   distiller sees the repository's tracked Markdown files to propose a path, each document gets
   its pointer rule, `propose` writes the documents into the clone, and `sync` checks the
   pointers. Gate: the website's snapshot distilled again gives units instead of one
@@ -1353,7 +1355,7 @@ from that project's snapshot.
   opens; and a proposal becomes the folder `.rein/proposals/proposal-<id>/`, its
   `proposal.yaml` holding the snapshot, the distiller's run and every decision, beside one
   entry per candidate named `<kind>_<id>` with exactly the files that would land. Built in
-  steps, each green before the next: (a) a `merge` lands as the related declaration rewritten;
+  steps, each green before the next: (a) `merge` leaves the distiller's answers, and with it the rewrite that was dropped;
   (b) the proposal folder; (c) the cut at `##` headings; (d) the distiller's version 2 answer,
   its line check and its name; (e) conflicts that block `propose`; (f) documents and their
   pointer rules; (g) labels.
@@ -2137,3 +2139,7 @@ writes is read from the next session on, not in the same one.
   `task rein:check` green, with tests for the line, the deny rules, the listing and the
   report. Left for the user: `task rein:install`, `rein sync` in a clone, then ask Claude Code
   to add a skill, and drop a hand-made skill into `.claude/skills/` to see the report.
+- (2026-10-24) P2.44 step (a) done: `merge` and its rewrite left the distiller's answers, the
+  brief no longer offers them, and an answer that suggests one is sent back as a problem;
+  test first, `task rein:check` green. D38 recorded; the README's licence section says the
+  names are not covered (Q30).
