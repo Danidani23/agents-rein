@@ -2253,3 +2253,8 @@ writes is read from the next session on, not in the same one.
   and not yet fixed: a retried answer still reports the first answer's problems; the notes and
   the next step still send conflicts to `proposal.yaml`; the distiller assigned
   `kind:infrastructure` to a project that carries `kind:static-site`, a category of one value.
+- (2026-10-25) Decided (Q42): a distiller that is not there, its CLI missing or logged out,
+  refuses with the reason and `--distiller none` instead of writing rein's own cut as if it had
+  been asked; nothing is written. Test first; `task rein:check` green. Seen and not yet fixed:
+  a proposal already pending for the snapshot is refused only in the writing step, after the
+  distiller has run for minutes.
