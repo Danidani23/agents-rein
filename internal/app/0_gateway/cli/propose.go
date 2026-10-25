@@ -76,6 +76,9 @@ func runPropose(environment *commandEnvironment, request orchestration.ProposeRe
 			return err
 		}
 		fmt.Fprintf(environment.out, "This will write %d declarations from %s on a branch of the org clone of %s, push the branch\nand open a pull request on GitHub:\n", len(plan.Included), request.Source, plan.Organization)
+		if len(plan.Documents) > 0 {
+			fmt.Fprintf(environment.out, "and write %d documents into the project's clone, uncommitted: %s\n", len(plan.Documents), strings.Join(plan.Documents, ", "))
+		}
 		printPlacement(environment, plan)
 		confirmed, err := prompter.Confirm("Continue?", "Nothing reaches main: the pull request is reviewed by the code owners, and rein review checks it. If a step fails, the branch is removed again. To change a level, a label or a file, answer n and edit the proposal file.")
 		if err != nil {
@@ -95,6 +98,11 @@ func runPropose(environment *commandEnvironment, request orchestration.ProposeRe
 	fmt.Fprintf(environment.out, "\npull request: %s\n", style.Bold(style.Green(result.PullRequestURL)))
 	if result.HistoryFile != "" {
 		fmt.Fprintf(environment.out, "the proposal moved to %s\n", result.HistoryFile)
+	}
+	if len(result.Documents) > 0 {
+		fmt.Fprintf(environment.out, "written into the project's clone, uncommitted: %s\n", strings.Join(result.Documents, ", "))
+		printNext(environment, "commit the documents in the project's repository; review and merge the pull request, then rein sync in each clone of its projects")
+		return nil
 	}
 	printNext(environment, "review and merge it, then rein sync in each clone of its projects")
 	return nil

@@ -172,6 +172,23 @@ func (Service) ReadFile(folder string, relative string) string {
 	return string(content)
 }
 
+// TrackedMarkdown lists the Markdown files the repository tracks under
+// folder, sorted; an empty list, never nil, for a repository without any.
+func (service Service) TrackedMarkdown(folder string) ([]string, error) {
+	listed, err := service.Repository.TrackedPaths(folder, []string{"."})
+	if err != nil {
+		return nil, err
+	}
+	documents := []string{}
+	for _, relative := range listed {
+		if strings.HasSuffix(relative, ".md") {
+			documents = append(documents, relative)
+		}
+	}
+	sort.Strings(documents)
+	return documents, nil
+}
+
 // FilesUnder lists the files below the relative folders under folder, as
 // relative paths with forward slashes; a missing folder lists nothing.
 func (Service) FilesUnder(folder string, relativeFolders []string) []string {

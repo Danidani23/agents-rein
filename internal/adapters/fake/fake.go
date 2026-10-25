@@ -349,7 +349,7 @@ func (repository *Repository) TrackedPaths(directory string, relativePaths []str
 	var tracked []string
 	for _, candidate := range strings.Fields(string(content)) {
 		for _, relativePath := range relativePaths {
-			if candidate == relativePath || strings.HasPrefix(candidate, strings.TrimSuffix(relativePath, "/")+"/") {
+			if relativePath == "." || candidate == relativePath || strings.HasPrefix(candidate, strings.TrimSuffix(relativePath, "/")+"/") {
 				tracked = append(tracked, candidate)
 			}
 		}

@@ -11,6 +11,11 @@ func TestRuleDeclarationSelectors(t *testing.T) {
 	if len(problems) != 0 || len(rule.Paths) != 1 || strings.Join(selectors.ApplyIf, ",") != "language:go,language:rust" || selectors.DoNotApplyIf[0] != "kind:library" || selectors.Enforcement != "required" {
 		t.Fatalf("rule %+v selectors %+v problems %v", rule, selectors, problems)
 	}
+	// a rule may point at a document of the project's repository, which sync checks
+	pointer, _, problems := ParseRuleDeclaration("overview.md", []byte("---\ndocument: docs/overview.md\n---\nRead docs/overview.md first.\n"))
+	if len(problems) != 0 || pointer.Document != "docs/overview.md" {
+		t.Fatalf("pointer %+v problems %v", pointer, problems)
+	}
 	_, selectors, problems = ParseRuleDeclaration("x.md", []byte("---\nenforcement: strict\napplyIf: [nocolon]\nextra: 1\n---\n"))
 	joined := ""
 	for _, problem := range problems {

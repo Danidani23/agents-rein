@@ -114,6 +114,13 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 					return err
 				}
 				corpus.Labels = registryLabels(services, orgClonePath)
+				// a document goes beside the clone's tracked Markdown, so only a project clone offers it
+				if stored[0].Project != "" && folderExists(stored[0].Folder) {
+					documents, err := services.WorkingCopy.TrackedMarkdown(stored[0].Folder)
+					if err == nil {
+						corpus.Documents = documents
+					}
+				}
 				result.Brief = distill.Brief(level, candidates, corpus)
 				return nil
 			},

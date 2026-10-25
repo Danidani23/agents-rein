@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/compile"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/ledger"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
@@ -160,6 +163,22 @@ func syncOne(orchestrator Orchestrator, clone machine.ProjectClone, request Sync
 			messages = append(messages, problem.Address+": "+problem.Message)
 		}
 		return synced, refusal.New(fmt.Sprintf("%s does not resolve; nothing was written:\n  %s", clone.Address, strings.Join(messages, "\n  ")))
+	}
+	// a rule pointing at a document needs the document in this clone (D34)
+	for _, chosen := range resolution.Chosen {
+		if chosen.Kind != address.Rules {
+			continue
+		}
+		for _, content := range chosen.Files {
+			rule, _, _ := declaration.ParseRuleDeclaration("", []byte(content))
+			if rule.Document == "" {
+				continue
+			}
+			_, err := os.Stat(filepath.Join(clone.ClonePath, filepath.FromSlash(rule.Document)))
+			if err != nil {
+				synced.Notes = append(synced.Notes, fmt.Sprintf("%s points at %s, which this clone lacks; the agent is told to read a file that is not there", chosen.Address, rule.Document))
+			}
+		}
 	}
 	for _, agent := range services.Snapshots.Agents {
 		if agent.Format() != "claude-code" {

@@ -32,8 +32,14 @@ type Candidate struct {
 	Related []string `yaml:"related,omitempty"`
 	// Judgement is what the judge said, when it ran.
 	Judgement *Judgement `yaml:"judgement,omitempty"`
-	Files     map[string]string
+	// Path is where a document goes in the project's repository.
+	Path  string `yaml:"path,omitempty"`
+	Files map[string]string
 }
+
+// KindDocuments is the kind of a document: knowledge for the project's
+// repository, not a declaration (D34).
+const KindDocuments = "documents"
 
 // Verdicts of the structural comparison.
 const (

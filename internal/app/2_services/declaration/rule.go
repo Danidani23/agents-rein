@@ -7,12 +7,16 @@ import "fmt"
 type Rule struct {
 	Path  string
 	Paths []string
+	// Document is the file of the project's repository a pointer rule
+	// names (D34).
+	Document string
 }
 
 // ruleDeclarationFields are the frontmatter fields a rule declaration in an
-// org repository may carry: Claude Code's paths and rein's selectors, which
-// the compiler strips before writing the rule into a clone.
-var ruleDeclarationFields = []string{"paths", "applyIf", "doNotApplyIf", "enforcement"}
+// org repository may carry: Claude Code's paths, the document a pointer
+// rule names, and rein's selectors, which the compiler strips before
+// writing the rule into a clone.
+var ruleDeclarationFields = []string{"paths", "document", "applyIf", "doNotApplyIf", "enforcement"}
 
 // ParseRuleDeclaration reads a rule as an org repository holds it: paths and
 // the selectors; any other field is a warning.
@@ -41,6 +45,14 @@ func ParseRuleDeclaration(path string, content []byte) (rule Rule, selectors Sel
 		}
 	}
 	rule.Paths, problems = stringList(mapping, "paths", problems)
+	if raw, present := mapping["document"]; present {
+		text, isString := raw.(string)
+		if !isString {
+			problems = append(problems, Problem{Severity: SeverityError, Message: "document must be a path"})
+		} else {
+			rule.Document = text
+		}
+	}
 	selectors.ApplyIf, problems = stringList(mapping, "applyIf", problems)
 	selectors.DoNotApplyIf, problems = stringList(mapping, "doNotApplyIf", problems)
 	if raw, present := mapping["enforcement"]; present {

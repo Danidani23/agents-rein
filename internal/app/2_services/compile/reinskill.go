@@ -50,7 +50,8 @@ those files; it is proposed to the org repository and comes back at the next syn
    proposal folder under ` + "`.rein/proposals/`" + `: ` + "`proposal.yaml`" + ` with every candidate, its level and
    the distiller's reason, beside one entry per candidate with its content; a person reviews and
    edits it, resolving each conflict as drop, override or amend; ` + "`rein propose`" + ` opens the pull
-   request from it.
+   request from it. Knowledge about the code, such as the architecture, becomes a document in
+   the project's repository with a rule pointing at it, not a setting.
 5. A setting for this developer on this machine only goes into ` + "`CLAUDE.local.md`" + `, or into
    the allow list of ` + "`.claude/settings.local.json`" + `, which sync keeps.
 

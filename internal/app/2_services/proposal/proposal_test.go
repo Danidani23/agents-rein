@@ -158,3 +158,26 @@ func TestConflicts(t *testing.T) {
 		}
 	}
 }
+
+func TestDocumentEntry(t *testing.T) {
+	document := distill.Candidate{Kind: distill.KindDocuments, ID: "architecture", Path: "docs/architecture.md", Files: map[string]string{"documents/architecture.md": "## Architecture\n\nsrc/ holds the pages.\n"}}
+	proposalDocument := Proposal{Version: Version, ID: "abc", Status: StatusPending, Organization: "acme", DistilledFrom: "organizations.acme.projects.shop", Candidates: []Candidate{FromCandidate(document, "organizations.acme.projects.shop", true, nil, nil)}}
+	folder := filepath.Join(t.TempDir(), FolderName("abc"))
+	err := proposalDocument.WriteFolder(folder)
+	if err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	index, _ := os.ReadFile(filepath.Join(folder, IndexFile))
+	entry, _ := os.ReadFile(filepath.Join(folder, "document_architecture.md"))
+	if !strings.Contains(string(index), "      path: docs/architecture.md\n") || !strings.Contains(string(index), "      entry: document_architecture.md\n") || string(entry) != "## Architecture\n\nsrc/ holds the pages.\n" {
+		t.Fatalf("index %s entry %q", index, entry)
+	}
+	read, err := Load(folder)
+	if err != nil || read.Candidates[0].Path != "docs/architecture.md" || read.Candidates[0].Files["architecture.md"] != "## Architecture\n\nsrc/ holds the pages.\n" {
+		t.Fatalf("read %+v err %v", read.Candidates, err)
+	}
+	read.Candidates[0].Path = "../outside.md"
+	if !strings.Contains(strings.Join(read.Check(nil), "\n"), `documents/architecture: path "../outside.md" is not a Markdown file inside the repository`) {
+		t.Fatalf("check %v", read.Check(nil))
+	}
+}

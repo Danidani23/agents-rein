@@ -49,6 +49,10 @@ type Unit struct {
 	Paths       []string   `json:"paths,omitempty"`
 	Description string     `json:"description,omitempty"`
 	Heading     string     `json:"heading,omitempty"`
+	// Path is where a document goes in the project's repository, and
+	// Pointer the one line that tells the agent to read it.
+	Path    string `json:"path,omitempty"`
+	Pointer string `json:"pointer,omitempty"`
 	Judgement
 }
 
@@ -88,7 +92,7 @@ var (
 	JudgeVerdicts    = []string{"new", "duplicate", "overlaps", "contradicts"}
 	JudgeSuggestions = []string{"keep", "drop", "lift"}
 	JudgeLevels      = []string{"organization", "team", "project", "user"}
-	JudgeShapes      = []string{"always", "paths", "skill"}
+	JudgeShapes      = []string{"always", "paths", "skill", "document"}
 )
 
 // AnswerVersion is the version of the answer format this build reads.
@@ -105,6 +109,9 @@ func Brief(level string, candidates []Candidate, corpus Corpus) string {
 	fmt.Fprintf(&brief, "# Task\n\nCandidate declarations were distilled from a project and would be added at the level `%s`. Compare each candidate with the declarations the organisation already has, below, and judge it.\n\n", level)
 	fmt.Fprintf(&brief, "A candidate that holds one concern is judged whole, as an entry of `candidates`. A rule or a skill that mixes concerns, such as a repeat of an existing declaration beside something new, a project fact inside general advice, or two procedures in one skill, is cut into `units` instead. A unit takes lines of one or more candidates by their numbers, `\"lines\": \"3-7, 9\"`, and a skill's other file whole by naming it in `file`. Lines are taken whole and verbatim, never written or reworded: the only text you add is a unit's `id`, a skill's `description`, an optional `heading` line, and `paths`. Every numbered line of a cut candidate that is not blank goes into exactly one unit, a repeat into a unit judged `duplicate` and `drop`. A candidate is judged whole or cut, never both; permission sets, hooks and tool servers are always judged whole.\n\n")
 	fmt.Fprintf(&brief, "A unit's `shape`: `always` for a rule the agent reads in every session; `paths` for a rule it reads when working on files matching the `paths` globs; `skill` for a procedure it loads when a task needs it, the `description` saying when. A rule's `kind` is `rules`, a skill's `skills`.\n\n")
+	if corpus.Documents != nil {
+		fmt.Fprintf(&brief, "A unit may be a `document` instead, of kind `documents`: knowledge a human contributor needs too, such as the architecture, an invariant of the code, a style guide or a deploy flow, which belongs in the project's repository, versioned with the code, and not in the agent's settings. Give its `path`, a new Markdown file that fits beside the repository's documents listed at the end, and a `pointer`: one line the agent reads, naming that path and saying when to read it; `paths` makes the pointer apply only to matching files. A short invariant the agent must never miss stays a rule, the reasoning behind it a document.\n\n")
+	}
 	fmt.Fprintf(&brief, "Every entry and every unit is judged:\n\n")
 	fmt.Fprintf(&brief, "- verdict: `new` when nothing existing covers it; `duplicate` when an existing declaration says the same; `overlaps` when an existing one covers part of it or says something similar; `contradicts` when following both is impossible.\n")
 	fmt.Fprintf(&brief, "- related: the addresses of the existing declarations the verdict rests on, from the headings below, none for `new`.\n")
@@ -144,6 +151,16 @@ func Brief(level string, candidates []Candidate, corpus Corpus) string {
 			}
 			fmt.Fprintf(&brief, "%s\n\n", strings.TrimSpace(candidate.Files[relative]))
 		}
+	}
+	if corpus.Documents != nil {
+		fmt.Fprintf(&brief, "# Documents in the repository\n\n")
+		if len(corpus.Documents) == 0 {
+			fmt.Fprintf(&brief, "None yet.\n")
+		}
+		for _, document := range corpus.Documents {
+			fmt.Fprintf(&brief, "- %s\n", document)
+		}
+		fmt.Fprintf(&brief, "\n")
 	}
 	fmt.Fprintf(&brief, "# Existing declarations\n\n")
 	if len(corpus.Passages) == 0 {
@@ -227,7 +244,7 @@ func Validate(answer Answer, candidates []Candidate, corpus Corpus) (problems []
 	fileCounts := map[string]map[string]int{}
 	for _, unit := range answer.Units {
 		label := "unit " + unit.ID
-		problems = append(problems, unitProblems(unit, label, taken)...)
+		problems = append(problems, unitProblems(unit, label, taken, corpus.Documents)...)
 		for _, from := range unit.From {
 			source, found := byKey[from.Candidate]
 			if !found {
@@ -348,7 +365,7 @@ func judgementProblems(label string, entry Judgement, texts map[string]string) (
 
 // unitProblems is everything wrong with a unit's own fields: its id, its
 // kind and shape, and the text it may add.
-func unitProblems(unit Unit, label string, taken map[string]bool) (problems []string) {
+func unitProblems(unit Unit, label string, taken map[string]bool, documents []string) (problems []string) {
 	key := unit.Kind + "/" + unit.ID
 	switch {
 	case !address.IsSlug(unit.ID):
@@ -357,7 +374,15 @@ func unitProblems(unit Unit, label string, taken map[string]bool) (problems []st
 		problems = append(problems, fmt.Sprintf("%s: the id is taken", label))
 	}
 	taken[key] = true
-	fits := (unit.Kind == address.Rules && (unit.Shape == "always" || unit.Shape == "paths")) || (unit.Kind == address.Skills && unit.Shape == "skill")
+	if unit.Shape == "document" {
+		// a document brings the rule that points at it, under the same id
+		if taken[address.Rules+"/"+unit.ID] {
+			problems = append(problems, fmt.Sprintf("%s: the id is taken by a rule, which the document's pointer needs", label))
+		}
+		taken[address.Rules+"/"+unit.ID] = true
+		problems = append(problems, documentProblems(unit, label, documents)...)
+	}
+	fits := (unit.Kind == address.Rules && (unit.Shape == "always" || unit.Shape == "paths")) || (unit.Kind == address.Skills && unit.Shape == "skill") || (unit.Kind == KindDocuments && unit.Shape == "document")
 	if !fits {
 		problems = append(problems, fmt.Sprintf("%s: shape %q does not fit %s", label, unit.Shape, unit.Kind))
 	}
@@ -375,6 +400,32 @@ func unitProblems(unit Unit, label string, taken map[string]bool) (problems []st
 	}
 	if len(unit.From) == 0 {
 		problems = append(problems, fmt.Sprintf("%s: takes nothing", label))
+	}
+	return problems
+}
+
+// documentProblems is everything wrong with a document: no repository to
+// put it in, a path outside it or not Markdown, a file that exists, a
+// pointer that is not one line naming the path.
+func documentProblems(unit Unit, label string, documents []string) (problems []string) {
+	if documents == nil {
+		return []string{fmt.Sprintf("%s: a document needs the project's repository", label)}
+	}
+	cleaned := path.Clean(unit.Path)
+	switch {
+	case unit.Path == "" || path.IsAbs(unit.Path) || cleaned == ".." || strings.HasPrefix(cleaned, "../") || !strings.HasSuffix(cleaned, ".md"):
+		problems = append(problems, fmt.Sprintf("%s: path %q is not a Markdown file inside the repository", label, unit.Path))
+	case contains(documents, cleaned):
+		problems = append(problems, fmt.Sprintf("%s: %s exists in the repository; a document is a new file", label, cleaned))
+	}
+	switch {
+	case strings.TrimSpace(unit.Pointer) == "":
+		problems = append(problems, fmt.Sprintf("%s: a document needs a pointer", label))
+	case strings.Contains(unit.Pointer, "\n"):
+		problems = append(problems, fmt.Sprintf("%s: the pointer is one line", label))
+	}
+	if unit.Path != "" && !strings.Contains(unit.Pointer, unit.Path) {
+		problems = append(problems, fmt.Sprintf("%s: the pointer must name %s", label, unit.Path))
 	}
 	return problems
 }
@@ -521,9 +572,33 @@ func Apply(answer Answer, candidates []Candidate) []Candidate {
 		result = append(result, candidate)
 	}
 	for _, unit := range answer.Units {
-		result = append(result, unitCandidate(unit, byKey))
+		result = append(result, unitCandidates(unit, byKey)...)
 	}
 	return result
+}
+
+// pointerFrontmatter is what the rule pointing at a document opens with:
+// the document it names, which sync checks, and its globs when it has any.
+type pointerFrontmatter struct {
+	Document string   `yaml:"document"`
+	Paths    []string `yaml:"paths,omitempty"`
+}
+
+// unitCandidates is what a unit becomes: one declaration, or a document
+// with the rule that points at it.
+func unitCandidates(unit Unit, byKey map[string]Candidate) []Candidate {
+	built := unitCandidate(unit, byKey)
+	if unit.Shape != "document" {
+		return []Candidate{built}
+	}
+	text := built.Files[path.Join(address.Rules, unit.ID+".md")]
+	document := built
+	document.Path = path.Clean(unit.Path)
+	document.Files = map[string]string{path.Join(KindDocuments, unit.ID+".md"): text}
+	frontmatter, _ := yaml.Marshal(pointerFrontmatter{Document: path.Clean(unit.Path), Paths: unit.Paths})
+	judgement := unit.Judgement
+	pointer := Candidate{Kind: address.Rules, ID: unit.ID, Sources: built.Sources, Notes: []string{"points at the document " + path.Clean(unit.Path)}, Files: map[string]string{path.Join(address.Rules, unit.ID+".md"): "---\n" + string(frontmatter) + "---\n" + strings.TrimSpace(unit.Pointer) + "\n"}, Judgement: &judgement}
+	return []Candidate{document, pointer}
 }
 
 // skillFrontmatter is what a skill cut out by the distiller opens with.

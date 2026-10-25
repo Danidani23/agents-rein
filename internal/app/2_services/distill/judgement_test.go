@@ -179,3 +179,58 @@ func TestUnits(t *testing.T) {
 		}
 	}
 }
+
+func TestDocuments(t *testing.T) {
+	architecture := []Candidate{{Kind: "rules", ID: "architecture", Sources: []string{"CLAUDE.md"}, Files: map[string]string{"rules/architecture.md": "## Architecture\n\nsrc/ holds the pages; functions/ the API.\n\nNever hardcode a colour.\n"}}}
+	corpus := exampleCorpus()
+	corpus.Documents = []string{"README.md", "docs/decisions/2026-09-01_progress.md"}
+	brief := Brief("organizations.acme.projects.shop", architecture, corpus)
+	for _, expected := range []string{"`document`", "- docs/decisions/2026-09-01_progress.md"} {
+		if !strings.Contains(brief, expected) {
+			t.Fatalf("brief lacks %q:\n%s", expected, brief)
+		}
+	}
+	// without the project's repository there is nowhere to put a document
+	if strings.Contains(Brief("organizations.acme.users.dani", architecture, exampleCorpus()), "`document`") {
+		t.Fatalf("a document offered without a repository")
+	}
+	answer, _ := ParseAnswer(`{"version": 2, "candidates": [], "units": [
+	  {"id": "architecture", "kind": "documents", "from": [{"candidate": "rules/architecture", "lines": "1-3"}], "shape": "document", "path": "docs/architecture.md", "pointer": "Before moving code between folders, read docs/architecture.md.", "paths": ["src/**", "functions/**"], "verdict": "new", "suggestion": "keep", "reason": "knowledge about the code"},
+	  {"id": "colours", "kind": "rules", "from": [{"candidate": "rules/architecture", "lines": "5"}], "shape": "always", "verdict": "new", "suggestion": "keep", "reason": "how the agent works"}
+	]}`)
+	candidates := architecture
+	problems := Validate(answer, candidates, corpus)
+	if len(problems) != 0 {
+		t.Fatalf("problems %v", problems)
+	}
+	indexed := byID(Apply(answer, candidates))
+	document := indexed["documents/architecture"]
+	if document.Path != "docs/architecture.md" || document.Files["documents/architecture.md"] != "## Architecture\n\nsrc/ holds the pages; functions/ the API.\n" {
+		t.Fatalf("document %+v", document)
+	}
+	// the pointer is a rule every agent reads, path-scoped here, naming its document
+	pointer := indexed["rules/architecture"].Files["rules/architecture.md"]
+	if !strings.HasPrefix(pointer, "---\n") || !strings.Contains(pointer, "document: docs/architecture.md\n") || !strings.Contains(pointer, "src/**") || !strings.HasSuffix(pointer, "---\nBefore moving code between folders, read docs/architecture.md.\n") || indexed["rules/architecture"].Judgement == nil {
+		t.Fatalf("pointer %q", pointer)
+	}
+	// a document is a new file the pointer names, in a project with a repository
+	bad, _ := ParseAnswer(`{"version": 2, "candidates": [], "units": [
+	  {"id": "a", "kind": "documents", "from": [{"candidate": "rules/architecture", "lines": "1-3"}], "shape": "document", "path": "README.md", "pointer": "Read the readme.", "verdict": "new", "suggestion": "keep", "reason": "x"},
+	  {"id": "b", "kind": "documents", "from": [{"candidate": "rules/architecture", "lines": "5"}], "shape": "document", "path": "../notes.txt", "pointer": "Read it.\nTwice.", "verdict": "new", "suggestion": "keep", "reason": "x"}
+	]}`)
+	joined := strings.Join(Validate(bad, architecture, corpus), "\n")
+	for _, expected := range []string{
+		"unit a: README.md exists in the repository; a document is a new file",
+		"unit a: the pointer must name README.md",
+		"unit b: path \"../notes.txt\" is not a Markdown file inside the repository",
+		"unit b: the pointer is one line",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing %q in\n%s", expected, joined)
+		}
+	}
+	joined = strings.Join(Validate(answer, architecture, exampleCorpus()), "\n")
+	if !strings.Contains(joined, "unit architecture: a document needs the project's repository") {
+		t.Fatalf("no repository: %s", joined)
+	}
+}

@@ -36,6 +36,9 @@ type Corpus struct {
 	// Labels is the organisation's registry, category:value, the only
 	// labels a lift may apply to.
 	Labels []string
+	// Documents are the Markdown files the project's repository tracks,
+	// beside which a document goes; nil when there is no repository.
+	Documents []string
 }
 
 // corpusBudget is the most characters of passages one brief carries.

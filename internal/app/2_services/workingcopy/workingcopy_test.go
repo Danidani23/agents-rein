@@ -90,6 +90,22 @@ func TestCommit(t *testing.T) {
 	}
 }
 
+func TestTrackedMarkdown(t *testing.T) {
+	root := t.TempDir()
+	_ = fake.NewProjectClone(root, []string{rootCommit}, []string{"README.md", "docs/deploy.md", "main.go", "docs/notes.txt"})
+	listed, err := Service{Repository: &fake.Repository{}}.TrackedMarkdown(root)
+	if err != nil || strings.Join(listed, ",") != "README.md,docs/deploy.md" {
+		t.Fatalf("listed %v err %v", listed, err)
+	}
+	// a repository without documents still says it is one
+	empty := t.TempDir()
+	_ = fake.NewProjectClone(empty, []string{rootCommit}, []string{"main.go"})
+	listed, err = Service{Repository: &fake.Repository{}}.TrackedMarkdown(empty)
+	if err != nil || listed == nil || len(listed) != 0 {
+		t.Fatalf("empty %v err %v", listed, err)
+	}
+}
+
 func TestFilesUnder(t *testing.T) {
 	folder := t.TempDir()
 	service := Service{}

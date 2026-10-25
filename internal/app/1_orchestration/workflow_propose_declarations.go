@@ -14,6 +14,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/lint"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/proposal"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/proposalfiles"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/scaffold"
 	"github.com/Danidani23/agents-rein/internal/ports"
@@ -53,6 +54,9 @@ type ProposalPlan struct {
 	Included     []PlannedCandidate
 	LeftOut      []PlannedCandidate
 	Excluded     []PlannedCandidate
+	// Documents are the paths written into the project's clone, for its
+	// repository, not the organisation's (D34).
+	Documents []string
 }
 
 // ProposeResult is what ProposeDeclarations did.
@@ -73,6 +77,9 @@ type preparedProposal struct {
 	orgClonePath string
 	levelID      string
 	filesByLevel map[string]map[string]string
+	// documents are the documents' contents by path, for cloneFolder.
+	documents   map[string]string
+	cloneFolder string
 }
 
 // ProposeDeclarations lints the candidates, compares them with the
@@ -140,6 +147,12 @@ func (orchestrator Orchestrator) ProposeDeclarations(request ProposeRequest) (Pr
 	err = services.Proposals.BackToMain(prepared.orgClonePath, result.Branch)
 	if err != nil {
 		return ProposeResult{}, err
+	}
+	if len(prepared.documents) > 0 {
+		_, err = services.WorkingCopy.WriteFiles(prepared.cloneFolder, prepared.documents)
+		if err != nil {
+			return result, fmt.Errorf("the pull request %s is open, but the documents could not be written into %s: %w", result.PullRequestURL, prepared.cloneFolder, err)
+		}
 	}
 	if prepared.File != "" {
 		document := prepared.document
@@ -212,14 +225,28 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 		orgClonePath: orgClonePath,
 		levelID:      levelIDOf(document.DistilledFrom),
 		filesByLevel: map[string]map[string]string{},
+		documents:    map[string]string{},
 	}
 	if isFile {
 		prepared.File = request.Source
 	}
 	levels, byLevel := document.Included()
 	for _, level := range levels {
-		var group []distill.Candidate
+		var declared []proposal.Candidate
 		for _, candidate := range byLevel[level] {
+			if candidate.Kind == distill.KindDocuments {
+				// a document goes into the project's clone, not the org repository
+				documentPath := path.Clean(candidate.Path)
+				for _, content := range candidate.Files {
+					prepared.documents[documentPath] = content
+				}
+				prepared.Documents = append(prepared.Documents, documentPath)
+				continue
+			}
+			declared = append(declared, candidate)
+		}
+		var group []distill.Candidate
+		for _, candidate := range declared {
 			files, err := proposal.FilesOf(candidate)
 			if err != nil {
 				return preparedProposal{}, fmt.Errorf("%s/%s: %w", candidate.Kind, candidate.ID, err)
@@ -228,7 +255,7 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 		}
 		distill.Compare(group, catalogue, level)
 		for index, compared := range group {
-			planned := plannedOf(byLevel[level][index], compared)
+			planned := plannedOf(declared[index], compared)
 			if compared.Verdict == distill.VerdictIdentical {
 				prepared.LeftOut = append(prepared.LeftOut, planned)
 				continue
@@ -244,6 +271,18 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 	}
 	for _, candidate := range document.Excluded() {
 		prepared.Excluded = append(prepared.Excluded, plannedOf(candidate, distill.Candidate{}))
+	}
+	if len(prepared.Documents) > 0 {
+		prepared.cloneFolder = cloneOfProposal(request.Source)
+		if prepared.cloneFolder == "" {
+			return preparedProposal{}, refusal.New("a document goes into the project's clone; propose the proposal the clone holds under .rein/proposals/")
+		}
+		for _, documentPath := range prepared.Documents {
+			_, err := os.Stat(filepath.Join(prepared.cloneFolder, filepath.FromSlash(documentPath)))
+			if err == nil {
+				return preparedProposal{}, refusal.New(fmt.Sprintf("%s exists in the clone; change the document's path in proposal.yaml, or merge the text by hand", documentPath))
+			}
+		}
 	}
 	if len(prepared.Included) == 0 {
 		return preparedProposal{}, refusal.New("nothing to propose: every included candidate is identical to a declaration the organisation has")
@@ -320,6 +359,17 @@ func loadProposal(services Services, request ProposeRequest) (document proposal.
 		document.Candidates = append(document.Candidates, proposal.FromCandidate(candidate, level, true, nil, nil))
 	}
 	return document, false, nil
+}
+
+// cloneOfProposal is the project clone a pending proposal lives in, under
+// .rein/proposals/; "" for any other source.
+func cloneOfProposal(source string) string {
+	proposals := filepath.Dir(source)
+	reinFolder := filepath.Dir(proposals)
+	if filepath.Base(proposals) != "proposals" || filepath.Base(reinFolder) != proposalfiles.CloneFolder {
+		return ""
+	}
+	return filepath.Dir(reinFolder)
 }
 
 // plannedOf is a candidate as the plan shows it, with the comparison when
@@ -503,6 +553,12 @@ func pullRequestBody(source string, prepared preparedProposal) string {
 		fmt.Fprintf(&body, "\nNotes from the distillation:\n")
 		for _, note := range notes {
 			fmt.Fprintf(&body, "- %s\n", note)
+		}
+	}
+	if len(prepared.Documents) > 0 {
+		fmt.Fprintf(&body, "\nDocuments for the project's repository, written into its clone and left for the developer to commit:\n")
+		for _, documentPath := range prepared.Documents {
+			fmt.Fprintf(&body, "- %s\n", documentPath)
 		}
 	}
 	if len(prepared.document.Skipped) > 0 {

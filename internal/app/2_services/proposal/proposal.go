@@ -107,6 +107,9 @@ type Candidate struct {
 	Judge        *Judgement `yaml:"distiller"`
 	Notes        []string   `yaml:"notes"`
 	Conflict     *Conflict  `yaml:"conflict,omitempty"`
+	// Path is where a document goes in the project's repository; the
+	// developer may change it.
+	Path string `yaml:"path,omitempty"`
 	// Entry names the file or folder beside proposal.yaml that holds the
 	// content; a proposal written before folders has Files inline instead.
 	Entry string            `yaml:"entry,omitempty"`
@@ -168,7 +171,7 @@ func entryName(candidate Candidate) string {
 		return name
 	}
 	switch candidate.Kind {
-	case address.Rules:
+	case address.Rules, distill.KindDocuments:
 		return name + ".md"
 	case address.Permissions, address.MCPServers:
 		return name + ".yaml"
@@ -206,6 +209,7 @@ func FromCandidate(candidate distill.Candidate, level string, include bool, appl
 		Compared:     Comparison{Verdict: candidate.Verdict, Related: orEmpty(candidate.Related)},
 		Judge:        judge,
 		Notes:        orEmpty(candidate.Notes),
+		Path:         candidate.Path,
 		Files:        files,
 	}
 }
@@ -419,6 +423,10 @@ func (proposal Proposal) Check(registry map[string]declaration.LabelCategory) []
 		}
 		if len(candidate.Files) == 0 {
 			problems = append(problems, where+": no files")
+		}
+		cleaned := path.Clean(candidate.Path)
+		if candidate.Kind == distill.KindDocuments && (candidate.Path == "" || path.IsAbs(candidate.Path) || cleaned == ".." || strings.HasPrefix(cleaned, "../") || !strings.HasSuffix(cleaned, ".md")) {
+			problems = append(problems, fmt.Sprintf("%s: path %q is not a Markdown file inside the repository", where, candidate.Path))
 		}
 	}
 	return problems

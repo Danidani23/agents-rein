@@ -1304,6 +1304,21 @@ func TestSyncClone(t *testing.T) {
 			t.Fatalf("status %+v", report.Clones)
 		}
 	})
+	t.Run("names a rule pointing at a document the clone lacks", func(t *testing.T) {
+		fixture, created, folder := withSyncableProject(t)
+		pointer := filepath.Join(created.Connected.OrgClonePath, "declarations", "rules", "overview.md")
+		_ = os.WriteFile(pointer, []byte("---\ndocument: docs/overview.md\n---\nRead docs/overview.md before changing the shop.\n"), 0o644)
+		result, err := fixture.orchestrator().SyncClone(SyncRequest{Directory: folder})
+		if err != nil || !strings.Contains(strings.Join(result.Clones[0].Notes, "\n"), "organizations.acme.rules.overview points at docs/overview.md, which this clone lacks") {
+			t.Fatalf("result %+v err %v", result.Clones, err)
+		}
+		_ = os.MkdirAll(filepath.Join(folder, "docs"), 0o755)
+		_ = os.WriteFile(filepath.Join(folder, "docs", "overview.md"), []byte("# Overview\n"), 0o644)
+		result, _ = fixture.orchestrator().SyncClone(SyncRequest{Directory: folder})
+		if strings.Contains(strings.Join(result.Clones[0].Notes, "\n"), "points at") {
+			t.Fatalf("the document is there: %v", result.Clones[0].Notes)
+		}
+	})
 	t.Run("names a file under its folders that it did not write, leaves it, and snapshots it with force", func(t *testing.T) {
 		fixture, _, folder := withSyncableProject(t)
 		_, _ = fixture.orchestrator().SyncClone(SyncRequest{Directory: folder})
@@ -1665,4 +1680,62 @@ func TestEditTeamAndRefresh(t *testing.T) {
 	if err != nil || len(refreshed.Teams) != 1 || refreshed.Teams[0].Description != "the web shop" || strings.Join(refreshed.Teams[0].Projects, ",") != "shop" || refreshed.UserLevel != "organizations.acme.users.danidani23" {
 		t.Fatalf("refreshed %+v err %v", refreshed, err)
 	}
+}
+
+func TestProposeDocuments(t *testing.T) {
+	prepare := func(t *testing.T) (*harness, CreateResult, string, DistillResult) {
+		t.Helper()
+		fixture, created := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		folder := projectClone(t)
+		_, err := fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
+		if err != nil {
+			t.Fatalf("init: %v", err)
+		}
+		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", folder)
+		fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[{"candidate":"mcpservers/docs","verdict":"new","suggestion":"keep","reason":"fine"},{"candidate":"rules/go","verdict":"new","suggestion":"keep","reason":"fine"}],"units":[
+		 {"id":"overview","kind":"documents","from":[{"candidate":"rules/instructions","lines":"1, 3"}],"shape":"document","path":"docs/overview.md","pointer":"Read docs/overview.md before changing the shop.","verdict":"new","suggestion":"keep","reason":"knowledge about the code"}]}`}}
+		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Directory: folder})
+		if err != nil {
+			t.Fatalf("distill: %v", err)
+		}
+		return fixture, created, folder, distilled
+	}
+	t.Run("a document goes into the clone, its pointer into the pull request", func(t *testing.T) {
+		fixture, created, folder, distilled := prepare(t)
+		// the distiller saw where the repository keeps its documents
+		if !strings.Contains(fixture.judge.Briefs[0], "# Documents in the repository\n\n") || !strings.Contains(fixture.judge.Briefs[0], "\n- INSTRUCTIONS.md\n") {
+			t.Fatalf("brief %q", fixture.judge.Briefs[0])
+		}
+		placed := map[string]proposal.Candidate{}
+		for _, candidate := range distilled.Proposal.Candidates {
+			placed[candidate.Kind+"/"+candidate.ID] = candidate
+		}
+		if placed["documents/overview"].Path != "docs/overview.md" || placed["rules/overview"].ID == "" {
+			t.Fatalf("placed %+v", placed)
+		}
+		result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.File})
+		if err != nil || strings.Join(result.Documents, ",") != "docs/overview.md" {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		written, _ := os.ReadFile(filepath.Join(folder, "docs", "overview.md"))
+		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
+		pointer, _ := os.ReadFile(filepath.Join(published, "declarations", "projects", "shop", "rules", "overview.md"))
+		_, documentInOrg := os.Stat(filepath.Join(published, "declarations", "projects", "shop", "documents"))
+		if string(written) != "# Shop\n\nBe brief.\n" || !strings.Contains(string(pointer), "document: docs/overview.md") || documentInOrg == nil {
+			t.Fatalf("written %q pointer %q in org %v", written, pointer, documentInOrg)
+		}
+		if !strings.Contains(fixture.host.PullRequests[0].Body, "Documents for the project's repository, written into its clone and left for the developer to commit:\n- docs/overview.md") {
+			t.Fatalf("body %q", fixture.host.PullRequests[0].Body)
+		}
+	})
+	t.Run("a document never goes over a file the clone has", func(t *testing.T) {
+		fixture, _, folder, distilled := prepare(t)
+		_ = os.MkdirAll(filepath.Join(folder, "docs"), 0o755)
+		_ = os.WriteFile(filepath.Join(folder, "docs", "overview.md"), []byte("mine"), 0o644)
+		_, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.File})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "docs/overview.md exists in the clone; change the document's path in proposal.yaml, or merge the text by hand") || len(fixture.host.PullRequests) != 0 {
+			t.Fatalf("over a file: %v", err)
+		}
+	})
 }
