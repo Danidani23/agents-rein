@@ -1381,9 +1381,10 @@ from that project's snapshot.
   reviews the labels, proposing a registry label a project lacks, a new one with its meaning
   when a unit it lifts needs it and no other, and one that looks redundant, each a candidate
   of kind `label` or a project-label change applied through the pull requests `rein` already
-  opens; and a proposal becomes the folder `.rein/proposals/proposal-<id>/`, its
-  `proposal.yaml` holding the snapshot, the distiller's run and every decision, beside one
-  entry per candidate named `<kind>_<id>` with exactly the files that would land. Built in
+  opens; and a proposal becomes the folder `.rein/proposals/proposal-<id>/`: one YAML file per
+  candidate, `<kind>_<id>.yaml`, with its fields and its text, beside `proposal.yaml` with the
+  proposal's own (corrected 2026-10-25: the user meant one file per candidate, not one index
+  beside the texts). Built in
   steps, each green before the next: (a) `merge` leaves the distiller's answers, and with it the rewrite that was dropped;
   (b) the proposal folder; (c) the cut at `##` headings; (d) the distiller's version 2 answer,
   its line check and its name; (e) conflicts that block `propose`; (f) documents and their
@@ -2231,4 +2232,15 @@ writes is read from the next session on, not in the same one.
   that registry and the single-valued categories, and writes the registry and record files
   on the pull request's branch, the changes listed in the plan and the body. Test first;
   `task rein:check` green. Left: P2.44's gate, the website distilled again with a real model.
-
+- (2026-10-25) P2.44's gate, first run on the website: the distiller timed out after five
+  minutes and the proposal held only rein's own cut, which a bug had spoilt: a line of prose
+  starting with backticks, "```bash block with explicit `git add`…", counted as a code fence,
+  so no heading after it cut anything and `rule_git` held eight sections. Fixed, each test
+  first: a fence opens only where CommonMark says, a backtick fence's info string holding no
+  backtick, and closes on its own character repeated; the distiller has fifteen minutes and
+  says it ran out of time instead of "waiting for input"; `distill --model` passes the model
+  to `claude`, the developer's default without it; a failed distiller writes nothing, so the
+  next distill starts fresh; the step says it can take several minutes. The proposal is now
+  one YAML file per candidate beside `proposal.yaml`, version 3; deleting a file leaves its
+  candidate out; the folders of version 2 still read. `task rein:check` green, `go vet` for
+  Windows green. Left: the website distilled again.
