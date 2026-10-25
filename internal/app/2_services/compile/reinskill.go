@@ -47,8 +47,8 @@ those files; it is proposed to the org repository and comes back at the next syn
    ` + "`organizations.<org>.teams.<team>`" + `, ` + "`organizations.<org>.projects.<project>`" + ` or
    ` + "`organizations.<org>.users.<user>`" + `.
 4. A harness that was in a repository before rein is distilled: ` + "`rein distill`" + ` writes a
-   proposal folder under ` + "`.rein/proposals/`" + `: ` + "`proposal.yaml`" + ` with every candidate, its level and
-   the distiller's reason, beside one entry per candidate with its content; a person reviews and
+   proposal folder under ` + "`.rein/proposals/`" + `, one YAML file per candidate with its level, the
+   distiller's reason and its text; a person reviews and
    edits it, resolving each conflict as drop, override or amend; ` + "`rein propose`" + ` opens the pull
    request from it. Knowledge about the code, such as the architecture, becomes a document in
    the project's repository with a rule pointing at it, not a setting.

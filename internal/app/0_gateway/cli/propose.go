@@ -20,8 +20,8 @@ func newProposeCommand(environment *commandEnvironment) *cobra.Command {
 		Use:   "propose [proposal, level folder or zip]",
 		Short: "Open a pull request that adds declarations to the org repository",
 		Long: "propose is the one way declarations enter an org repository. It takes the proposal rein\n" +
-			"distill wrote, a folder whose proposal.yaml says for every candidate whether it goes, to\n" +
-			"which level and with which labels, beside the candidates' content, and does exactly that:\n" +
+			"distill wrote, a folder with a YAML file per candidate saying whether it goes, to which\n" +
+			"level and with which labels, and holding its text, and does exactly that:\n" +
 			"lints the candidates, leaves out the ones identical to what the organisation has, writes the\n" +
 			"rest on a branch of the organisation's clone at their levels, pushes it and opens the pull\n" +
 			"request with the comparison as its body. The proposal is then marked proposed and moved to\n" +

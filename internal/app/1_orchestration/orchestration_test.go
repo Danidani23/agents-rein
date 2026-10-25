@@ -748,9 +748,10 @@ func TestDistillHarness(t *testing.T) {
 			t.Fatalf("file %q", result.File)
 		}
 		content, _ := os.ReadFile(filepath.Join(result.File, "proposal.yaml"))
-		instructions, _ := os.ReadFile(filepath.Join(result.File, "rule_instructions.md"))
-		if !strings.Contains(string(content), "distilled_from: organizations.acme.projects.shop") || !strings.Contains(string(content), "verdict: identical") || !strings.Contains(string(instructions), "Be brief.") {
-			t.Fatalf("proposal %q instructions %q", content, instructions)
+		instructions, _ := os.ReadFile(filepath.Join(result.File, "rule_instructions.yaml"))
+		goRule, _ := os.ReadFile(filepath.Join(result.File, "rule_go.yaml"))
+		if !strings.Contains(string(content), "distilled_from: organizations.acme.projects.shop") || !strings.Contains(string(goRule), "verdict: identical") || !strings.Contains(string(instructions), "Be brief.") {
+			t.Fatalf("proposal %q instructions %q go %q", content, instructions, goRule)
 		}
 		ignore, _ := os.ReadFile(filepath.Join(folder, ".gitignore"))
 		if !strings.Contains(string(ignore), "\n.rein/\n") {
@@ -1068,6 +1069,18 @@ func TestDistillWithTheJudge(t *testing.T) {
 		}
 		_ = edited.WriteFolder(proposalPath)
 	}
+	t.Run("a distiller that fails writes nothing, so the next distill starts fresh", func(t *testing.T) {
+		fixture, _ := prepare(t)
+		fixture.judge = &fake.Judge{Answers: []string{"nonsense", "still nonsense"}}
+		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "the distiller fake-judge failed, so nothing was written") || !strings.Contains(err.Error(), "holds no JSON object") || result.File != "" {
+			t.Fatalf("result %+v err %v", result, err)
+		}
+		pending, _ := fixture.orchestrator().ProposalFiles.ListPending(fixture.orchestrator().ProposalFiles.HomePendingFolder())
+		if len(pending) != 0 {
+			t.Fatalf("a failed distillation left %d proposals", len(pending))
+		}
+	})
 	t.Run("a conflict blocks propose until it is resolved, and an override names what it replaces", func(t *testing.T) {
 		fixture, created := prepare(t)
 		fixture.judge = &fake.Judge{Answers: []string{conflicting}}
