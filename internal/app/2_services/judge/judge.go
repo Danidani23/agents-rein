@@ -60,6 +60,8 @@ func (service Service) JudgeCandidates(level string, candidates []distill.Candid
 		}
 		if len(problems) == 0 {
 			run.Status = distill.JudgeAnswered
+			// a retried answer that is believed leaves the first one's problems behind
+			run.Problems = nil
 			return run, distill.Apply(answer, candidates)
 		}
 		run.Problems = problems

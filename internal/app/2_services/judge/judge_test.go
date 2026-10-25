@@ -28,6 +28,10 @@ func TestJudgeCandidates(t *testing.T) {
 		if run.Status != distill.JudgeAnswered || len(backend.Briefs) != 2 || !strings.Contains(backend.Briefs[1], "previous answer was not accepted") || !strings.Contains(backend.Briefs[1], "holds no JSON object") {
 			t.Fatalf("run %+v briefs %d", run, len(backend.Briefs))
 		}
+		// the accepted answer has no problems; the first answer's are gone with it
+		if len(run.Problems) != 0 {
+			t.Fatalf("an accepted retry reports %v", run.Problems)
+		}
 		backend = &fake.Judge{Answers: []string{"nonsense", `{"version":2,"candidates":[]}`}}
 		run, items := Service{Judge: backend}.JudgeCandidates("organizations.acme", candidates(), distill.Corpus{}, "")
 		if run.Status != distill.JudgeFailed || !strings.Contains(strings.Join(run.Problems, ";"), "rules/brief is not answered") || items[0].Judgement != nil {
