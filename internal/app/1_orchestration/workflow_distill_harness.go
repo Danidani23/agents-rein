@@ -67,6 +67,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 	document := proposal.Proposal{Version: proposal.Version, Status: proposal.StatusPending, Organization: organization.Slug, DistilledFrom: level, Skipped: []string{}, Candidates: []proposal.Candidate{}}
 	var candidates []distill.Candidate
 	var corpus distill.Corpus
+	var catalogue distill.Catalogue
 	judging := request.Judge != "none"
 	steps := []Step{
 		{
@@ -99,7 +100,8 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 		{
 			Name: "comparing with the organisation's declarations",
 			Do: func() error {
-				catalogue, err := distill.LoadCatalogue(orgClonePath)
+				var err error
+				catalogue, err = distill.LoadCatalogue(orgClonePath)
 				if err != nil {
 					return err
 				}
@@ -119,7 +121,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 	}
 	if judging && !request.DryRun {
 		steps = append(steps, Step{
-			Name: "asking the judge " + services.Judge.Name() + ", which takes a minute or more",
+			Name: "asking the distiller " + services.Judge.Name() + ", which takes a minute or more",
 			Do: func() error {
 				if len(candidates) == 0 {
 					return nil
@@ -129,7 +131,9 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 					document.Judge = distill.JudgeRun{Backend: services.Judge.Name(), Status: distill.JudgeSkipped, Problems: []string{reason}}
 					return nil
 				}
-				document.Judge = services.Judge.JudgeCandidates(level, candidates, corpus)
+				document.Judge, candidates = services.Judge.JudgeCandidates(level, candidates, corpus)
+				// the units the distiller cut out are compared like any candidate
+				distill.Compare(candidates, catalogue, level)
 				return nil
 			},
 		})
@@ -211,9 +215,9 @@ func placeJudged(services Services, orgClonePath string, organization machine.Or
 			case 1:
 				target = address.Organizations + "." + organization.Slug + "." + address.Teams + "." + teams[0]
 			case 0:
-				note = "the judge lifts it to the team level; set level to the team's address"
+				note = "the distiller lifts it to the team level; set level to the team's address"
 			default:
-				note = "the judge lifts it to the team level and the project belongs to the teams " + strings.Join(teams, ", ") + "; set level to one of them"
+				note = "the distiller lifts it to the team level and the project belongs to the teams " + strings.Join(teams, ", ") + "; set level to one of them"
 			}
 		}
 		for _, label := range judgement.ApplyIf {
@@ -226,6 +230,12 @@ func placeJudged(services Services, orgClonePath string, organization machine.Or
 	placed := proposal.FromCandidate(candidate, target, include, labels, resolved)
 	if note != "" {
 		placed.Notes = append(placed.Notes, note)
+	}
+	// a contradiction waits for the developer's decision, which propose asks for (D34)
+	if judgement.Verdict == "contradicts" {
+		placed.Include = false
+		placed.Conflict = &proposal.Conflict{With: orEmptyList(judgement.Related), Resolution: ""}
+		placed.Notes = append(placed.Notes, "in conflict with "+strings.Join(judgement.Related, ", ")+"; set its resolution in proposal.yaml: drop, override or amend")
 	}
 	return placed
 }

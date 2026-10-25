@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/lint"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
@@ -185,6 +186,25 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 	if err != nil {
 		return preparedProposal{}, err
 	}
+	// a required declaration may not be weakened by anything below it
+	enforcements := map[string]string{}
+	for _, entry := range catalogue.Entries {
+		enforcements[entry.Address] = entry.Enforcement
+	}
+	var overrides []string
+	for _, candidate := range document.Candidates {
+		if candidate.Conflict == nil || candidate.Conflict.Resolution != proposal.ResolutionOverride {
+			continue
+		}
+		for _, with := range candidate.Conflict.With {
+			if enforcements[with] == declaration.EnforcementRequired {
+				overrides = append(overrides, fmt.Sprintf("%s/%s cannot override %s, which is required; drop it, or amend the required declaration", candidate.Kind, candidate.ID, with))
+			}
+		}
+	}
+	if len(overrides) > 0 {
+		return preparedProposal{}, refusal.New("the proposal cannot go as it is:\n  " + strings.Join(overrides, "\n  "))
+	}
 	prepared := preparedProposal{
 		ProposalPlan: ProposalPlan{Organization: organization.Slug, ID: document.ID},
 		document:     document,
@@ -308,6 +328,13 @@ func plannedOf(candidate proposal.Candidate, compared distill.Candidate) Planned
 	planned := PlannedCandidate{Kind: candidate.Kind, ID: candidate.ID, Level: candidate.Level, ApplyIf: candidate.ApplyIf, Verdict: compared.Verdict, Related: compared.Related}
 	if candidate.Judge != nil {
 		planned.Judge = candidate.Judge.Suggestion + ": " + candidate.Judge.Reason
+	}
+	if candidate.Conflict != nil && candidate.Judge != nil {
+		with := strings.Join(candidate.Conflict.With, ", ")
+		planned.Judge = "conflict with " + with + ", resolved " + candidate.Conflict.Resolution + ": " + candidate.Judge.Reason
+		if candidate.Conflict.Resolution == proposal.ResolutionAmend {
+			planned.Judge += "; amend " + with + " in a proposal of its own"
+		}
 	}
 	return planned
 }
@@ -440,12 +467,12 @@ func userRecordIfMissing(orgClonePath string, levelPath string, userSlug string,
 func pullRequestBody(source string, prepared preparedProposal) string {
 	var body strings.Builder
 	fmt.Fprintf(&body, "Proposed by `rein propose` from `%s`, distilled from `%s`.\n\n", filepath.Base(source), prepared.document.DistilledFrom)
-	fmt.Fprintf(&body, "| kind | id | level | labels | compared with the organisation | the judge |\n|---|---|---|---|---|---|\n")
+	fmt.Fprintf(&body, "| kind | id | level | labels | compared with the organisation | the distiller |\n|---|---|---|---|---|---|\n")
 	for _, planned := range prepared.Included {
 		fmt.Fprintf(&body, "| %s | %s | %s | %s | %s | %s |\n", planned.Kind, planned.ID, planned.Level, strings.Join(planned.ApplyIf, " "), describeVerdict(planned), escapeCell(orDash(planned.Judge)))
 	}
 	if prepared.document.Judge.Backend != "" {
-		fmt.Fprintf(&body, "\nJudge: %s, %s", prepared.document.Judge.Backend, prepared.document.Judge.Status)
+		fmt.Fprintf(&body, "\nDistiller: %s, %s", prepared.document.Judge.Backend, prepared.document.Judge.Status)
 		if prepared.document.Judge.Session != "" {
 			fmt.Fprintf(&body, ", session %s", prepared.document.Judge.Session)
 		}
@@ -455,7 +482,7 @@ func pullRequestBody(source string, prepared preparedProposal) string {
 		fmt.Fprintf(&body, "\n")
 	}
 	if len(prepared.Excluded) > 0 {
-		fmt.Fprintf(&body, "\nLeft out by the proposal, with the judge's view:\n")
+		fmt.Fprintf(&body, "\nLeft out by the proposal, with the distiller's view:\n")
 		for _, planned := range prepared.Excluded {
 			fmt.Fprintf(&body, "- %s/%s: %s\n", planned.Kind, planned.ID, orDash(planned.Judge))
 		}

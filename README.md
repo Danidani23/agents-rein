@@ -55,8 +55,8 @@ the start of every chat session with the agent.
 - `rein` lints the declarations, resolves the levels for a project and writes the result into
   each clone in the form the agent reads. Nothing it writes is committed: agent settings are
   not repository settings.
-- A harness that already exists in a repository is distilled into declarations, and a judge
-  suggests the level each one belongs to.
+- A harness that already exists in a repository is distilled into declarations: a distiller cuts
+  it into units of one concern and suggests the level each belongs to.
 - It is a compiler and a linter, never a service, and never deletes a repository.
 
 ## Quick start

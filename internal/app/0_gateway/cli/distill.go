@@ -23,7 +23,7 @@ func newDistillCommand(environment *commandEnvironment) *cobra.Command {
 			"the rules become rules, one per ## section, skills stay skills, the settings' permissions\n" +
 			"and hooks become a permission set and hooks, .mcp.json becomes tool servers, with any literal\n" +
 			"secret replaced by a REIN_ reference. Each candidate is compared with what the organisation\n" +
-			"already declares, by content and by id; the judge says where each belongs; and everything is\n" +
+			"already declares, by content and by id; the distiller says where each belongs; and everything is\n" +
 			"written as one proposal folder, proposal.yaml with every decision beside one entry per\n" +
 			"candidate with its content, under .rein/proposals/ of the project's folder, or under\n" +
 			"~/.rein/proposals/pending/ for your agent's home. Review and edit it, then rein propose.\n" +
@@ -39,8 +39,11 @@ func newDistillCommand(environment *commandEnvironment) *cobra.Command {
 	command.Flags().StringVar(&request.Project, "project", "", "the project's slug, instead of the folder")
 	command.Flags().BoolVar(&request.Home, "home", false, "distill your agent's home into your user level instead of a project")
 	command.Flags().StringVar(&request.SnapshotPath, "snapshot", "", "a snapshot file to distill, instead of the latest")
-	command.Flags().StringVar(&request.Judge, "judge", "", "agent-cli to ask your agent's CLI, none to skip the model pass (default: the organisation's provider, else agent-cli)")
-	command.Flags().BoolVar(&request.DryRun, "dry-run", false, "print the brief that would go to the judge and write nothing")
+	command.Flags().StringVar(&request.Judge, "distiller", "", "agent-cli to ask your agent's CLI, none to skip the model pass (default: the organisation's provider, else agent-cli)")
+	command.Flags().BoolVar(&request.DryRun, "dry-run", false, "print the brief that would go to the distiller and write nothing")
+	// --judge is what --distiller was called before the distiller had its name
+	command.Flags().StringVar(&request.Judge, "judge", "", "the old name of --distiller")
+	_ = command.Flags().MarkDeprecated("judge", "use --distiller")
 	command.Flags().BoolVar(&request.Force, "force", false, "replace a pending proposal of the same snapshot")
 	return command
 }
@@ -62,7 +65,7 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 	switch request.Judge {
 	case "", "agent-cli", "none":
 	default:
-		return refusal.New(fmt.Sprintf("--judge %q is not agent-cli or none", request.Judge))
+		return refusal.New(fmt.Sprintf("--distiller %q is not agent-cli or none", request.Judge))
 	}
 	result, err := orchestrator.DistillHarness(request)
 	if err != nil {
@@ -70,7 +73,7 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 	}
 	if request.DryRun {
 		fmt.Fprintf(environment.out, "%s", result.Brief)
-		fmt.Fprintf(environment.errOut, "dry run: the brief above would go to the judge; nothing was written\n")
+		fmt.Fprintf(environment.errOut, "dry run: the brief above would go to the distiller; nothing was written\n")
 		return nil
 	}
 	document := result.Proposal
@@ -89,10 +92,10 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 			fmt.Fprintf(environment.out, "             note: %s\n", note)
 		}
 		if candidate.Judge != nil {
-			fmt.Fprintf(environment.out, "             judge: %s\n", describeJudgementLine(candidate))
+			fmt.Fprintf(environment.out, "             distiller: %s\n", describeJudgementLine(candidate))
 		}
 	}
-	line := fmt.Sprintf("judge: %s %s", document.Judge.Backend, document.Judge.Status)
+	line := fmt.Sprintf("distiller: %s %s", document.Judge.Backend, document.Judge.Status)
 	if document.Judge.Session != "" {
 		line += ", conversation " + document.Judge.Session
 	}
@@ -105,7 +108,20 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 	}
 	fmt.Fprintf(environment.out, "%d new, %d identical to an existing declaration, %d sharing an id with another level\n", counts[distill.VerdictNew], counts[distill.VerdictIdentical], counts[distill.VerdictSameID])
 	style := environment.style()
+	conflicts := 0
+	for _, candidate := range document.Candidates {
+		if candidate.Conflict != nil {
+			conflicts++
+		}
+	}
+	if conflicts > 0 {
+		fmt.Fprintf(environment.out, "%s\n", style.Yellow(fmt.Sprintf("%d in conflict, which rein propose waits for: drop, override or amend each", conflicts)))
+	}
 	fmt.Fprintf(environment.out, "\nwritten to %s\n", style.Bold(style.Green(result.File)))
+	if conflicts > 0 {
+		printNext(environment, "resolve each conflict in proposal.yaml, review the rest, then rein propose opens the pull request")
+		return nil
+	}
 	printNext(environment, "review and edit it, then rein propose opens the pull request")
 	return nil
 }

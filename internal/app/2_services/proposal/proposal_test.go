@@ -122,3 +122,39 @@ func TestProposalCheckAndFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestConflicts(t *testing.T) {
+	conflicting := func(resolution string) Candidate {
+		return Candidate{Kind: "rules", ID: "handover", Level: "organizations.acme.projects.shop", ApplyIf: []string{}, DoNotApplyIf: []string{}, Files: map[string]string{"handover.md": "## Handover\n\nOne block for all commands.\n"}, Conflict: &Conflict{With: []string{"organizations.acme.users.dani.rules.global"}, Resolution: resolution}}
+	}
+	document := Proposal{Version: Version, Status: StatusPending, Organization: "acme", Candidates: []Candidate{conflicting("")}}
+	problems := strings.Join(document.Check(nil), "\n")
+	if !strings.Contains(problems, "rules/handover conflicts with organizations.acme.users.dani.rules.global and is not resolved: set its resolution in proposal.yaml to drop, override or amend") {
+		t.Fatalf("unresolved: %s", problems)
+	}
+	document.Candidates[0] = conflicting("maybe")
+	problems = strings.Join(document.Check(nil), "\n")
+	if !strings.Contains(problems, `rules/handover: resolution "maybe" is not drop, override or amend`) {
+		t.Fatalf("unknown resolution: %s", problems)
+	}
+	// override puts it in, opening with the line that names what it replaces
+	document.Candidates[0] = conflicting("override")
+	levels, byLevel := document.Included()
+	if len(document.Check(nil)) != 0 || len(levels) != 1 {
+		t.Fatalf("override: problems %v levels %v", document.Check(nil), levels)
+	}
+	files, _ := FilesOf(byLevel[levels[0]][0])
+	if files["rules/handover.md"] != "This replaces `organizations.acme.users.dani.rules.global` where the two disagree.\n\n## Handover\n\nOne block for all commands.\n" {
+		t.Fatalf("override files %q", files)
+	}
+	// drop and amend leave it out, whatever include says
+	for _, resolution := range []string{"drop", "amend"} {
+		candidate := conflicting(resolution)
+		candidate.Include = true
+		document.Candidates[0] = candidate
+		levels, _ = document.Included()
+		if len(levels) != 0 || len(document.Excluded()) != 1 {
+			t.Fatalf("%s: levels %v excluded %d", resolution, levels, len(document.Excluded()))
+		}
+	}
+}

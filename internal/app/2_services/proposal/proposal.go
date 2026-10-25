@@ -46,9 +46,26 @@ const (
 // Header is the comment at the top of every proposal.yaml.
 const Header = `# Written by rein distill. Review and edit it, then rein propose. A candidate with
 # include: false stays out; level, applyIf, doNotApplyIf and enforcement are yours to
-# change here, its content in the entry beside this file that it names. Never edit a
-# proposed one; distill again instead.
+# change here, its content in the entry beside this file that it names. A candidate in
+# conflict waits for its resolution: drop, the existing declaration holds; override, this
+# one replaces it where the two disagree, refused against a required one; amend, the
+# existing one is wrong and changes in a proposal of its own. Never edit a proposed one;
+# distill again instead.
 `
+
+// The resolutions of a conflict.
+const (
+	ResolutionDrop     = "drop"
+	ResolutionOverride = "override"
+	ResolutionAmend    = "amend"
+)
+
+// Conflict is a candidate that contradicts existing declarations, and what
+// the developer decided about it; propose waits for the decision (D34).
+type Conflict struct {
+	With       []string `yaml:"with"`
+	Resolution string   `yaml:"resolution"`
+}
 
 // Proposal is the document.
 type Proposal struct {
@@ -59,7 +76,7 @@ type Proposal struct {
 	DistilledFrom string           `yaml:"distilled_from"`
 	Snapshot      Snapshot         `yaml:"snapshot"`
 	DistilledAt   time.Time        `yaml:"distilled_at"`
-	Judge         distill.JudgeRun `yaml:"judge"`
+	Judge         distill.JudgeRun `yaml:"distiller"`
 	Skipped       []string         `yaml:"skipped"`
 	ProposedAt    time.Time        `yaml:"proposed_at,omitempty"`
 	PullRequest   string           `yaml:"pull_request"`
@@ -87,8 +104,9 @@ type Candidate struct {
 	Enforcement  string     `yaml:"enforcement"`
 	Sources      []string   `yaml:"sources"`
 	Compared     Comparison `yaml:"compared"`
-	Judge        *Judgement `yaml:"judge"`
+	Judge        *Judgement `yaml:"distiller"`
 	Notes        []string   `yaml:"notes"`
+	Conflict     *Conflict  `yaml:"conflict,omitempty"`
 	// Entry names the file or folder beside proposal.yaml that holds the
 	// content; a proposal written before folders has Files inline instead.
 	Entry string            `yaml:"entry,omitempty"`
@@ -357,7 +375,16 @@ func (proposal Proposal) Check(registry map[string]declaration.LabelCategory) []
 	seen := map[string]bool{}
 	for _, candidate := range proposal.Candidates {
 		where := candidate.Kind + "/" + candidate.ID
-		if !candidate.Include {
+		if candidate.Conflict != nil {
+			switch candidate.Conflict.Resolution {
+			case "":
+				problems = append(problems, fmt.Sprintf("%s conflicts with %s and is not resolved: set its resolution in proposal.yaml to drop, override or amend", where, strings.Join(candidate.Conflict.With, ", ")))
+			case ResolutionDrop, ResolutionOverride, ResolutionAmend:
+			default:
+				problems = append(problems, fmt.Sprintf("%s: resolution %q is not drop, override or amend", where, candidate.Conflict.Resolution))
+			}
+		}
+		if !candidate.Goes() {
 			continue
 		}
 		parsed, err := address.Parse(candidate.Level)
@@ -397,12 +424,21 @@ func (proposal Proposal) Check(registry map[string]declaration.LabelCategory) []
 	return problems
 }
 
-// Included lists the candidates with include: true by level, the levels
-// sorted, the candidates in the document's order.
+// Goes says whether a candidate goes to the org repository: a conflict's
+// resolution decides, override in and drop or amend out, else include.
+func (candidate Candidate) Goes() bool {
+	if candidate.Conflict != nil {
+		return candidate.Conflict.Resolution == ResolutionOverride
+	}
+	return candidate.Include
+}
+
+// Included lists the candidates that go by level, the levels sorted, the
+// candidates in the document's order.
 func (proposal Proposal) Included() (levels []string, byLevel map[string][]Candidate) {
 	byLevel = map[string][]Candidate{}
 	for _, candidate := range proposal.Candidates {
-		if !candidate.Include {
+		if !candidate.Goes() {
 			continue
 		}
 		if _, seen := byLevel[candidate.Level]; !seen {
@@ -414,11 +450,11 @@ func (proposal Proposal) Included() (levels []string, byLevel map[string][]Candi
 	return levels, byLevel
 }
 
-// Excluded lists the candidates with include: false.
+// Excluded lists the candidates that stay out.
 func (proposal Proposal) Excluded() []Candidate {
 	var excluded []Candidate
 	for _, candidate := range proposal.Candidates {
-		if !candidate.Include {
+		if !candidate.Goes() {
 			excluded = append(excluded, candidate)
 		}
 	}
@@ -427,10 +463,19 @@ func (proposal Proposal) Excluded() []Candidate {
 
 // FilesOf is a candidate's files at their paths in the declarations
 // layout, rules/<id>.md or skills/<id>/SKILL.md, with the selectors written
-// into them.
+// into them. An override opens its text with the line that says what it
+// replaces, which the levels above honour (D34).
 func FilesOf(candidate Candidate) (map[string]string, error) {
 	files := map[string]string{}
 	for key, content := range candidate.Files {
+		if candidate.Conflict != nil && candidate.Conflict.Resolution == ResolutionOverride && (candidate.Kind == address.Rules || key == "SKILL.md") {
+			frontmatter, body := splitFrontmatter(content)
+			var replaced []string
+			for _, with := range candidate.Conflict.With {
+				replaced = append(replaced, "`"+with+"`")
+			}
+			content = frontmatter + "This replaces " + strings.Join(replaced, " and ") + " where the two disagree.\n\n" + strings.TrimLeft(body, "\n")
+		}
 		switch candidate.Kind {
 		case address.Rules:
 			files[path.Join(address.Rules, candidate.ID+".md")] = content
@@ -441,6 +486,19 @@ func FilesOf(candidate Candidate) (map[string]string, error) {
 		}
 	}
 	return declaration.AnnotateSelectors(candidate.Kind, files, declaration.Selectors{ApplyIf: candidate.ApplyIf, DoNotApplyIf: candidate.DoNotApplyIf, Enforcement: candidate.Enforcement})
+}
+
+// splitFrontmatter parts a declaration file into its frontmatter, with its
+// --- fences, and its body.
+func splitFrontmatter(content string) (frontmatter string, body string) {
+	if !strings.HasPrefix(content, "---\n") {
+		return "", content
+	}
+	end := strings.Index(content[4:], "\n---\n")
+	if end < 0 {
+		return "", content
+	}
+	return content[:4+end+5], content[4+end+5:]
 }
 
 // MarkProposed records the branch, the pull request and the time.

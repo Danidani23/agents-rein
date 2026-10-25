@@ -56,7 +56,7 @@ type Report struct {
 	Snapshots  []string           `yaml:"snapshots"`
 	Candidates []CandidateSummary `yaml:"candidates"`
 	Skipped    []string           `yaml:"skipped,omitempty"`
-	Judge      *JudgeRun          `yaml:"judge,omitempty"`
+	Judge      *JudgeRun          `yaml:"distiller,omitempty"`
 }
 
 // CandidateSummary is a candidate without its files.
@@ -197,14 +197,7 @@ type section struct {
 // The frontmatter is returned apart, for every part to carry, and each part
 // is trimmed of its trailing blank lines.
 func sectionsOf(content string) (frontmatter string, sections []section) {
-	body := content
-	if strings.HasPrefix(content, "---\n") {
-		end := strings.Index(content[4:], "\n---\n")
-		if end >= 0 {
-			frontmatter = content[:4+end+5]
-			body = content[4+end+5:]
-		}
-	}
+	frontmatter, body := splitFrontmatter(content)
 	current := section{}
 	inFence := false
 	for _, line := range strings.SplitAfter(body, "\n") {
@@ -226,6 +219,19 @@ func sectionsOf(content string) (frontmatter string, sections []section) {
 		}
 	}
 	return frontmatter, sections
+}
+
+// splitFrontmatter parts a declaration file into its frontmatter, the
+// lines between the --- fences with the fences, and its body.
+func splitFrontmatter(content string) (frontmatter string, body string) {
+	if !strings.HasPrefix(content, "---\n") {
+		return "", content
+	}
+	end := strings.Index(content[4:], "\n---\n")
+	if end < 0 {
+		return "", content
+	}
+	return content[:4+end+5], content[4+end+5:]
 }
 
 // ruleSections turns a file of rules into one candidate per ## section
@@ -414,8 +420,8 @@ func slugOf(name string) string {
 	return strings.TrimRight(builder.String(), "-")
 }
 
-// Identity is what makes two declarations the same thing: for a rule the
-// body, for a skill its files, for a tool server its transport, command and
+// Identity is what makes two declarations the same thing: for a rule its
+// file, frontmatter included, for a skill its files, for a tool server its transport, command and
 // arguments or its URL, for a permission set its rules, for a hook its
 // event, matcher and script.
 func Identity(kind string, files map[string]string) string {

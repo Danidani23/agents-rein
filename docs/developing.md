@@ -13,7 +13,7 @@ repeats neither.
 | [Task](https://taskfile.dev) | every repeatable command in [Taskfile.yml](../Taskfile.yml) | `task --list` |
 | git | the clone and the release | `git --version` |
 | the GitHub CLI, logged in | the release's token, read with `gh auth token` | `gh auth status` |
-| Claude Code, logged in | `rein distill`'s judge, which runs `claude -p` | `claude --version` |
+| Claude Code, logged in | `rein distill`'s distiller, which runs `claude -p` | `claude --version` |
 
 The code depends on cobra, yaml.v3 and the official MCP SDK, no more: a further module is an
 [ADR](decisions/2026-10-23_mcp-gateway-on-the-official-sdk.md) before it is added, and `go.mod`

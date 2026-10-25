@@ -868,7 +868,7 @@ func TestProposeDeclarations(t *testing.T) {
 		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "mcpservers", "docs.yaml")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("description: the docs server\ntransport: http\nurl: https://docs.example/other\n"), 0o644)
-		fixture.judge = &fake.Judge{Answers: []string{`{"version":1,"candidates":[` +
+		fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[` +
 			`{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"organization","applyIf":["language:go","not a label"],"reason":"general"},` +
 			`{"candidate":"rules/go","verdict":"new","suggestion":"lift","level":"team","reason":"the team's style"},` +
 			`{"candidate":"mcpservers/docs","verdict":"duplicate","related":["organizations.acme.mcpservers.docs"],"suggestion":"drop","reason":"already declared"}]}`}}
@@ -876,7 +876,7 @@ func TestProposeDeclarations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("distill: %v", err)
 		}
-		if !strings.HasPrefix(fixture.judge.Briefs[0], "rein distill, the judge's brief for organizations.acme.projects.shop, ") || !strings.Contains(fixture.judge.Briefs[0], "applyIf labels come from the organisation's registry and nowhere else: data:internal") {
+		if !strings.HasPrefix(fixture.judge.Briefs[0], "rein distill, the distiller's brief for organizations.acme.projects.shop, ") || !strings.Contains(fixture.judge.Briefs[0], "applyIf labels come from the organisation's registry and nowhere else: data:internal") {
 			t.Fatalf("brief: %q", fixture.judge.Briefs[0][:120])
 		}
 		byKey := map[string]proposal.Candidate{}
@@ -928,7 +928,7 @@ func TestProposeDeclarations(t *testing.T) {
 			t.Fatalf("the edited level was ignored")
 		}
 		body := fixture.host.PullRequests[0].Body
-		if !strings.Contains(body, "| rules | instructions | organizations.acme | language:go | new | lift: general |") || !strings.Contains(body, "Judge: fake-judge, answered, session fake-session") {
+		if !strings.Contains(body, "| rules | instructions | organizations.acme | language:go | new | lift: general |") || !strings.Contains(body, "Distiller: fake-judge, answered, session fake-session") {
 			t.Fatalf("body %q", body)
 		}
 	})
@@ -937,7 +937,7 @@ func TestProposeDeclarations(t *testing.T) {
 		_, _ = fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "Ops"})
 		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web", "ops"}})
 		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", "")
-		fixture.judge = &fake.Judge{Answers: []string{`{"version":1,"candidates":[{"candidate":"rules/go","verdict":"new","suggestion":"lift","level":"team","reason":"style"},{"candidate":"rules/instructions","verdict":"new","suggestion":"keep","reason":"fine"},{"candidate":"mcpservers/docs","verdict":"new","suggestion":"keep","reason":"fine"}]}`}}
+		fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[{"candidate":"rules/go","verdict":"new","suggestion":"lift","level":"team","reason":"style"},{"candidate":"rules/instructions","verdict":"new","suggestion":"keep","reason":"fine"},{"candidate":"mcpservers/docs","verdict":"new","suggestion":"keep","reason":"fine"}]}`}}
 		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
 		if err != nil {
 			t.Fatalf("distill: %v", err)
@@ -1039,7 +1039,7 @@ func TestProposeDeclarations(t *testing.T) {
 }
 
 func TestDistillWithTheJudge(t *testing.T) {
-	answer := `{"version":1,"candidates":[
+	answer := `{"version":2,"candidates":[
 	 {"candidate":"rules/instructions","verdict":"new","suggestion":"keep","reason":"nothing covers it"},
 	 {"candidate":"rules/go","verdict":"duplicate","related":["organizations.acme.rules.go"],"quotes":[{"address":"organizations.acme.rules.go","text":"Two-line errors."}],"suggestion":"drop","reason":"the organisation says it"},
 	 {"candidate":"mcpservers/docs","verdict":"new","suggestion":"lift","level":"organization","reason":"everyone reads the docs"}]}`
@@ -1053,6 +1053,92 @@ func TestDistillWithTheJudge(t *testing.T) {
 		_ = os.WriteFile(existing, []byte("Two-line errors.\n"), 0o644)
 		return fixture, created
 	}
+	conflicting := `{"version":2,"candidates":[{"candidate":"mcpservers/docs","verdict":"new","suggestion":"keep","reason":"fine"},{"candidate":"rules/go","verdict":"duplicate","related":["organizations.acme.rules.go"],"suggestion":"drop","reason":"said"}],"units":[
+	 {"id":"loose-errors","kind":"rules","from":[{"candidate":"rules/instructions","lines":"1, 3"}],"shape":"always","verdict":"contradicts","related":["organizations.acme.rules.go"],"quotes":[{"address":"organizations.acme.rules.go","text":"Two-line errors."}],"suggestion":"keep","reason":"the project wants it otherwise"}]}`
+	resolve := func(t *testing.T, proposalPath string, resolution string) {
+		t.Helper()
+		edited, err := proposal.Load(proposalPath)
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+		for index := range edited.Candidates {
+			if edited.Candidates[index].Conflict != nil {
+				edited.Candidates[index].Conflict.Resolution = resolution
+			}
+		}
+		_ = edited.WriteFolder(proposalPath)
+	}
+	t.Run("a conflict blocks propose until it is resolved, and an override names what it replaces", func(t *testing.T) {
+		fixture, created := prepare(t)
+		fixture.judge = &fake.Judge{Answers: []string{conflicting}}
+		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		if err != nil {
+			t.Fatalf("distill: %v", err)
+		}
+		var unit proposal.Candidate
+		for _, candidate := range distilled.Proposal.Candidates {
+			if candidate.ID == "loose-errors" {
+				unit = candidate
+			}
+		}
+		if unit.Include || unit.Conflict == nil || strings.Join(unit.Conflict.With, ",") != "organizations.acme.rules.go" || unit.Conflict.Resolution != "" {
+			t.Fatalf("unit %+v conflict %+v", unit, unit.Conflict)
+		}
+		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.File})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "rules/loose-errors conflicts with organizations.acme.rules.go and is not resolved") {
+			t.Fatalf("unresolved: %v", err)
+		}
+		resolve(t, distilled.File, "override")
+		result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.File})
+		if err != nil {
+			t.Fatalf("override: %v", err)
+		}
+		published := fixture.repository.Published[created.Remote+"#"+result.Branch]
+		content, _ := os.ReadFile(filepath.Join(published, "declarations", "projects", "shop", "rules", "loose-errors.md"))
+		if string(content) != "This replaces `organizations.acme.rules.go` where the two disagree.\n\n# Shop\n\nBe brief.\n" {
+			t.Fatalf("override content %q", content)
+		}
+		if !strings.Contains(fixture.host.PullRequests[0].Body, "conflict with organizations.acme.rules.go, resolved override: the project wants it otherwise") {
+			t.Fatalf("body %q", fixture.host.PullRequests[0].Body)
+		}
+	})
+	t.Run("an override of a required declaration is refused", func(t *testing.T) {
+		fixture, created := prepare(t)
+		required := filepath.Join(created.Connected.OrgClonePath, "declarations", "rules", "go.md")
+		_ = os.WriteFile(required, []byte("---\nenforcement: required\n---\nTwo-line errors.\n"), 0o644)
+		fixture.judge = &fake.Judge{Answers: []string{conflicting}}
+		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		if err != nil {
+			t.Fatalf("distill: %v", err)
+		}
+		resolve(t, distilled.File, "override")
+		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.File})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "rules/loose-errors cannot override organizations.acme.rules.go, which is required") {
+			t.Fatalf("required: %v", err)
+		}
+	})
+	t.Run("units the distiller cut out replace their candidates and are compared like them", func(t *testing.T) {
+		fixture, _ := prepare(t)
+		units := `{"version":2,"candidates":[{"candidate":"mcpservers/docs","verdict":"new","suggestion":"keep","reason":"fine"}],"units":[
+		 {"id":"shop-title","kind":"rules","from":[{"candidate":"rules/instructions","lines":"1"}],"shape":"always","verdict":"new","suggestion":"drop","reason":"a title"},
+		 {"id":"brevity","kind":"rules","from":[{"candidate":"rules/instructions","lines":"3"}],"shape":"always","verdict":"new","suggestion":"keep","reason":"the project's own"},
+		 {"id":"errors","kind":"rules","from":[{"candidate":"rules/go","lines":"1"}],"shape":"always","verdict":"duplicate","related":["organizations.acme.rules.go"],"suggestion":"drop","reason":"the organisation says it"}]}`
+		fixture.judge = &fake.Judge{Answers: []string{units}}
+		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		if err != nil || result.Proposal.Judge.Status != "answered" {
+			t.Fatalf("judge %+v err %v", result.Proposal.Judge, err)
+		}
+		placed := map[string]proposal.Candidate{}
+		for _, candidate := range result.Proposal.Candidates {
+			placed[candidate.Kind+"/"+candidate.ID] = candidate
+		}
+		if _, found := placed["rules/instructions"]; found || placed["rules/brevity"].Files["brevity.md"] != "Be brief.\n" || placed["rules/brevity"].Judge == nil || !placed["rules/brevity"].Include || placed["rules/shop-title"].Include {
+			t.Fatalf("placed %+v", placed)
+		}
+		if placed["rules/errors"].Compared.Verdict != "identical" {
+			t.Fatalf("the unit was not compared: %+v", placed["rules/errors"].Compared)
+		}
+	})
 	t.Run("the judge's answer lands in the proposal and the pull request", func(t *testing.T) {
 		fixture, _ := prepare(t)
 		fixture.judge = &fake.Judge{Answers: []string{answer}}
@@ -1075,7 +1161,7 @@ func TestDistillWithTheJudge(t *testing.T) {
 			t.Fatalf("proposal %q", content)
 		}
 		proposed, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: result.File})
-		if err != nil || !strings.Contains(fixture.host.PullRequests[0].Body, "| the judge |") || !strings.Contains(fixture.host.PullRequests[0].Body, "| mcpservers | docs | organizations.acme |  | new | lift: everyone reads the docs |") || !strings.Contains(fixture.host.PullRequests[0].Body, "Judge: fake-judge, answered") || !strings.Contains(fixture.host.PullRequests[0].Body, "- rules/go: drop: the organisation says it") {
+		if err != nil || !strings.Contains(fixture.host.PullRequests[0].Body, "| the distiller |") || !strings.Contains(fixture.host.PullRequests[0].Body, "| mcpservers | docs | organizations.acme |  | new | lift: everyone reads the docs |") || !strings.Contains(fixture.host.PullRequests[0].Body, "Distiller: fake-judge, answered") || !strings.Contains(fixture.host.PullRequests[0].Body, "- rules/go: drop: the organisation says it") {
 			t.Fatalf("proposed %+v err %v body %q", proposed, err, fixture.host.PullRequests[0].Body)
 		}
 	})

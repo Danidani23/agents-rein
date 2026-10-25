@@ -14,11 +14,12 @@ import (
 
 // Entry is one declaration an organisation already has.
 type Entry struct {
-	Address  string
-	Level    string
-	Kind     string
-	ID       string
-	Identity string
+	Address     string
+	Level       string
+	Kind        string
+	ID          string
+	Identity    string
+	Enforcement string
 }
 
 // Catalogue is every declaration of an org repository, for the comparison.
@@ -114,7 +115,8 @@ func (catalogue *Catalogue) add(levelPath string, kind string, id string, files 
 	if err != nil {
 		return
 	}
-	catalogue.Entries = append(catalogue.Entries, Entry{Address: level.String() + "." + kind + "." + id, Level: level.String(), Kind: kind, ID: id, Identity: Identity(kind, files)})
+	selectors, _ := declaration.SelectorsOf(kind, files)
+	catalogue.Entries = append(catalogue.Entries, Entry{Address: level.String() + "." + kind + "." + id, Level: level.String(), Kind: kind, ID: id, Identity: Identity(kind, files), Enforcement: selectors.Enforcement})
 }
 
 // Compare gives every candidate its verdict against the catalogue: identical

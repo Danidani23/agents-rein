@@ -184,7 +184,7 @@ func isolate(t *testing.T, login string) (reinHome string) {
 }
 
 // stubJudgeAnswer is claude's JSON envelope around a judge answer.
-const stubJudgeAnswer = `{"result":"{\"version\":1,\"candidates\":[{\"candidate\":\"rules/go\",\"verdict\":\"new\",\"suggestion\":\"keep\",\"reason\":\"fine\"},{\"candidate\":\"rules/instructions\",\"verdict\":\"new\",\"suggestion\":\"keep\",\"reason\":\"fine\"}]}","is_error":false}`
+const stubJudgeAnswer = `{"result":"{\"version\":2,\"candidates\":[{\"candidate\":\"rules/go\",\"verdict\":\"new\",\"suggestion\":\"keep\",\"reason\":\"fine\"},{\"candidate\":\"rules/instructions\",\"verdict\":\"new\",\"suggestion\":\"keep\",\"reason\":\"fine\"}]}","is_error":false}`
 
 func scratchOrgRepository(t *testing.T) string {
 	t.Helper()
@@ -352,7 +352,7 @@ func TestWiring(t *testing.T) {
 			t.Fatalf("the binding was not pushed")
 		}
 		code, out, errOut = run("distill", "--path", project)
-		if code != cli.ExitWorked || !strings.Contains(out, "distilled 2 candidates for organizations.acme.projects.shop") || !strings.Contains(out, "rules/go") || !strings.Contains(out, "written to "+filepath.Join(project, ".rein", "proposals", "proposal-")) || !strings.Contains(out, "judge: agent-cli:claude answered, conversation ") {
+		if code != cli.ExitWorked || !strings.Contains(out, "distilled 2 candidates for organizations.acme.projects.shop") || !strings.Contains(out, "rules/go") || !strings.Contains(out, "written to "+filepath.Join(project, ".rein", "proposals", "proposal-")) || !strings.Contains(out, "distiller: agent-cli:claude answered, conversation ") {
 			t.Fatalf("distill: code %d out %q err %q", code, out, errOut)
 		}
 		ignore, _ = os.ReadFile(filepath.Join(project, ".gitignore"))

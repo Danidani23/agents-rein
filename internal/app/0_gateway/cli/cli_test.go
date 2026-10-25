@@ -672,9 +672,9 @@ func TestProposePendingFile(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(home, "CLAUDE.md"), []byte("be brief"), 0o644)
 	orchestrator, _ := fixture.orchestrate()
 	_, _, _ = orchestrator.Snapshots.Take("claude-code", "organizations.acme.projects.shop", home, []string{"CLAUDE.md"})
-	fixture.judge = &fake.Judge{Answers: []string{`{"version":1,"candidates":[{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"user","reason":"personal"}]}`}}
+	fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"user","reason":"personal"}]}`}}
 	code, out, errOut := fixture.run("distill", "--project", "shop")
-	if code != ExitWorked || !strings.Contains(out, "judge: new; lift to organizations.acme.users.danidani23: personal") {
+	if code != ExitWorked || !strings.Contains(out, "distiller: new; lift to organizations.acme.users.danidani23: personal") {
 		t.Fatalf("distill: code %d out %q err %q", code, out, errOut)
 	}
 	file := ""
@@ -703,25 +703,39 @@ func TestDistillJudgeFlags(t *testing.T) {
 	orchestrator, _ := fixture.orchestrate()
 	_, _, _ = orchestrator.Snapshots.Take("claude-code", "organizations.acme.projects.shop", home, []string{"CLAUDE.md"})
 	code, out, _ := fixture.run("distill", "--project", "shop")
-	if code != ExitWorked || !strings.Contains(out, "judge: fake-judge skipped: no judge in this test") {
+	if code != ExitWorked || !strings.Contains(out, "distiller: fake-judge skipped: no judge in this test") {
 		t.Fatalf("code %d out %q", code, out)
 	}
-	fixture.judge = &fake.Judge{Answers: []string{`{"version":1,"candidates":[{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"organization","reason":"general"}]}`}}
+	fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"organization","reason":"general"}]}`}}
 	code, out, _ = fixture.run("distill", "--project", "shop", "--force")
-	if code != ExitWorked || !strings.Contains(out, "judge: new; lift to organizations.acme: general") || !strings.Contains(out, "judge: fake-judge answered, conversation fake-session") {
+	if code != ExitWorked || !strings.Contains(out, "distiller: new; lift to organizations.acme: general") || !strings.Contains(out, "distiller: fake-judge answered, conversation fake-session") {
 		t.Fatalf("code %d out %q", code, out)
 	}
-	code, out, _ = fixture.run("distill", "--project", "shop", "--judge", "none", "--force")
-	if code != ExitWorked || !strings.Contains(out, "judge: fake-judge skipped: not asked") || strings.Contains(out, "asking the judge") {
+	code, out, _ = fixture.run("distill", "--project", "shop", "--distiller", "none", "--force")
+	if code != ExitWorked || !strings.Contains(out, "distiller: fake-judge skipped: not asked") || strings.Contains(out, "asking the distiller") {
 		t.Fatalf("code %d out %q", code, out)
 	}
 	code, out, errOut := fixture.run("distill", "--project", "shop", "--dry-run")
 	if code != ExitWorked || !strings.Contains(out, "# Candidates") || !strings.Contains(out, "## rules/instructions") || !strings.Contains(errOut, "dry run") {
 		t.Fatalf("code %d out %q err %q", code, out, errOut)
 	}
-	code, _, errOut = fixture.run("distill", "--project", "shop", "--judge", "oracle")
-	if code != ExitRefused || !strings.Contains(errOut, "not agent-cli or none") {
+	code, _, errOut = fixture.run("distill", "--project", "shop", "--distiller", "oracle")
+	if code != ExitRefused || !strings.Contains(errOut, `--distiller "oracle" is not agent-cli or none`) {
 		t.Fatalf("code %d err %q", code, errOut)
+	}
+	// --judge, the flag's old name, still works
+	code, out, _ = fixture.run("distill", "--project", "shop", "--judge", "none", "--force")
+	if code != ExitWorked || !strings.Contains(out, "distiller: fake-judge skipped: not asked") {
+		t.Fatalf("old flag: code %d out %q", code, out)
+	}
+	// a conflict is counted, and the next step is to resolve it
+	_, orgClonePath, _ := orchestrator.Organizations.Lookup("acme")
+	_ = os.MkdirAll(filepath.Join(orgClonePath, "declarations", "rules"), 0o755)
+	_ = os.WriteFile(filepath.Join(orgClonePath, "declarations", "rules", "style.md"), []byte("Be verbose.\n"), 0o644)
+	fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[{"candidate":"rules/instructions","verdict":"contradicts","related":["organizations.acme.rules.style"],"quotes":[{"address":"organizations.acme.rules.style","text":"Be verbose."}],"suggestion":"keep","reason":"the project wants it short"}]}`}}
+	code, out, _ = fixture.run("distill", "--project", "shop", "--force")
+	if code != ExitWorked || !strings.Contains(out, "1 in conflict, which rein propose waits for") || !strings.Contains(out, "resolve each conflict in proposal.yaml") {
+		t.Fatalf("conflict: code %d out %q", code, out)
 	}
 }
 
