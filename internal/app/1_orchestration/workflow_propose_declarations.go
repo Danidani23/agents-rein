@@ -80,9 +80,11 @@ type preparedProposal struct {
 	orgClonePath string
 	levelID      string
 	filesByLevel map[string]map[string]string
-	// documents are the documents' contents by path, for cloneFolder.
-	documents   map[string]string
-	cloneFolder string
+	// documents are the documents' contents by path, for cloneFolder, and
+	// documentFiles the candidate's file in the proposal that holds each.
+	documents     map[string]string
+	documentFiles map[string]string
+	cloneFolder   string
 	// recordFiles are the registry and project record files the label
 	// changes rewrite, by path under declarations/.
 	recordFiles map[string]string
@@ -236,14 +238,15 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 		return preparedProposal{}, refusal.New("the proposal cannot go as it is:\n  " + strings.Join(overrides, "\n  "))
 	}
 	prepared := preparedProposal{
-		ProposalPlan: ProposalPlan{Organization: organization.Slug, ID: document.ID},
-		document:     document,
-		organization: organization,
-		orgClonePath: orgClonePath,
-		levelID:      levelIDOf(document.DistilledFrom),
-		filesByLevel: map[string]map[string]string{},
-		documents:    map[string]string{},
-		recordFiles:  recordFiles,
+		ProposalPlan:  ProposalPlan{Organization: organization.Slug, ID: document.ID},
+		document:      document,
+		organization:  organization,
+		orgClonePath:  orgClonePath,
+		levelID:       levelIDOf(document.DistilledFrom),
+		filesByLevel:  map[string]map[string]string{},
+		documents:     map[string]string{},
+		documentFiles: map[string]string{},
+		recordFiles:   recordFiles,
 	}
 	prepared.Labels = labelChanges
 	if isFile {
@@ -262,6 +265,7 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 				for _, content := range candidate.Files {
 					prepared.documents[documentPath] = content
 				}
+				prepared.documentFiles[documentPath] = proposal.CandidateFileName(candidate)
 				prepared.Documents = append(prepared.Documents, documentPath)
 				continue
 			}
@@ -302,7 +306,7 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 		for _, documentPath := range prepared.Documents {
 			_, err := os.Stat(filepath.Join(prepared.cloneFolder, filepath.FromSlash(documentPath)))
 			if err == nil {
-				return preparedProposal{}, refusal.New(fmt.Sprintf("%s exists in the clone; change the document's path in proposal.yaml, or merge the text by hand", documentPath))
+				return preparedProposal{}, refusal.New(fmt.Sprintf("%s exists in the clone; change path in %s, or merge the text by hand", documentPath, prepared.documentFiles[documentPath]))
 			}
 		}
 	}
@@ -350,7 +354,7 @@ func loadProposal(services Services, request ProposeRequest) (document proposal.
 			return proposal.Proposal{}, false, refusal.New(err.Error())
 		}
 		if request.Level != "" {
-			return proposal.Proposal{}, false, refusal.New("a proposal says where each candidate goes; edit its level fields in proposal.yaml instead of --level")
+			return proposal.Proposal{}, false, refusal.New("a proposal says where each candidate goes; edit level in each candidate's file instead of --level")
 		}
 		return document, true, nil
 	}

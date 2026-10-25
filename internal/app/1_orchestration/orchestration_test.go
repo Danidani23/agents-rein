@@ -991,7 +991,7 @@ func TestProposeDeclarations(t *testing.T) {
 			t.Fatalf("broken: %v", err)
 		}
 		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: brokenPath, Level: "organizations.acme"})
-		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "instead of --level") {
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "edit level in each candidate's file instead of --level") {
 			t.Fatalf("level with a file: %v", err)
 		}
 		bad := t.TempDir()
@@ -1762,7 +1762,7 @@ func TestProposeDocuments(t *testing.T) {
 		_ = os.MkdirAll(filepath.Join(folder, "docs"), 0o755)
 		_ = os.WriteFile(filepath.Join(folder, "docs", "overview.md"), []byte("mine"), 0o644)
 		_, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.File})
-		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "docs/overview.md exists in the clone; change the document's path in proposal.yaml, or merge the text by hand") || len(fixture.host.PullRequests) != 0 {
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "docs/overview.md exists in the clone; change path in document_overview.yaml, or merge the text by hand") || len(fixture.host.PullRequests) != 0 {
 			t.Fatalf("over a file: %v", err)
 		}
 	})
