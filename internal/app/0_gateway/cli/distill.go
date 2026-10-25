@@ -27,8 +27,8 @@ func newDistillCommand(environment *commandEnvironment) *cobra.Command {
 			"written as one proposal folder, a YAML file per candidate with where it goes and its text,\n" +
 			"beside proposal.yaml, under .rein/proposals/ of the project's folder, or under\n" +
 			"~/.rein/proposals/pending/ for your agent's home. Review and edit it, then rein propose. A\n" +
-			"distiller that fails writes nothing, so the next distill starts fresh. Nothing is written\n" +
-			"into the org repository.",
+			"distiller that fails or is not there writes nothing, so the next distill starts fresh;\n" +
+			"--distiller none takes rein's own cut alone. Nothing is written into the org repository.",
 		Example: "  rein distill\n  rein distill --project shop\n  rein distill --home\n  rein distill --snapshot ~/.rein/snapshots/claude-code-20261019-093000.json",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {

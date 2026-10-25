@@ -608,17 +608,17 @@ func TestDistill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("snapshot: %v", err)
 	}
-	code, out, errOut := fixture.run("distill", "--project", "shop")
+	code, out, errOut := fixture.run("distill", "--project", "shop", "--distiller", "none")
 	for _, expected := range []string{"  ✓ reading the snapshot (", "  ✓ writing the proposal (", "distilled 1 candidates for organizations.acme.projects.shop", "new        rules/instructions", "1 new, 0 identical", "written to " + filepath.Join(home, ".rein", "proposals", "proposal-"), "next: review and edit it, then rein propose"} {
 		if code != ExitWorked || !strings.Contains(out, expected) {
 			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 		}
 	}
-	code, _, errOut = fixture.run("distill", "--project", "shop")
+	code, _, errOut = fixture.run("distill", "--project", "shop", "--distiller", "none")
 	if code != ExitRefused || !strings.Contains(errOut, "is pending at") || !strings.Contains(errOut, "--force") {
 		t.Fatalf("pending twice: code %d err %q", code, errOut)
 	}
-	code, _, errOut = fixture.run("distill", "--project", "shop", "--force")
+	code, _, errOut = fixture.run("distill", "--project", "shop", "--force", "--distiller", "none")
 	if code != ExitWorked {
 		t.Fatalf("forced: code %d err %q", code, errOut)
 	}
@@ -702,8 +702,13 @@ func TestDistillJudgeFlags(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(home, "CLAUDE.md"), []byte("be brief"), 0o644)
 	orchestrator, _ := fixture.orchestrate()
 	_, _, _ = orchestrator.Snapshots.Take("claude-code", "organizations.acme.projects.shop", home, []string{"CLAUDE.md"})
-	code, out, _ := fixture.run("distill", "--project", "shop")
-	if code != ExitWorked || !strings.Contains(out, "distiller: fake-judge skipped: no judge in this test") {
+	// a distiller that is not there refuses, naming the way without it (Q42)
+	code, _, errOut := fixture.run("distill", "--project", "shop")
+	if code != ExitRefused || !strings.Contains(errOut, "the distiller fake-judge is not available: no judge in this test") || !strings.Contains(errOut, "--distiller none") {
+		t.Fatalf("code %d err %q", code, errOut)
+	}
+	code, out, _ := fixture.run("distill", "--project", "shop", "--distiller", "none")
+	if code != ExitWorked || !strings.Contains(out, "distiller: fake-judge skipped: not asked") {
 		t.Fatalf("code %d out %q", code, out)
 	}
 	fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"organization","reason":"general"}]}`}}
@@ -715,7 +720,7 @@ func TestDistillJudgeFlags(t *testing.T) {
 	if code != ExitWorked || !strings.Contains(out, "distiller: fake-judge skipped: not asked") || strings.Contains(out, "asking the distiller") {
 		t.Fatalf("code %d out %q", code, out)
 	}
-	code, out, errOut := fixture.run("distill", "--project", "shop", "--dry-run")
+	code, out, errOut = fixture.run("distill", "--project", "shop", "--dry-run")
 	if code != ExitWorked || !strings.Contains(out, "# Candidates") || !strings.Contains(out, "## rules/instructions") || !strings.Contains(errOut, "dry run") {
 		t.Fatalf("code %d out %q err %q", code, out, errOut)
 	}

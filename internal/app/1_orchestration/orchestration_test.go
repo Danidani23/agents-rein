@@ -730,7 +730,7 @@ func TestDistillHarness(t *testing.T) {
 		if len(before.Clones) != 1 || before.Clones[0].Snapshot != "snapshot not distilled yet; rein distill" {
 			t.Fatalf("status before distill %+v", before.Clones)
 		}
-		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Directory: folder})
+		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Judge: "none", Directory: folder})
 		if err != nil || result.Level != "organizations.acme.projects.shop" || len(result.Proposal.Candidates) != 3 || len(result.Proposal.Skipped) != 1 || result.Proposal.Snapshot.Path != snapshotPath || len(result.Proposal.ID) != 12 || result.Proposal.Status != proposal.StatusPending {
 			t.Fatalf("result %+v err %v", result, err)
 		}
@@ -757,11 +757,11 @@ func TestDistillHarness(t *testing.T) {
 		if !strings.Contains(string(ignore), "\n.rein/\n") {
 			t.Fatalf("gitignore %q", ignore)
 		}
-		_, err = fixture.orchestrator().DistillHarness(DistillRequest{Directory: folder})
+		_, err = fixture.orchestrator().DistillHarness(DistillRequest{Judge: "none", Directory: folder})
 		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "is pending at "+result.File) {
 			t.Fatalf("second distill: %v", err)
 		}
-		again, err := fixture.orchestrator().DistillHarness(DistillRequest{Directory: folder, Force: true})
+		again, err := fixture.orchestrator().DistillHarness(DistillRequest{Judge: "none", Directory: folder, Force: true})
 		if err != nil || again.File != result.File {
 			t.Fatalf("forced: %+v err %v", again, err)
 		}
@@ -777,11 +777,11 @@ func TestDistillHarness(t *testing.T) {
 	t.Run("the home becomes the user's level under the home's pending folder, a named snapshot its own, and the refusals", func(t *testing.T) {
 		fixture, _ := withTeam(t)
 		snapshotPath := claudeCodeSnapshot(t, fixture, "", "")
-		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Home: true})
+		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Judge: "none", Home: true})
 		if err != nil || result.Level != "organizations.acme.users.danidani23" || len(result.Proposal.Candidates) != 3 || filepath.Dir(result.File) != filepath.Join(fixture.home, "proposals", "pending") {
 			t.Fatalf("result %+v err %v", result, err)
 		}
-		result, err = fixture.orchestrator().DistillHarness(DistillRequest{SnapshotPath: snapshotPath, Force: true})
+		result, err = fixture.orchestrator().DistillHarness(DistillRequest{Judge: "none", SnapshotPath: snapshotPath, Force: true})
 		if err != nil || result.Level != "organizations.acme.users.danidani23" {
 			t.Fatalf("result %+v err %v", result, err)
 		}
@@ -805,7 +805,7 @@ func TestProposeDeclarations(t *testing.T) {
 		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "rules", "go.md")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("Two-line errors.\n"), 0o644)
-		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Judge: "none", Project: "shop"})
 		if err != nil {
 			t.Fatalf("distill: %v", err)
 		}
@@ -846,7 +846,7 @@ func TestProposeDeclarations(t *testing.T) {
 		clone := projectClone(t)
 		_, _ = fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: clone, Project: "bound"})
 		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.bound", clone)
-		boundProposal, _ := fixture.orchestrator().DistillHarness(DistillRequest{Directory: clone})
+		boundProposal, _ := fixture.orchestrator().DistillHarness(DistillRequest{Judge: "none", Directory: clone})
 		proposed, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: boundProposal.File})
 		if err != nil {
 			t.Fatalf("propose bound: %v", err)
@@ -1020,7 +1020,7 @@ func TestProposeDeclarations(t *testing.T) {
 		fixture, created := withTeam(t)
 		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
 		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", "")
-		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Judge: "none", Project: "shop"})
 		if err != nil {
 			t.Fatalf("distill: %v", err)
 		}
@@ -1178,13 +1178,14 @@ func TestDistillWithTheJudge(t *testing.T) {
 			t.Fatalf("proposed %+v err %v body %q", proposed, err, fixture.host.PullRequests[0].Body)
 		}
 	})
-	t.Run("an unavailable judge is reported and skipped, none skips it, a dry run writes nothing", func(t *testing.T) {
+	t.Run("an unavailable judge refuses and writes nothing, none skips it, a dry run writes nothing", func(t *testing.T) {
 		fixture, _ := prepare(t)
 		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
-		if err != nil || result.Proposal.Judge.Status != "skipped" || !strings.Contains(result.Proposal.Judge.Problems[0], "no judge in this test") {
+		if err == nil || !strings.Contains(err.Error(), "the distiller fake-judge is not available: no judge in this test") || !strings.Contains(err.Error(), "--distiller none") || result.File != "" {
 			t.Fatalf("result %+v err %v", result.Proposal.Judge, err)
 		}
-		result, err = fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop", Judge: "none", Force: true})
+		// nothing is pending after the refusal, so no --force is needed
+		result, err = fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop", Judge: "none"})
 		if err != nil || result.Proposal.Judge.Status != "skipped" || result.Proposal.Judge.Problems[0] != "not asked" || result.Brief != "" {
 			t.Fatalf("result %+v err %v", result.Proposal.Judge, err)
 		}

@@ -144,10 +144,10 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 				if len(candidates) == 0 {
 					return nil
 				}
+				// a distiller that is not there is said, never skipped in silence (Q42)
 				reason, available := services.Judge.Available()
 				if !available {
-					document.Judge = distill.JudgeRun{Backend: services.Judge.Name(), Status: distill.JudgeSkipped, Problems: []string{reason}}
-					return nil
+					return refusal.New(fmt.Sprintf("the distiller %s is not available: %s; install or log in to it, or take rein's own cut alone with --distiller none", services.Judge.Name(), reason))
 				}
 				document.Judge, candidates = services.Judge.JudgeCandidates(level, candidates, corpus, request.Model)
 				// a failed distiller leaves nothing behind, so the next distill starts fresh
