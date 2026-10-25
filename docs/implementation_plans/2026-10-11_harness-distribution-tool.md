@@ -2244,3 +2244,12 @@ writes is read from the next session on, not in the same one.
   one YAML file per candidate beside `proposal.yaml`, version 3; deleting a file leaves its
   candidate out; the folders of version 2 still read. `task rein:check` green, `go vet` for
   Windows green. Left: the website distilled again.
+- (2026-10-25) P2.44's gate, second run on the website: 9 minutes 34 seconds on the developer's
+  default model, 29 candidates from units, the repeats dropped against what they repeat, three
+  conflicts holding `propose`, one document with its pointer rule, one label. Decided the same
+  day (Q41 RD2): for a project the brief gains "About the project", the README's first 8,000
+  characters cut at a line and the names of up to 300 tracked files, never their contents, for
+  the labels and the documents' paths. Test first; `task rein:check` green. Seen in that run
+  and not yet fixed: a retried answer still reports the first answer's problems; the notes and
+  the next step still send conflicts to `proposal.yaml`; the distiller assigned
+  `kind:infrastructure` to a project that carries `kind:static-site`, a category of one value.
