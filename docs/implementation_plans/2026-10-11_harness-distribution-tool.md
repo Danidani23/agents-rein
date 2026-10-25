@@ -2220,3 +2220,15 @@ writes is read from the next session on, not in the same one.
   the document into the clone, never over a file it has, leaves it to be committed, sends the
   pointer in the pull request and names the document there; `sync` names a pointer whose
   document the clone lacks. Test first; `task rein:check` green.
+- (2026-10-25) P2.44 step (g) done, the last of its steps: for a project the brief names the
+  labels the project carries and asks for a review in `labels`: `assign` a registry label the
+  project plainly has, `add` a label the registry lacks, with its meaning, only when an entry
+  or unit lifted in the same answer uses it, `redundant` for one that duplicates another,
+  each with its reason. Each becomes a candidate of kind `labels`, `label_<id>.yaml` in the
+  proposal, an assignment at the project's level, an addition and a flag at the
+  organisation's; a flag never goes. `propose` applies additions first, then assignments, to
+  a copy of the registry and of the project records, checks the candidates' labels against
+  that registry and the single-valued categories, and writes the registry and record files
+  on the pull request's branch, the changes listed in the plan and the body. Test first;
+  `task rein:check` green. Left: P2.44's gate, the website distilled again with a real model.
+
