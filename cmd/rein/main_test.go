@@ -34,6 +34,10 @@ func TestMain(tests *testing.M) {
 			_, _ = io.Copy(io.Discard, os.Stdin)
 			fmt.Print(stubJudgeAnswer)
 		}
+		// the arguments it was started with, for a test to read
+		if recorded := os.Getenv("REIN_TEST_CLAUDE_ARGUMENTS"); recorded != "" {
+			_ = os.WriteFile(recorded, []byte(strings.Join(os.Args[1:], " ")), 0o644)
+		}
 		os.Exit(0)
 	}
 	folder, err := claudeStub()
@@ -351,7 +355,13 @@ func TestWiring(t *testing.T) {
 		if git("--git-dir", remote, "rev-list", "--count", "main") != "4" {
 			t.Fatalf("the binding was not pushed")
 		}
-		code, out, errOut = run("distill", "--path", project)
+		arguments := filepath.Join(t.TempDir(), "claude-arguments")
+		t.Setenv("REIN_TEST_CLAUDE_ARGUMENTS", arguments)
+		code, out, errOut = run("distill", "--path", project, "--model", "sonnet")
+		passed, _ := os.ReadFile(arguments)
+		if !strings.Contains(string(passed), "--model sonnet") {
+			t.Fatalf("claude was started with %q, without the model", passed)
+		}
 		if code != cli.ExitWorked || !strings.Contains(out, "distilled 2 candidates for organizations.acme.projects.shop") || !strings.Contains(out, "rules/go") || !strings.Contains(out, "written to "+filepath.Join(project, ".rein", "proposals", "proposal-")) || !strings.Contains(out, "distiller: agent-cli:claude answered, conversation ") {
 			t.Fatalf("distill: code %d out %q err %q", code, out, errOut)
 		}

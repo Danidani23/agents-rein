@@ -39,12 +39,12 @@ func (service Service) Name() string {
 // the units cut out in place of the candidates they came from. The run says
 // what happened; a failed run returns the candidates as the mechanical pass
 // had them.
-func (service Service) JudgeCandidates(level string, candidates []distill.Candidate, corpus distill.Corpus) (distill.JudgeRun, []distill.Candidate) {
+func (service Service) JudgeCandidates(level string, candidates []distill.Candidate, corpus distill.Corpus, model string) (distill.JudgeRun, []distill.Candidate) {
 	run := distill.JudgeRun{Backend: service.Name(), Dropped: corpus.Dropped}
 	// the first line names the conversation in the agent's history
 	brief := fmt.Sprintf("rein distill, the distiller's brief for %s, %s\n\n", level, time.Now().Format("2006-01-02 15:04")) + distill.Brief(level, candidates, corpus)
 	for attempt := 0; attempt < 2; attempt++ {
-		text, session, err := service.Judge.Ask(brief)
+		text, session, err := service.Judge.Ask(brief, model)
 		run.Session = session
 		if err != nil {
 			run.Status = distill.JudgeFailed

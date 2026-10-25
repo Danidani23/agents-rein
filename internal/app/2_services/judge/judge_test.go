@@ -17,25 +17,25 @@ const good = `{"version":2,"candidates":[{"candidate":"rules/brief","verdict":"n
 func TestJudgeCandidates(t *testing.T) {
 	t.Run("a believed answer is applied", func(t *testing.T) {
 		backend := &fake.Judge{Answers: []string{good}}
-		run, items := Service{Judge: backend}.JudgeCandidates("organizations.acme", candidates(), distill.Corpus{})
+		run, items := Service{Judge: backend}.JudgeCandidates("organizations.acme", candidates(), distill.Corpus{}, "")
 		if run.Status != distill.JudgeAnswered || run.Backend != "fake-judge" || items[0].Judgement == nil || items[0].Judgement.Reason != "nothing like it" || len(backend.Briefs) != 1 {
 			t.Fatalf("run %+v judgement %+v", run, items[0].Judgement)
 		}
 	})
 	t.Run("a bad answer goes back once with the problems, then counts as failed", func(t *testing.T) {
 		backend := &fake.Judge{Answers: []string{"nonsense", good}}
-		run, _ := Service{Judge: backend}.JudgeCandidates("organizations.acme", candidates(), distill.Corpus{})
+		run, _ := Service{Judge: backend}.JudgeCandidates("organizations.acme", candidates(), distill.Corpus{}, "")
 		if run.Status != distill.JudgeAnswered || len(backend.Briefs) != 2 || !strings.Contains(backend.Briefs[1], "previous answer was not accepted") || !strings.Contains(backend.Briefs[1], "holds no JSON object") {
 			t.Fatalf("run %+v briefs %d", run, len(backend.Briefs))
 		}
 		backend = &fake.Judge{Answers: []string{"nonsense", `{"version":2,"candidates":[]}`}}
-		run, items := Service{Judge: backend}.JudgeCandidates("organizations.acme", candidates(), distill.Corpus{})
+		run, items := Service{Judge: backend}.JudgeCandidates("organizations.acme", candidates(), distill.Corpus{}, "")
 		if run.Status != distill.JudgeFailed || !strings.Contains(strings.Join(run.Problems, ";"), "rules/brief is not answered") || items[0].Judgement != nil {
 			t.Fatalf("run %+v", run)
 		}
 	})
 	t.Run("a backend error and an unavailable backend", func(t *testing.T) {
-		run, _ := Service{Judge: &fake.Judge{}}.JudgeCandidates("organizations.acme", candidates(), distill.Corpus{})
+		run, _ := Service{Judge: &fake.Judge{}}.JudgeCandidates("organizations.acme", candidates(), distill.Corpus{}, "")
 		if run.Status != distill.JudgeFailed || !strings.Contains(run.Problems[0], "no answer left") {
 			t.Fatalf("run %+v", run)
 		}

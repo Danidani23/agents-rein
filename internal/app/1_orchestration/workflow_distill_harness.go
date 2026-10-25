@@ -28,6 +28,8 @@ type DistillRequest struct {
 	// Judge is "agent-cli" or empty for the wired backend, "none" to skip
 	// the model pass.
 	Judge string
+	// Model names the distiller's model, "" for the backend's default.
+	Model string
 	// DryRun stops before asking the judge and before writing anything,
 	// with the brief in the result.
 	DryRun bool
@@ -129,7 +131,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 	}
 	if judging && !request.DryRun {
 		steps = append(steps, Step{
-			Name: "asking the distiller " + services.Judge.Name() + ", which takes a minute or more",
+			Name: "asking the distiller " + services.Judge.Name() + ", which can take several minutes",
 			Do: func() error {
 				if len(candidates) == 0 {
 					return nil
@@ -139,7 +141,11 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 					document.Judge = distill.JudgeRun{Backend: services.Judge.Name(), Status: distill.JudgeSkipped, Problems: []string{reason}}
 					return nil
 				}
-				document.Judge, candidates = services.Judge.JudgeCandidates(level, candidates, corpus)
+				document.Judge, candidates = services.Judge.JudgeCandidates(level, candidates, corpus, request.Model)
+				// a failed distiller leaves nothing behind, so the next distill starts fresh
+				if document.Judge.Status == distill.JudgeFailed {
+					return refusal.New(fmt.Sprintf("the distiller %s failed, so nothing was written: %s; distill again, name a faster model with --model, or take rein's own cut alone with --distiller none", document.Judge.Backend, strings.Join(document.Judge.Problems, "; ")))
+				}
 				// the units the distiller cut out are compared like any candidate
 				distill.Compare(candidates, catalogue, level)
 				return nil

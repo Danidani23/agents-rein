@@ -24,10 +24,11 @@ func newDistillCommand(environment *commandEnvironment) *cobra.Command {
 			"and hooks become a permission set and hooks, .mcp.json becomes tool servers, with any literal\n" +
 			"secret replaced by a REIN_ reference. Each candidate is compared with what the organisation\n" +
 			"already declares, by content and by id; the distiller says where each belongs; and everything is\n" +
-			"written as one proposal folder, proposal.yaml with every decision beside one entry per\n" +
-			"candidate with its content, under .rein/proposals/ of the project's folder, or under\n" +
-			"~/.rein/proposals/pending/ for your agent's home. Review and edit it, then rein propose.\n" +
-			"Nothing is written into the org repository.",
+			"written as one proposal folder, a YAML file per candidate with where it goes and its text,\n" +
+			"beside proposal.yaml, under .rein/proposals/ of the project's folder, or under\n" +
+			"~/.rein/proposals/pending/ for your agent's home. Review and edit it, then rein propose. A\n" +
+			"distiller that fails writes nothing, so the next distill starts fresh. Nothing is written\n" +
+			"into the org repository.",
 		Example: "  rein distill\n  rein distill --project shop\n  rein distill --home\n  rein distill --snapshot ~/.rein/snapshots/claude-code-20261019-093000.json",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
@@ -40,6 +41,7 @@ func newDistillCommand(environment *commandEnvironment) *cobra.Command {
 	command.Flags().BoolVar(&request.Home, "home", false, "distill your agent's home into your user level instead of a project")
 	command.Flags().StringVar(&request.SnapshotPath, "snapshot", "", "a snapshot file to distill, instead of the latest")
 	command.Flags().StringVar(&request.Judge, "distiller", "", "agent-cli to ask your agent's CLI, none to skip the model pass (default: the organisation's provider, else agent-cli)")
+	command.Flags().StringVar(&request.Model, "model", "", "the model the distiller asks, such as sonnet for a large harness (default: your agent's default)")
 	command.Flags().BoolVar(&request.DryRun, "dry-run", false, "print the brief that would go to the distiller and write nothing")
 	// --judge is what --distiller was called before the distiller had its name
 	command.Flags().StringVar(&request.Judge, "judge", "", "the old name of --distiller")

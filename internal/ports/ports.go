@@ -221,7 +221,7 @@ type Judge interface {
 	// Ask sends the brief and returns the answer's text, with the id of
 	// the conversation it ran as, "" when the backend keeps none, so a
 	// person can open it again.
-	Ask(brief string) (answer string, session string, err error)
+	Ask(brief string, model string) (answer string, session string, err error)
 }
 
 // MachineLock keeps two rein processes from changing this machine at once:

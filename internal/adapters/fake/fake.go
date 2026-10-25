@@ -590,6 +590,8 @@ type Judge struct {
 	Answers     []string
 	Unavailable string
 	Briefs      []string
+	// Models are the models asked for, one per brief.
+	Models []string
 }
 
 // Name is the fake's name.
@@ -606,8 +608,9 @@ func (judge *Judge) Available() (string, bool) {
 }
 
 // Ask records the brief and returns the next scripted answer.
-func (judge *Judge) Ask(brief string) (string, string, error) {
+func (judge *Judge) Ask(brief string, model string) (string, string, error) {
 	judge.Briefs = append(judge.Briefs, brief)
+	judge.Models = append(judge.Models, model)
 	if len(judge.Answers) == 0 {
 		return "", "", errors.New("fake judge has no answer left")
 	}

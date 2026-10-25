@@ -3,10 +3,12 @@ package claudecode
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/Danidani23/agents-rein/internal/adapters/execute"
 	"github.com/Danidani23/agents-rein/internal/ports"
@@ -42,20 +44,24 @@ type envelope struct {
 	Subtype string `json:"subtype"`
 }
 
+// judgeTimeout is how long the distiller may think: a large harness with
+// many units takes several minutes on a large model.
+const judgeTimeout = 15 * time.Minute
+
 // Ask runs claude -p with JSON output and returns the result text and the
 // session's id, which claude --resume opens again. It runs in an empty
 // folder without tools, so no project's instructions, hooks or tools
-// colour the verdict; a brief of many candidates takes a minute or more,
-// so the limit is the network one. Never --bare: it skips the login with
-// the hooks.
-func (Judge) Ask(brief string) (string, string, error) {
+// colour the verdict; model names the model, "" for the developer's
+// default. Never --bare: it skips the login with the hooks.
+func (Judge) Ask(brief string, model string) (string, string, error) {
 	scratch, err := os.MkdirTemp("", "rein-judge-*")
 	if err != nil {
 		return "", "", err
 	}
 	defer os.RemoveAll(scratch)
 	session := newSessionID()
-	result, err := execute.RunWith(execute.Options{Directory: scratch, Input: brief, Timeout: execute.NetworkTimeout}, "claude", "-p", "--output-format", "json", "--max-turns", "1", "--tools", "", "--session-id", session)
+	result, err := execute.RunWith(execute.Options{Directory: scratch, Input: brief, Timeout: judgeTimeout}, "claude", judgeArguments(model, session)...)
+	err = explainFailure(err)
 	var output envelope
 	parsed := json.Unmarshal([]byte(result.Stdout), &output) == nil
 	if err != nil {
@@ -74,6 +80,25 @@ func (Judge) Ask(brief string) (string, string, error) {
 		return "", session, fmt.Errorf("claude reported an error: %s", strings.TrimSpace(output.Result))
 	}
 	return output.Result, session, nil
+}
+
+// judgeArguments are claude's arguments for one brief: one turn, no tools,
+// JSON out, the session's id, and the model when one is named.
+func judgeArguments(model string, session string) []string {
+	arguments := []string{"-p", "--output-format", "json", "--max-turns", "1", "--tools", "", "--session-id", session}
+	if model != "" {
+		arguments = append(arguments, "--model", model)
+	}
+	return arguments
+}
+
+// explainFailure says a timeout as it is: claude had the brief and did not
+// answer in time, which a faster model or another try mends.
+func explainFailure(err error) error {
+	if errors.Is(err, execute.ErrTimedOut) {
+		return fmt.Errorf("claude did not answer within %s; distill again, or name a faster model with --model", judgeTimeout)
+	}
+	return err
 }
 
 // newSessionID is a fresh UUID, version 4, for claude --session-id.
