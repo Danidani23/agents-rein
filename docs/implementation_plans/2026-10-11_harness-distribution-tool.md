@@ -2266,3 +2266,6 @@ writes is read from the next session on, not in the same one.
   carried or assigned twice, so the distiller answers again; a pending proposal is refused
   right after the snapshot is read, before the distiller is asked. `task rein:check` green,
   `go vet` for Windows green. Left: P2.44's gate, the website distilled again.
+- (2026-10-25) Decided (Q45 j) and done, test first: `propose`'s refusals of a document over a
+  file the clone has and of `--level` on a proposal name the candidate's own file and its field,
+  `path` or `level`, no longer `proposal.yaml`. `task rein:check` green.
