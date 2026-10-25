@@ -142,7 +142,11 @@ func Brief(level string, candidates []Candidate, corpus Corpus) string {
 		if len(corpus.ProjectLabels) > 0 {
 			carried = strings.Join(corpus.ProjectLabels, ", ")
 		}
-		fmt.Fprintf(&brief, "Review the project's labels too, in `labels`, each with an `action`, the `label` as category:value and a one-sentence `reason`: `assign` a registry label the project plainly has but does not carry; `add` a label the registry lacks, with its `meaning`, only when an entry or unit you lift needs it in `applyIf` and no registry label fits; `redundant` for a registry label that says the same as another. The project carries %s.\n\n", carried)
+		fmt.Fprintf(&brief, "Review the project's labels too, in `labels`, each with an `action`, the `label` as category:value and a one-sentence `reason`: `assign` a registry label the project plainly has but does not carry; `add` a label the registry lacks, with its `meaning`, only when an entry or unit you lift needs it in `applyIf` and no registry label fits; `redundant` for a registry label that says the same as another. The project carries %s.", carried)
+		if len(corpus.SingleValued) > 0 {
+			fmt.Fprintf(&brief, " These categories take one value per project: %s.", strings.Join(corpus.SingleValued, ", "))
+		}
+		fmt.Fprintf(&brief, "\n\n")
 	}
 	fmt.Fprintf(&brief, "Every entry and every unit is judged:\n\n")
 	fmt.Fprintf(&brief, "- verdict: `new` when nothing existing covers it; `duplicate` when an existing declaration says the same; `overlaps` when an existing one covers part of it or says something similar; `contradicts` when following both is impossible.\n")
@@ -478,8 +482,9 @@ func documentProblems(unit Unit, label string, documents []string) (problems []s
 
 // labelProblems is everything wrong with the label suggestions: an unknown
 // action, a label that is not category:value, an assignment of a label the
-// registry lacks or the project carries, an addition the registry has, that
-// has no meaning, or that nothing lifted in the answer uses.
+// registry lacks or the project carries, or a second value of a category of
+// one value, an addition the registry has, that has no meaning, or that
+// nothing lifted in the answer uses.
 func labelProblems(answer Answer, corpus Corpus) (problems []string) {
 	lifted := map[string]bool{}
 	for _, entry := range answer.Candidates {
@@ -497,6 +502,8 @@ func labelProblems(answer Answer, corpus Corpus) (problems []string) {
 		}
 	}
 	seen := map[string]bool{}
+	// the label already assigned in this answer, by category
+	assigned := map[string]string{}
 	for _, suggestion := range answer.Labels {
 		label := fmt.Sprintf("label %s %s", suggestion.Action, suggestion.Label)
 		category, value, isLabel := strings.Cut(suggestion.Label, ":")
@@ -517,6 +524,16 @@ func labelProblems(answer Answer, corpus Corpus) (problems []string) {
 				problems = append(problems, fmt.Sprintf("%s: the project carries it", label))
 			case !inRegistry:
 				problems = append(problems, fmt.Sprintf("%s: the registry has no such label; add it instead", label))
+			case contains(corpus.SingleValued, category):
+				for _, carried := range corpus.ProjectLabels {
+					if strings.HasPrefix(carried, category+":") {
+						problems = append(problems, fmt.Sprintf("%s: %s takes one value and the project carries %s", label, category, carried))
+					}
+				}
+				if other, found := assigned[category]; found {
+					problems = append(problems, fmt.Sprintf("%s: %s takes one value and this answer assigns %s too", label, category, other))
+				}
+				assigned[category] = suggestion.Label
 			}
 		case LabelAdd:
 			if inRegistry {

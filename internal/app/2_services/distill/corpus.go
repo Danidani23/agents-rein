@@ -42,6 +42,9 @@ type Corpus struct {
 	// ProjectLabels are the labels the project carries, which the distiller
 	// reviews; nil when no project is distilled.
 	ProjectLabels []string
+	// SingleValued are the registry's categories of one value, of which a
+	// project carries one label at most.
+	SingleValued []string
 	// ProjectReadme is the first part of the project's README, and
 	// ProjectFiles the names of files its repository tracks, the first of
 	// ProjectFilesTotal: what the project is, for the labels and the

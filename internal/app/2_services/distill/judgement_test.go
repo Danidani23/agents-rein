@@ -292,6 +292,35 @@ func TestLabels(t *testing.T) {
 			t.Fatalf("missing %q in\n%s", expected, joined)
 		}
 	}
+	// a category of one value takes no second one, carried or assigned in the same answer
+	corpus.SingleValued = []string{"kind"}
+	if brief := Brief("organizations.acme.projects.shop", exampleCandidates(), corpus); !strings.Contains(brief, "These categories take one value per project: kind.") {
+		t.Fatalf("brief lacks the categories of one value:\n%s", brief)
+	}
+	second, _ := ParseAnswer(`{"version": 2,
+	"candidates": [
+	  {"candidate": "rules/go-testing", "verdict": "new", "suggestion": "keep", "reason": "x"},
+	  {"candidate": "rules/brief", "verdict": "new", "suggestion": "keep", "reason": "x"}],
+	"labels": [
+	  {"action": "assign", "label": "kind:web-app", "reason": "x"}]}`)
+	joined = strings.Join(Validate(second, exampleCandidates(), corpus), "\n")
+	if !strings.Contains(joined, "label assign kind:web-app: kind takes one value and the project carries kind:static-site") {
+		t.Fatalf("second value: %s", joined)
+	}
+	corpus.ProjectLabels = []string{}
+	two, _ := ParseAnswer(`{"version": 2,
+	"candidates": [
+	  {"candidate": "rules/go-testing", "verdict": "new", "suggestion": "keep", "reason": "x"},
+	  {"candidate": "rules/brief", "verdict": "new", "suggestion": "keep", "reason": "x"}],
+	"labels": [
+	  {"action": "assign", "label": "kind:web-app", "reason": "x"},
+	  {"action": "assign", "label": "kind:static-site", "reason": "x"},
+	  {"action": "assign", "label": "language:go", "reason": "x"},
+	  {"action": "assign", "label": "language:typescript", "reason": "x"}]}`)
+	joined = strings.Join(Validate(two, exampleCandidates(), corpus), "\n")
+	if !strings.Contains(joined, "label assign kind:static-site: kind takes one value and this answer assigns kind:web-app too") || strings.Contains(joined, "language") {
+		t.Fatalf("two values: %s", joined)
+	}
 	// without a project there are no project labels to review
 	if strings.Contains(Brief("organizations.acme.users.dani", exampleCandidates(), exampleCorpus()), "`assign`") {
 		t.Fatalf("labels reviewed without a project")
