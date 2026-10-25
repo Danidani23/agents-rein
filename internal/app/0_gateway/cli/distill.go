@@ -110,18 +110,20 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 	}
 	fmt.Fprintf(environment.out, "%d new, %d identical to an existing declaration, %d sharing an id with another level\n", counts[distill.VerdictNew], counts[distill.VerdictIdentical], counts[distill.VerdictSameID])
 	style := environment.style()
-	conflicts := 0
+	var conflicts []proposal.Candidate
 	for _, candidate := range document.Candidates {
 		if candidate.Conflict != nil {
-			conflicts++
+			conflicts = append(conflicts, candidate)
 		}
 	}
-	if conflicts > 0 {
-		fmt.Fprintf(environment.out, "%s\n", style.Yellow(fmt.Sprintf("%d in conflict, which rein propose waits for: drop, override or amend each", conflicts)))
-	}
 	fmt.Fprintf(environment.out, "\nwritten to %s\n", style.Bold(style.Green(result.File)))
-	if conflicts > 0 {
-		printNext(environment, "resolve each conflict in proposal.yaml, review the rest, then rein propose opens the pull request")
+	// the files in conflict close the output, each a full path the terminal opens
+	if len(conflicts) > 0 {
+		fmt.Fprintf(environment.out, "\n%s\n", style.Yellow(fmt.Sprintf("%d in conflict, which rein propose waits for: drop, override or amend each", len(conflicts))))
+		for _, candidate := range conflicts {
+			fmt.Fprintf(environment.out, "  %s  with %s\n", filepath.Join(result.File, proposal.CandidateFileName(candidate)), strings.Join(candidate.Conflict.With, ", "))
+		}
+		printNext(environment, "set conflict.resolution in each file in conflict, review the rest, then rein propose opens the pull request")
 		return nil
 	}
 	printNext(environment, "review and edit it, then rein propose opens the pull request")

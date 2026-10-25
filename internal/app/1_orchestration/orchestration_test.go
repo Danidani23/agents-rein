@@ -1097,6 +1097,9 @@ func TestDistillWithTheJudge(t *testing.T) {
 		if unit.Include || unit.Conflict == nil || strings.Join(unit.Conflict.With, ",") != "organizations.acme.rules.go" || unit.Conflict.Resolution != "" {
 			t.Fatalf("unit %+v conflict %+v", unit, unit.Conflict)
 		}
+		if !strings.Contains(strings.Join(unit.Notes, "\n"), "in conflict with organizations.acme.rules.go; set conflict.resolution in rule_loose-errors.yaml: drop, override or amend") {
+			t.Fatalf("notes %q", unit.Notes)
+		}
 		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.File})
 		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "rules/loose-errors conflicts with organizations.acme.rules.go and is not resolved") {
 			t.Fatalf("unresolved: %v", err)
@@ -1188,6 +1191,12 @@ func TestDistillWithTheJudge(t *testing.T) {
 		result, err = fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop", Judge: "none"})
 		if err != nil || result.Proposal.Judge.Status != "skipped" || result.Proposal.Judge.Problems[0] != "not asked" || result.Brief != "" {
 			t.Fatalf("result %+v err %v", result.Proposal.Judge, err)
+		}
+		// a pending proposal is refused before the distiller spends minutes on it (Q44)
+		fixture.judge = &fake.Judge{Answers: []string{answer}}
+		_, err = fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "is pending at") || len(fixture.judge.Briefs) != 0 {
+			t.Fatalf("pending: err %v, the distiller asked %d times", err, len(fixture.judge.Briefs))
 		}
 		before, _ := os.ReadDir(filepath.Join(fixture.home, "proposals", "pending"))
 		result, err = fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop", DryRun: true})

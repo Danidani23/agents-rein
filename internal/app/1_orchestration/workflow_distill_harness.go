@@ -71,6 +71,11 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 	var candidates []distill.Candidate
 	var corpus distill.Corpus
 	var catalogue distill.Catalogue
+	// the folder the proposal goes into: the project clone's, else the home's
+	folder := services.ProposalFiles.HomePendingFolder()
+	if stored[0].Project != "" && folderExists(stored[0].Folder) {
+		folder = proposalfiles.PendingFolderOf(stored[0].Folder)
+	}
 	judging := request.Judge != "none"
 	steps := []Step{
 		{
@@ -97,6 +102,14 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 				digest := proposal.DigestOf(contents...)
 				document.ID = digest[:12]
 				document.Snapshot = proposal.Snapshot{Path: stored[0].Path, SHA256: digest, TakenAt: stored[0].TakenAt}
+				// a pending proposal is refused before the distiller spends minutes on it (Q44)
+				if request.DryRun {
+					return nil
+				}
+				err := services.ProposalFiles.RefusePending(folder, document.ID, request.Force)
+				if err != nil {
+					return refusal.New(err.Error())
+				}
 				return nil
 			},
 		},
@@ -116,7 +129,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 				if err != nil {
 					return err
 				}
-				corpus.Labels = registryLabels(services, orgClonePath)
+				corpus.Labels, corpus.SingleValued = registryLabels(services, orgClonePath)
 				corpus.ProjectLabels = projectLabelsOf(services, orgClonePath, level)
 				// a document goes beside the clone's tracked Markdown, so only a project clone offers it
 				if stored[0].Project != "" && folderExists(stored[0].Folder) {
@@ -173,9 +186,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 				for _, candidate := range candidates {
 					document.Candidates = append(document.Candidates, placeJudged(services, orgClonePath, organization, level, candidate))
 				}
-				folder := services.ProposalFiles.HomePendingFolder()
 				if stored[0].Project != "" && folderExists(stored[0].Folder) {
-					folder = proposalfiles.PendingFolderOf(stored[0].Folder)
 					_, err := services.WorkingCopy.WriteIgnoreBlock(stored[0].Folder, ignoreEntries(services))
 					if err != nil {
 						return err
@@ -266,7 +277,7 @@ func placeJudged(services Services, orgClonePath string, organization machine.Or
 	if judgement.Verdict == "contradicts" {
 		placed.Include = false
 		placed.Conflict = &proposal.Conflict{With: orEmptyList(judgement.Related), Resolution: ""}
-		placed.Notes = append(placed.Notes, "in conflict with "+strings.Join(judgement.Related, ", ")+"; set its resolution in proposal.yaml: drop, override or amend")
+		placed.Notes = append(placed.Notes, "in conflict with "+strings.Join(judgement.Related, ", ")+"; set conflict.resolution in "+proposal.CandidateFileName(placed)+": drop, override or amend")
 	}
 	return placed
 }
@@ -418,17 +429,20 @@ func teamsOfLevel(services Services, orgClonePath string, level string) []string
 }
 
 // registryLabels lists the organisation's label registry as category:value,
-// for the judge; an unreadable registry gives none.
-func registryLabels(services Services, orgClonePath string) []string {
+// for the judge, and the categories of one value; an unreadable registry
+// gives none.
+func registryLabels(services Services, orgClonePath string) (labels []string, singleValued []string) {
 	tree, err := services.Records.Tree(orgClonePath)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
-	var labels []string
 	for _, category := range sortedKeys(tree.Labels) {
 		for _, value := range tree.Labels[category].LabelValues() {
 			labels = append(labels, category+":"+value)
 		}
+		if !tree.Labels[category].Multiple {
+			singleValued = append(singleValued, category)
+		}
 	}
-	return labels
+	return labels, singleValued
 }

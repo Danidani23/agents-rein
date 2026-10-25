@@ -154,7 +154,7 @@ func TestConflicts(t *testing.T) {
 	}
 	document := Proposal{Version: Version, Status: StatusPending, Organization: "acme", Candidates: []Candidate{conflicting("")}}
 	problems := strings.Join(document.Check(nil), "\n")
-	if !strings.Contains(problems, "rules/handover conflicts with organizations.acme.users.dani.rules.global and is not resolved: set its resolution in proposal.yaml to drop, override or amend") {
+	if !strings.Contains(problems, "rules/handover conflicts with organizations.acme.users.dani.rules.global and is not resolved: set conflict.resolution in rule_handover.yaml to drop, override or amend") {
 		t.Fatalf("unresolved: %s", problems)
 	}
 	document.Candidates[0] = conflicting("maybe")

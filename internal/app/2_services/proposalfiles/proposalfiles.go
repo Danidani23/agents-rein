@@ -58,19 +58,29 @@ func (service Service) now() time.Time {
 	return service.Clock()
 }
 
-// WritePending writes a proposal into folder as its own folder. A pending
-// proposal of the same id already there, a folder or an older file, is
-// refused unless force, since it may hold edits; force replaces both.
-func (service Service) WritePending(folder string, document proposal.Proposal, force bool) (string, error) {
-	proposalPath := filepath.Join(folder, proposal.FolderName(document.ID))
-	legacyPath := filepath.Join(folder, proposal.FileName(document.ID))
-	for _, existing := range []string{proposalPath, legacyPath} {
+// RefusePending refuses a pending proposal of the id already in folder, a
+// folder or an older file, unless force, since it may hold edits.
+func (Service) RefusePending(folder string, id string, force bool) error {
+	for _, existing := range []string{filepath.Join(folder, proposal.FolderName(id)), filepath.Join(folder, proposal.FileName(id))} {
 		_, err := os.Stat(existing)
 		if err == nil && !force {
-			return "", fmt.Errorf("a proposal of this snapshot is pending at %s; edit and propose it, or distill with --force to replace it", existing)
+			return fmt.Errorf("a proposal of this snapshot is pending at %s; edit and propose it, or distill with --force to replace it", existing)
 		}
 	}
-	err := os.Remove(legacyPath)
+	return nil
+}
+
+// WritePending writes a proposal into folder as its own folder. A pending
+// proposal of the same id already there is refused unless force, which
+// replaces both a folder and an older file.
+func (service Service) WritePending(folder string, document proposal.Proposal, force bool) (string, error) {
+	err := service.RefusePending(folder, document.ID, force)
+	if err != nil {
+		return "", err
+	}
+	proposalPath := filepath.Join(folder, proposal.FolderName(document.ID))
+	legacyPath := filepath.Join(folder, proposal.FileName(document.ID))
+	err = os.Remove(legacyPath)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return "", err
 	}

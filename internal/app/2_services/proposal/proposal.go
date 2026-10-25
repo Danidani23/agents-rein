@@ -174,9 +174,9 @@ func HistoryName(id string, proposedAt time.Time) string {
 	return proposedAt.UTC().Format("20060102-150405") + "-" + id
 }
 
-// candidateFileName is a candidate's file in a proposal folder:
+// CandidateFileName is a candidate's file in a proposal folder:
 // <kind>_<id>.yaml, the kind in the singular.
-func candidateFileName(candidate Candidate) string {
+func CandidateFileName(candidate Candidate) string {
 	return strings.TrimSuffix(candidate.Kind, "s") + "_" + candidate.ID + ".yaml"
 }
 
@@ -356,9 +356,9 @@ func (proposal Proposal) WriteFolder(folder string) error {
 	index.Candidates = nil
 	taken := map[string]bool{}
 	for _, candidate := range proposal.Candidates {
-		name := candidateFileName(candidate)
+		name := CandidateFileName(candidate)
 		for count := 2; taken[name]; count++ {
-			name = fmt.Sprintf("%s-%d.yaml", strings.TrimSuffix(candidateFileName(candidate), ".yaml"), count)
+			name = fmt.Sprintf("%s-%d.yaml", strings.TrimSuffix(CandidateFileName(candidate), ".yaml"), count)
 		}
 		taken[name] = true
 		candidate.Entry = ""
@@ -401,7 +401,7 @@ func (proposal Proposal) Check(registry map[string]declaration.LabelCategory) []
 		if candidate.Conflict != nil {
 			switch candidate.Conflict.Resolution {
 			case "":
-				problems = append(problems, fmt.Sprintf("%s conflicts with %s and is not resolved: set its resolution in proposal.yaml to drop, override or amend", where, strings.Join(candidate.Conflict.With, ", ")))
+				problems = append(problems, fmt.Sprintf("%s conflicts with %s and is not resolved: set conflict.resolution in %s to drop, override or amend", where, strings.Join(candidate.Conflict.With, ", "), CandidateFileName(candidate)))
 			case ResolutionDrop, ResolutionOverride, ResolutionAmend:
 			default:
 				problems = append(problems, fmt.Sprintf("%s: resolution %q is not drop, override or amend", where, candidate.Conflict.Resolution))

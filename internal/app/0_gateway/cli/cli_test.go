@@ -739,8 +739,15 @@ func TestDistillJudgeFlags(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(orgClonePath, "declarations", "rules", "style.md"), []byte("Be verbose.\n"), 0o644)
 	fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[{"candidate":"rules/instructions","verdict":"contradicts","related":["organizations.acme.rules.style"],"quotes":[{"address":"organizations.acme.rules.style","text":"Be verbose."}],"suggestion":"keep","reason":"the project wants it short"}]}`}}
 	code, out, _ = fixture.run("distill", "--project", "shop", "--force")
-	if code != ExitWorked || !strings.Contains(out, "1 in conflict, which rein propose waits for") || !strings.Contains(out, "resolve each conflict in proposal.yaml") {
+	if code != ExitWorked || !strings.Contains(out, "1 in conflict, which rein propose waits for") || !strings.Contains(out, "next: set conflict.resolution in each file in conflict") {
 		t.Fatalf("conflict: code %d out %q", code, out)
+	}
+	// the files in conflict close the output, each as its full path, after where the proposal went
+	conflictFile := filepath.Join(home, ".rein", "proposals", "proposal-")
+	written := strings.Index(out, "written to ")
+	listed := strings.Index(out, "\n  "+conflictFile)
+	if written < 0 || listed < written || !strings.Contains(out[listed:], filepath.FromSlash("/rule_instructions.yaml")+"  with organizations.acme.rules.style") {
+		t.Fatalf("conflict files: out %q", out)
 	}
 }
 
