@@ -2187,3 +2187,27 @@ writes is read from the next session on, not in the same one.
   and a path-scoped rule's frontmatter goes with every part; a file without sections stays one
   candidate as before, and a skill stays whole. D34 corrected: the user asked for skills to be
   split by the distiller, not cut at their headings. Test first; `task rein:check` green.
+- (2026-10-24) P2.44 step (d) done: the answer is version 2. A rule or a skill that holds one
+  concern is still judged whole; one that mixes concerns is cut into units, each taking
+  numbered lines of one or more candidates, or a skill's other file whole, and giving them a
+  shape: `always`, `paths` with its globs, or `skill` with its description. The brief numbers
+  every rule's and skill's body, a frontmatter shown apart, and says the lines are taken
+  verbatim, the only added text an id, a description, a heading and paths. `rein` checks every
+  non-blank line of a cut candidate lands in exactly one unit and every other file of a skill
+  travels once, refuses a candidate judged whole and cut, a unit from a permission set, a
+  hook or a tool server, a shape that does not fit its kind; the units replace the
+  candidates they came from and are compared with the organisation like any candidate. The
+  user-facing name is the distiller: the brief, `distill`'s output and help, the proposal's
+  `distiller:` field and the pull request; `--distiller` replaces `--judge`, which still works
+  as a deprecated alias. A proposal written before reads without its judge's view. Test first;
+  `task rein:check` green, `go vet` for Windows green. Not yet seen: how a real model cuts
+  with this brief, which the website's distillation in P2.44's gate shows.
+- (2026-10-24) P2.44 step (e) done: a candidate or unit the distiller judges `contradicts` is
+  placed as a conflict, left out, naming what it contradicts, with an empty `resolution` in
+  `proposal.yaml`; `propose` refuses while any is unresolved. `drop` and `amend` leave it out,
+  whatever `include` says, `override` puts it in with a first line, "This replaces <address>
+  where the two disagree.", and is refused when that declaration is `required`, which the
+  catalogue now reads. `distill` counts the conflicts and says to resolve them; the plan and
+  the pull request say what each conflicted with and how it was resolved, an `amend` with
+  the reminder to change the existing declaration in a proposal of its own. Test first;
+  `task rein:check` green, `go vet` for Windows green.
