@@ -2211,3 +2211,12 @@ writes is read from the next session on, not in the same one.
   the pull request say what each conflicted with and how it was resolved, an `amend` with
   the reminder to change the existing declaration in a proposal of its own. Test first;
   `task rein:check` green, `go vet` for Windows green.
+- (2026-10-25) P2.44 step (f) done: in a project clone, the brief offers a unit of shape
+  `document`, kind `documents`, and lists the Markdown the repository tracks; the distiller gives
+  the document's `path`, a new Markdown file inside the repository, and a one-line `pointer`
+  naming it, path-scoped with `paths`. Such a unit becomes the document, `document_<id>.md` in
+  the proposal with its path, which the developer may change, and a pointer rule whose
+  frontmatter says `document: <path>`, a field the declarations now know. `propose` writes
+  the document into the clone, never over a file it has, leaves it to be committed, sends the
+  pointer in the pull request and names the document there; `sync` names a pointer whose
+  document the clone lacks. Test first; `task rein:check` green.
