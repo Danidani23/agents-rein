@@ -209,13 +209,18 @@ type section struct {
 func sectionsOf(content string) (frontmatter string, sections []section) {
 	frontmatter, body := splitFrontmatter(content)
 	current := section{}
-	inFence := false
+	fence := ""
 	for _, line := range strings.SplitAfter(body, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-			inFence = !inFence
+		switch {
+		case fence == "":
+			fence = fenceOpening(trimmed)
+		case closesFence(trimmed, fence):
+			fence = ""
+			current.text += line
+			continue
 		}
-		if !inFence && strings.HasPrefix(line, "## ") {
+		if fence == "" && strings.HasPrefix(line, "## ") {
 			sections = append(sections, current)
 			current = section{heading: strings.TrimSpace(strings.TrimPrefix(line, "## "))}
 		}
@@ -242,6 +247,28 @@ func splitFrontmatter(content string) (frontmatter string, body string) {
 		return "", content
 	}
 	return content[:4+end+5], content[4+end+5:]
+}
+
+// fenceOpening is the fence a line opens, three or more backticks or
+// tildes, or "" when it opens none: a backtick fence's info string holds
+// no backtick, so prose that starts with inline code is no fence
+// (CommonMark).
+func fenceOpening(line string) string {
+	if !strings.HasPrefix(line, "```") && !strings.HasPrefix(line, "~~~") {
+		return ""
+	}
+	marker := line[:1]
+	run := len(line) - len(strings.TrimLeft(line, marker))
+	if marker == "`" && strings.Contains(line[run:], "`") {
+		return ""
+	}
+	return line[:run]
+}
+
+// closesFence says whether a line closes the fence: the same character,
+// at least as many times, and nothing else.
+func closesFence(line string, fence string) bool {
+	return strings.Trim(line, fence[:1]) == "" && len(line) >= len(fence)
 }
 
 // ruleSections turns a file of rules into one candidate per ## section

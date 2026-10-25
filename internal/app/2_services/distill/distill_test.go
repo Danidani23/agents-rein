@@ -92,6 +92,26 @@ func TestCutAtSections(t *testing.T) {
 	}
 }
 
+// A line of prose that starts with backticks is no code block: a backtick
+// fence's info string holds no backtick (CommonMark), so the sections after
+// it are still cut. The website's instructions had such a line.
+func TestCutIgnoresBackticksInProse(t *testing.T) {
+	instructions := "## Git\n\nhand over ONE copy-paste-runnable\n```bash block with explicit `git add <paths>` per commit.\n\n## Architecture\n\n```\napex/  the apex site\n```\n\n## Privacy\n\nNothing links to the site.\n\n~~~text\n## inside a tilde fence\n~~~\n\n## Terminology\n\nCorrect wrong terms.\n"
+	candidates, _, err := ConvertClaudeCode(map[string]string{"CLAUDE.md": instructions})
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	indexed := byID(candidates)
+	for _, expected := range []string{"rules/git", "rules/architecture", "rules/privacy", "rules/terminology"} {
+		if _, found := indexed[expected]; !found {
+			t.Fatalf("missing %s in %v", expected, indexed)
+		}
+	}
+	if !strings.Contains(indexed["rules/privacy"].Files["rules/privacy.md"], "## inside a tilde fence") || len(candidates) != 4 {
+		t.Fatalf("privacy %q candidates %d", indexed["rules/privacy"].Files["rules/privacy.md"], len(candidates))
+	}
+}
+
 func TestDistilledCandidatesPassTheLint(t *testing.T) {
 	candidates, _, _ := ConvertClaudeCode(harness)
 	root := t.TempDir()
