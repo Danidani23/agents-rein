@@ -3,6 +3,7 @@ package orchestration
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
@@ -122,6 +123,13 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 					documents, err := services.WorkingCopy.TrackedMarkdown(stored[0].Folder)
 					if err == nil {
 						corpus.Documents = documents
+					}
+					// what the project is: its README's first part and its files' names (Q41 RD2)
+					corpus.ProjectReadme = distill.ReadmeExcerpt(readmeOf(stored[0].Folder))
+					tracked, err := services.WorkingCopy.TrackedFiles(stored[0].Folder)
+					if err == nil {
+						corpus.ProjectFiles = distill.ProjectFilesOf(tracked)
+						corpus.ProjectFilesTotal = len(tracked)
 					}
 				}
 				result.Brief = distill.Brief(level, candidates, corpus)
@@ -279,6 +287,26 @@ func projectLabelsOf(services Services, orgClonePath string, level string) []str
 		return nil
 	}
 	return append([]string{}, project.Labels...)
+}
+
+// readmeOf is the README at the top of a project's folder, whatever its
+// case and extension, "" when there is none.
+func readmeOf(folder string) string {
+	entries, err := os.ReadDir(folder)
+	if err != nil {
+		return ""
+	}
+	for _, entry := range entries {
+		name := strings.ToLower(entry.Name())
+		if entry.IsDir() || (name != "readme.md" && name != "readme" && name != "readme.txt") {
+			continue
+		}
+		content, err := os.ReadFile(filepath.Join(folder, entry.Name()))
+		if err == nil {
+			return string(content)
+		}
+	}
+	return ""
 }
 
 // folderExists says whether a folder is there to hold a proposal.

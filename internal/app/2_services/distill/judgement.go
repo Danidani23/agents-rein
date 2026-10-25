@@ -184,6 +184,19 @@ func Brief(level string, candidates []Candidate, corpus Corpus) string {
 			fmt.Fprintf(&brief, "%s\n\n", strings.TrimSpace(candidate.Files[relative]))
 		}
 	}
+	if corpus.ProjectReadme != "" || len(corpus.ProjectFiles) > 0 {
+		fmt.Fprintf(&brief, "# About the project\n\nWhat the project is, for its labels and for where a document goes; never a candidate.\n\n")
+		if corpus.ProjectReadme != "" {
+			fmt.Fprintf(&brief, "The first part of its README:\n\n%s\n", strings.TrimSpace(corpus.ProjectReadme))
+		}
+		if len(corpus.ProjectFiles) > 0 {
+			fmt.Fprintf(&brief, "\nThe files its repository tracks, names only, %d of %d:\n\n", len(corpus.ProjectFiles), corpus.ProjectFilesTotal)
+			for _, file := range corpus.ProjectFiles {
+				fmt.Fprintf(&brief, "- %s\n", file)
+			}
+		}
+		fmt.Fprintf(&brief, "\n")
+	}
 	if corpus.Documents != nil {
 		fmt.Fprintf(&brief, "# Documents in the repository\n\n")
 		if len(corpus.Documents) == 0 {

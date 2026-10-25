@@ -1706,6 +1706,7 @@ func TestProposeDocuments(t *testing.T) {
 			t.Fatalf("init: %v", err)
 		}
 		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", folder)
+		_ = os.WriteFile(filepath.Join(folder, "README.md"), []byte("# Shop\n\nA web shop in Go.\n"), 0o644)
 		fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[{"candidate":"mcpservers/docs","verdict":"new","suggestion":"keep","reason":"fine"},{"candidate":"rules/go","verdict":"new","suggestion":"keep","reason":"fine"}],"units":[
 		 {"id":"overview","kind":"documents","from":[{"candidate":"rules/instructions","lines":"1, 3"}],"shape":"document","path":"docs/overview.md","pointer":"Read docs/overview.md before changing the shop.","verdict":"new","suggestion":"keep","reason":"knowledge about the code"}]}`}}
 		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Directory: folder})
@@ -1716,6 +1717,10 @@ func TestProposeDocuments(t *testing.T) {
 	}
 	t.Run("a document goes into the clone, its pointer into the pull request", func(t *testing.T) {
 		fixture, created, folder, distilled := prepare(t)
+		// the distiller saw what the project is: its README and its files' names
+		if !strings.Contains(fixture.judge.Briefs[0], "# About the project") || !strings.Contains(fixture.judge.Briefs[0], "A web shop in Go.") || !strings.Contains(fixture.judge.Briefs[0], "\n- main.go\n") {
+			t.Fatalf("brief %q", fixture.judge.Briefs[0])
+		}
 		// the distiller saw where the repository keeps its documents
 		if !strings.Contains(fixture.judge.Briefs[0], "# Documents in the repository\n\n") || !strings.Contains(fixture.judge.Briefs[0], "\n- INSTRUCTIONS.md\n") {
 			t.Fatalf("brief %q", fixture.judge.Briefs[0])

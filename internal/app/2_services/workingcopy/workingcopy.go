@@ -172,10 +172,20 @@ func (Service) ReadFile(folder string, relative string) string {
 	return string(content)
 }
 
+// TrackedFiles lists every file the repository tracks under folder, sorted.
+func (service Service) TrackedFiles(folder string) ([]string, error) {
+	listed, err := service.Repository.TrackedPaths(folder, []string{"."})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(listed)
+	return listed, nil
+}
+
 // TrackedMarkdown lists the Markdown files the repository tracks under
 // folder, sorted; an empty list, never nil, for a repository without any.
 func (service Service) TrackedMarkdown(folder string) ([]string, error) {
-	listed, err := service.Repository.TrackedPaths(folder, []string{"."})
+	listed, err := service.TrackedFiles(folder)
 	if err != nil {
 		return nil, err
 	}

@@ -90,6 +90,15 @@ func TestCommit(t *testing.T) {
 	}
 }
 
+func TestTrackedFiles(t *testing.T) {
+	root := t.TempDir()
+	_ = fake.NewProjectClone(root, []string{rootCommit}, []string{"main.go", "README.md", "docs/deploy.md"})
+	listed, err := Service{Repository: &fake.Repository{}}.TrackedFiles(root)
+	if err != nil || strings.Join(listed, ",") != "README.md,docs/deploy.md,main.go" {
+		t.Fatalf("listed %v err %v", listed, err)
+	}
+}
+
 func TestTrackedMarkdown(t *testing.T) {
 	root := t.TempDir()
 	_ = fake.NewProjectClone(root, []string{rootCommit}, []string{"README.md", "docs/deploy.md", "main.go", "docs/notes.txt"})

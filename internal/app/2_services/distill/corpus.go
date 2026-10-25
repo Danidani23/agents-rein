@@ -42,6 +42,41 @@ type Corpus struct {
 	// ProjectLabels are the labels the project carries, which the distiller
 	// reviews; nil when no project is distilled.
 	ProjectLabels []string
+	// ProjectReadme is the first part of the project's README, and
+	// ProjectFiles the names of files its repository tracks, the first of
+	// ProjectFilesTotal: what the project is, for the labels and the
+	// documents, never the files' contents.
+	ProjectReadme     string
+	ProjectFiles      []string
+	ProjectFilesTotal int
+}
+
+// readmeBudget is the most characters of a README one brief carries, and
+// projectFilesBudget the most file names.
+const (
+	readmeBudget       = 8000
+	projectFilesBudget = 300
+)
+
+// ReadmeExcerpt is the first part of a README, cut at a line within the
+// budget.
+func ReadmeExcerpt(readme string) string {
+	if len(readme) <= readmeBudget {
+		return readme
+	}
+	cut := strings.LastIndex(readme[:readmeBudget], "\n")
+	if cut < 0 {
+		return readme[:readmeBudget]
+	}
+	return readme[:cut+1]
+}
+
+// ProjectFilesOf keeps the first file names within the budget.
+func ProjectFilesOf(tracked []string) []string {
+	if len(tracked) > projectFilesBudget {
+		return tracked[:projectFilesBudget]
+	}
+	return tracked
 }
 
 // corpusBudget is the most characters of passages one brief carries.

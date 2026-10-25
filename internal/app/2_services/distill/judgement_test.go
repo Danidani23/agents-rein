@@ -297,3 +297,25 @@ func TestLabels(t *testing.T) {
 		t.Fatalf("labels reviewed without a project")
 	}
 }
+
+func TestAboutTheProject(t *testing.T) {
+	corpus := exampleCorpus()
+	corpus.ProjectReadme = "# Website\n\nTwo sites on Cloudflare Pages, infrastructure in Terraform.\n"
+	corpus.ProjectFiles = []string{"astro.config.mjs", "package.json", "terraform/main.tf"}
+	corpus.ProjectFilesTotal = 412
+	brief := Brief("organizations.acme.projects.shop", exampleCandidates(), corpus)
+	for _, expected := range []string{"# About the project", "Two sites on Cloudflare Pages, infrastructure in Terraform.", "names only, 3 of 412", "- astro.config.mjs\n- package.json\n- terraform/main.tf"} {
+		if !strings.Contains(brief, expected) {
+			t.Fatalf("brief lacks %q:\n%s", expected, brief)
+		}
+	}
+	if strings.Contains(Brief("organizations.acme.users.dani", exampleCandidates(), exampleCorpus()), "# About the project") {
+		t.Fatalf("a project described without one")
+	}
+	// a long README is cut at a line, within the budget
+	long := strings.Repeat("A line of the README.\n", 1000)
+	excerpt := ReadmeExcerpt(long)
+	if len(excerpt) > readmeBudget || !strings.HasSuffix(excerpt, "A line of the README.\n") {
+		t.Fatalf("excerpt of %d characters ends %q", len(excerpt), excerpt[len(excerpt)-30:])
+	}
+}
