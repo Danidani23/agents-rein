@@ -234,3 +234,66 @@ func TestDocuments(t *testing.T) {
 		t.Fatalf("no repository: %s", joined)
 	}
 }
+
+func TestLabels(t *testing.T) {
+	corpus := exampleCorpus()
+	corpus.Labels = []string{"kind:static-site", "kind:web-app", "language:go", "language:typescript"}
+	corpus.ProjectLabels = []string{"kind:static-site"}
+	brief := Brief("organizations.acme.projects.shop", exampleCandidates(), corpus)
+	for _, expected := range []string{"`labels`", "`assign`", "`add`", "`redundant`", "The project carries kind:static-site."} {
+		if !strings.Contains(brief, expected) {
+			t.Fatalf("brief lacks %q:\n%s", expected, brief)
+		}
+	}
+	answer, _ := ParseAnswer(`{"version": 2,
+	"candidates": [
+	  {"candidate": "rules/go-testing", "verdict": "new", "suggestion": "keep", "reason": "x"},
+	  {"candidate": "rules/brief", "verdict": "new", "suggestion": "lift", "level": "organization", "applyIf": ["framework:astro"], "reason": "every Astro site"}],
+	"labels": [
+	  {"action": "assign", "label": "language:typescript", "reason": "the pages are TypeScript"},
+	  {"action": "add", "label": "framework:astro", "meaning": "Sites built with Astro", "reason": "the lifted brief needs it"},
+	  {"action": "redundant", "label": "kind:web-app", "reason": "the same as kind:static-site here"}]}`)
+	candidates := exampleCandidates()
+	problems := Validate(answer, candidates, corpus)
+	if len(problems) != 0 {
+		t.Fatalf("problems %v", problems)
+	}
+	indexed := byID(Apply(answer, candidates))
+	add := indexed["labels/framework-astro"]
+	if add.Files["labels/framework-astro.yaml"] != "action: add\nlabel: framework:astro\nmeaning: Sites built with Astro\n" || add.Judgement == nil || add.Judgement.Suggestion != "add" || add.Judgement.Reason != "the lifted brief needs it" {
+		t.Fatalf("add %+v", add)
+	}
+	if indexed["labels/language-typescript"].Judgement.Suggestion != "assign" || indexed["labels/kind-web-app"].Judgement.Suggestion != "redundant" {
+		t.Fatalf("labels %+v", indexed)
+	}
+	// a label change says what it changes and why, and a new label serves a lift
+	bad, _ := ParseAnswer(`{"version": 2,
+	"candidates": [
+	  {"candidate": "rules/go-testing", "verdict": "new", "suggestion": "keep", "reason": "x"},
+	  {"candidate": "rules/brief", "verdict": "new", "suggestion": "keep", "reason": "x"}],
+	"labels": [
+	  {"action": "assign", "label": "kind:static-site", "reason": "x"},
+	  {"action": "assign", "label": "stack:rails", "reason": "x"},
+	  {"action": "add", "label": "language:go", "reason": "x"},
+	  {"action": "add", "label": "framework:astro", "reason": ""},
+	  {"action": "retire", "label": "Kind Web", "reason": "x"}]}`)
+	joined := strings.Join(Validate(bad, exampleCandidates(), corpus), "\n")
+	for _, expected := range []string{
+		"label assign kind:static-site: the project carries it",
+		"label assign stack:rails: the registry has no such label; add it instead",
+		"label add language:go: the registry has it; assign it instead",
+		"label add framework:astro: a new label needs its meaning",
+		"label add framework:astro: no entry or unit lifted in this answer uses it in applyIf",
+		"label add framework:astro: no reason",
+		`label retire Kind Web: the action is not assign, add or redundant`,
+		`label retire Kind Web: "Kind Web" is not category:value`,
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing %q in\n%s", expected, joined)
+		}
+	}
+	// without a project there are no project labels to review
+	if strings.Contains(Brief("organizations.acme.users.dani", exampleCandidates(), exampleCorpus()), "`assign`") {
+		t.Fatalf("labels reviewed without a project")
+	}
+}

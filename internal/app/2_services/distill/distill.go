@@ -41,6 +41,10 @@ type Candidate struct {
 // repository, not a declaration (D34).
 const KindDocuments = "documents"
 
+// KindLabels is the kind of a label change the distiller suggests: to the
+// registry or to the project's record, not a declaration.
+const KindLabels = "labels"
+
 // Verdicts of the structural comparison.
 const (
 	// VerdictNew means nothing in the organisation looks like it.

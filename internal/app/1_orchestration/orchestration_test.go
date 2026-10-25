@@ -1739,3 +1739,50 @@ func TestProposeDocuments(t *testing.T) {
 		}
 	})
 }
+
+func TestProposeLabels(t *testing.T) {
+	fixture, created := withTeam(t)
+	_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+	_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", "")
+	fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[
+	 {"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"organization","applyIf":["framework:astro"],"reason":"every Astro site"},
+	 {"candidate":"rules/go","verdict":"new","suggestion":"keep","reason":"fine"},
+	 {"candidate":"mcpservers/docs","verdict":"new","suggestion":"keep","reason":"fine"}],
+	"labels":[
+	 {"action":"assign","label":"language:typescript","reason":"the pages are TypeScript"},
+	 {"action":"add","label":"framework:astro","meaning":"Sites built with Astro","reason":"the lifted instructions need it"},
+	 {"action":"redundant","label":"kind:web-app","reason":"the same as kind:static-site here"}]}`}}
+	distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+	if err != nil {
+		t.Fatalf("distill: %v", err)
+	}
+	// the distiller saw what the project carries
+	if !strings.Contains(fixture.judge.Briefs[0], "The project carries no labels yet.") {
+		t.Fatalf("brief %q", fixture.judge.Briefs[0])
+	}
+	placed := map[string]proposal.Candidate{}
+	for _, candidate := range distilled.Proposal.Candidates {
+		placed[candidate.Kind+"/"+candidate.ID] = candidate
+	}
+	if placed["labels/framework-astro"].Level != "organizations.acme" || !placed["labels/framework-astro"].Include || placed["labels/language-typescript"].Level != "organizations.acme.projects.shop" || placed["labels/kind-web-app"].Include {
+		t.Fatalf("placed %+v", placed)
+	}
+	result, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.File})
+	if err != nil {
+		t.Fatalf("propose: %v", err)
+	}
+	// the registry and the project's record change on the same branch as the declarations
+	published := fixture.repository.Published[created.Remote+"#"+result.Branch]
+	registry, _ := os.ReadFile(filepath.Join(published, "declarations", "labels", "framework.yaml"))
+	project, _ := os.ReadFile(filepath.Join(published, "declarations", "projects", "shop", "project.yaml"))
+	instructions, _ := os.ReadFile(filepath.Join(published, "declarations", "rules", "instructions.md"))
+	if !strings.Contains(string(registry), "astro: Sites built with Astro") || !strings.Contains(string(project), "- language:typescript") || !strings.Contains(string(instructions), "framework:astro") {
+		t.Fatalf("registry %q project %q instructions %q", registry, project, instructions)
+	}
+	body := fixture.host.PullRequests[0].Body
+	for _, expected := range []string{"Label changes:", "- add framework:astro: Sites built with Astro", "- assign language:typescript to organizations.acme.projects.shop", "labels/kind-web-app: redundant: the same as kind:static-site here"} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("missing %q in body %q", expected, body)
+		}
+	}
+}

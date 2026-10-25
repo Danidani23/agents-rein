@@ -79,6 +79,9 @@ func runPropose(environment *commandEnvironment, request orchestration.ProposeRe
 		if len(plan.Documents) > 0 {
 			fmt.Fprintf(environment.out, "and write %d documents into the project's clone, uncommitted: %s\n", len(plan.Documents), strings.Join(plan.Documents, ", "))
 		}
+		for _, change := range plan.Labels {
+			fmt.Fprintf(environment.out, "  label: %s\n", change)
+		}
 		printPlacement(environment, plan)
 		confirmed, err := prompter.Confirm("Continue?", "Nothing reaches main: the pull request is reviewed by the code owners, and rein review checks it. If a step fails, the branch is removed again. To change a level, a label or a file, answer n and edit the proposal file.")
 		if err != nil {
@@ -94,6 +97,9 @@ func runPropose(environment *commandEnvironment, request orchestration.ProposeRe
 	}
 	fmt.Fprintf(environment.out, "proposed %d declarations on branch %s\n", len(result.Included), result.Branch)
 	printPlacement(environment, result.ProposalPlan)
+	for _, change := range result.Labels {
+		fmt.Fprintf(environment.out, "  label: %s\n", change)
+	}
 	style := environment.style()
 	fmt.Fprintf(environment.out, "\npull request: %s\n", style.Bold(style.Green(result.PullRequestURL)))
 	if result.HistoryFile != "" {

@@ -114,6 +114,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 					return err
 				}
 				corpus.Labels = registryLabels(services, orgClonePath)
+				corpus.ProjectLabels = projectLabelsOf(services, orgClonePath, level)
 				// a document goes beside the clone's tracked Markdown, so only a project clone offers it
 				if stored[0].Project != "" && folderExists(stored[0].Folder) {
 					documents, err := services.WorkingCopy.TrackedMarkdown(stored[0].Folder)
@@ -199,6 +200,15 @@ func placeJudged(services Services, orgClonePath string, organization machine.Or
 	if judgement == nil {
 		return proposal.FromCandidate(candidate, level, true, nil, nil)
 	}
+	// a label goes to the registry, at the organisation, or to the project's record
+	if candidate.Kind == distill.KindLabels {
+		target := level
+		if judgement.Suggestion != distill.LabelAssign {
+			target = address.Organizations + "." + organization.Slug
+		}
+		resolved := &proposal.Judgement{Verdict: judgement.Verdict, Suggestion: judgement.Suggestion, Level: target, ApplyIf: []string{}, Reason: judgement.Reason, Quotes: []distill.Quote{}}
+		return proposal.FromCandidate(candidate, target, judgement.Suggestion != distill.LabelRedundant, nil, resolved)
+	}
 	resolved := &proposal.Judgement{Verdict: judgement.Verdict, Suggestion: judgement.Suggestion, ApplyIf: orEmptyList(judgement.ApplyIf), Reason: judgement.Reason, Quotes: judgement.Quotes}
 	if resolved.Quotes == nil {
 		resolved.Quotes = []distill.Quote{}
@@ -245,6 +255,24 @@ func placeJudged(services Services, orgClonePath string, organization machine.Or
 		placed.Notes = append(placed.Notes, "in conflict with "+strings.Join(judgement.Related, ", ")+"; set its resolution in proposal.yaml: drop, override or amend")
 	}
 	return placed
+}
+
+// projectLabelsOf is what the project at level carries, an empty list for
+// none; nil when level is not a project's or its record is unreadable.
+func projectLabelsOf(services Services, orgClonePath string, level string) []string {
+	segments := strings.Split(level, ".")
+	if len(segments) != 4 || segments[2] != address.Projects {
+		return nil
+	}
+	tree, err := services.Records.Tree(orgClonePath)
+	if err != nil {
+		return nil
+	}
+	project, found := tree.Projects[segments[3]]
+	if !found {
+		return nil
+	}
+	return append([]string{}, project.Labels...)
 }
 
 // folderExists says whether a folder is there to hold a proposal.

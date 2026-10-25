@@ -37,7 +37,32 @@ type Answer struct {
 	Version    int               `json:"version"`
 	Candidates []AnswerCandidate `json:"candidates"`
 	Units      []Unit            `json:"units"`
+	Labels     []LabelSuggestion `json:"labels"`
 }
+
+// LabelSuggestion is what the distiller says about a label: assign one the
+// registry has to the project, add one it lacks, or flag one as redundant.
+type LabelSuggestion struct {
+	Action  string `json:"action" yaml:"action"`
+	Label   string `json:"label" yaml:"label"`
+	Meaning string `json:"meaning,omitempty" yaml:"meaning,omitempty"`
+	Reason  string `json:"reason" yaml:"-"`
+}
+
+// ParseLabelChange reads a label entry of a proposal, which the developer
+// may have edited.
+func ParseLabelChange(content string) (LabelSuggestion, error) {
+	var change LabelSuggestion
+	err := yaml.Unmarshal([]byte(content), &change)
+	return change, err
+}
+
+// The actions of a label suggestion.
+const (
+	LabelAssign    = "assign"
+	LabelAdd       = "add"
+	LabelRedundant = "redundant"
+)
 
 // Unit is a declaration the distiller cut out of rules and skills: the
 // lines it takes, verbatim, the shape it gives them, and its judgement.
@@ -111,6 +136,13 @@ func Brief(level string, candidates []Candidate, corpus Corpus) string {
 	fmt.Fprintf(&brief, "A unit's `shape`: `always` for a rule the agent reads in every session; `paths` for a rule it reads when working on files matching the `paths` globs; `skill` for a procedure it loads when a task needs it, the `description` saying when. A rule's `kind` is `rules`, a skill's `skills`.\n\n")
 	if corpus.Documents != nil {
 		fmt.Fprintf(&brief, "A unit may be a `document` instead, of kind `documents`: knowledge a human contributor needs too, such as the architecture, an invariant of the code, a style guide or a deploy flow, which belongs in the project's repository, versioned with the code, and not in the agent's settings. Give its `path`, a new Markdown file that fits beside the repository's documents listed at the end, and a `pointer`: one line the agent reads, naming that path and saying when to read it; `paths` makes the pointer apply only to matching files. A short invariant the agent must never miss stays a rule, the reasoning behind it a document.\n\n")
+	}
+	if corpus.ProjectLabels != nil {
+		carried := "no labels yet"
+		if len(corpus.ProjectLabels) > 0 {
+			carried = strings.Join(corpus.ProjectLabels, ", ")
+		}
+		fmt.Fprintf(&brief, "Review the project's labels too, in `labels`, each with an `action`, the `label` as category:value and a one-sentence `reason`: `assign` a registry label the project plainly has but does not carry; `add` a label the registry lacks, with its `meaning`, only when an entry or unit you lift needs it in `applyIf` and no registry label fits; `redundant` for a registry label that says the same as another. The project carries %s.\n\n", carried)
 	}
 	fmt.Fprintf(&brief, "Every entry and every unit is judged:\n\n")
 	fmt.Fprintf(&brief, "- verdict: `new` when nothing existing covers it; `duplicate` when an existing declaration says the same; `overlaps` when an existing one covers part of it or says something similar; `contradicts` when following both is impossible.\n")
@@ -297,6 +329,7 @@ func Validate(answer Answer, candidates []Candidate, corpus Corpus) (problems []
 		}
 		problems = append(problems, judgementProblems(label, unit.Judgement, texts)...)
 	}
+	problems = append(problems, labelProblems(answer, corpus)...)
 	var keys []string
 	for key := range byKey {
 		keys = append(keys, key)
@@ -426,6 +459,72 @@ func documentProblems(unit Unit, label string, documents []string) (problems []s
 	}
 	if unit.Path != "" && !strings.Contains(unit.Pointer, unit.Path) {
 		problems = append(problems, fmt.Sprintf("%s: the pointer must name %s", label, unit.Path))
+	}
+	return problems
+}
+
+// labelProblems is everything wrong with the label suggestions: an unknown
+// action, a label that is not category:value, an assignment of a label the
+// registry lacks or the project carries, an addition the registry has, that
+// has no meaning, or that nothing lifted in the answer uses.
+func labelProblems(answer Answer, corpus Corpus) (problems []string) {
+	lifted := map[string]bool{}
+	for _, entry := range answer.Candidates {
+		if entry.Suggestion == "lift" {
+			for _, label := range entry.ApplyIf {
+				lifted[label] = true
+			}
+		}
+	}
+	for _, unit := range answer.Units {
+		if unit.Suggestion == "lift" {
+			for _, label := range unit.ApplyIf {
+				lifted[label] = true
+			}
+		}
+	}
+	seen := map[string]bool{}
+	for _, suggestion := range answer.Labels {
+		label := fmt.Sprintf("label %s %s", suggestion.Action, suggestion.Label)
+		category, value, isLabel := strings.Cut(suggestion.Label, ":")
+		if !isLabel || !address.IsSlug(category) || !address.IsSlug(value) {
+			problems = append(problems, fmt.Sprintf("%s: %q is not category:value", label, suggestion.Label))
+		}
+		if seen[suggestion.Label] {
+			problems = append(problems, fmt.Sprintf("%s: the label is suggested twice", label))
+		}
+		seen[suggestion.Label] = true
+		inRegistry := contains(corpus.Labels, suggestion.Label)
+		switch suggestion.Action {
+		case LabelAssign:
+			switch {
+			case corpus.ProjectLabels == nil:
+				problems = append(problems, fmt.Sprintf("%s: there is no project to assign it to", label))
+			case contains(corpus.ProjectLabels, suggestion.Label):
+				problems = append(problems, fmt.Sprintf("%s: the project carries it", label))
+			case !inRegistry:
+				problems = append(problems, fmt.Sprintf("%s: the registry has no such label; add it instead", label))
+			}
+		case LabelAdd:
+			if inRegistry {
+				problems = append(problems, fmt.Sprintf("%s: the registry has it; assign it instead", label))
+			}
+			if strings.TrimSpace(suggestion.Meaning) == "" {
+				problems = append(problems, fmt.Sprintf("%s: a new label needs its meaning", label))
+			}
+			if !lifted[suggestion.Label] {
+				problems = append(problems, fmt.Sprintf("%s: no entry or unit lifted in this answer uses it in applyIf", label))
+			}
+		case LabelRedundant:
+			if !inRegistry {
+				problems = append(problems, fmt.Sprintf("%s: the registry has no such label", label))
+			}
+		default:
+			problems = append(problems, fmt.Sprintf("%s: the action is not assign, add or redundant", label))
+		}
+		if strings.TrimSpace(suggestion.Reason) == "" {
+			problems = append(problems, fmt.Sprintf("%s: no reason", label))
+		}
 	}
 	return problems
 }
@@ -573,6 +672,12 @@ func Apply(answer Answer, candidates []Candidate) []Candidate {
 	}
 	for _, unit := range answer.Units {
 		result = append(result, unitCandidates(unit, byKey)...)
+	}
+	for _, suggestion := range answer.Labels {
+		id := slugOf(suggestion.Label)
+		content, _ := yaml.Marshal(suggestion)
+		judgement := Judgement{Verdict: VerdictNew, Suggestion: suggestion.Action, Reason: suggestion.Reason}
+		result = append(result, Candidate{Kind: KindLabels, ID: id, Sources: []string{}, Files: map[string]string{path.Join(KindLabels, id+".yaml"): string(content)}, Judgement: &judgement})
 	}
 	return result
 }

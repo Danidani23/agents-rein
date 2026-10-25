@@ -173,7 +173,7 @@ func entryName(candidate Candidate) string {
 	switch candidate.Kind {
 	case address.Rules, distill.KindDocuments:
 		return name + ".md"
-	case address.Permissions, address.MCPServers:
+	case address.Permissions, address.MCPServers, distill.KindLabels:
 		return name + ".yaml"
 	}
 	return name

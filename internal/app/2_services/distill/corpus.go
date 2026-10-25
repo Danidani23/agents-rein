@@ -39,6 +39,9 @@ type Corpus struct {
 	// Documents are the Markdown files the project's repository tracks,
 	// beside which a document goes; nil when there is no repository.
 	Documents []string
+	// ProjectLabels are the labels the project carries, which the distiller
+	// reviews; nil when no project is distilled.
+	ProjectLabels []string
 }
 
 // corpusBudget is the most characters of passages one brief carries.

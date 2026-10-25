@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
@@ -57,6 +58,8 @@ type ProposalPlan struct {
 	// Documents are the paths written into the project's clone, for its
 	// repository, not the organisation's (D34).
 	Documents []string
+	// Labels are the changes to the registry and to project records.
+	Labels []string
 }
 
 // ProposeResult is what ProposeDeclarations did.
@@ -80,6 +83,9 @@ type preparedProposal struct {
 	// documents are the documents' contents by path, for cloneFolder.
 	documents   map[string]string
 	cloneFolder string
+	// recordFiles are the registry and project record files the label
+	// changes rewrite, by path under declarations/.
+	recordFiles map[string]string
 }
 
 // ProposeDeclarations lints the candidates, compares them with the
@@ -119,6 +125,13 @@ func (orchestrator Orchestrator) ProposeDeclarations(request ProposeRequest) (Pr
 				var relativePaths []string
 				for _, level := range sortedKeys(prepared.filesByLevel) {
 					written, err := services.Proposals.Write(prepared.orgClonePath, levelPathOf(level), prepared.filesByLevel[level])
+					if err != nil {
+						return err
+					}
+					relativePaths = append(relativePaths, written...)
+				}
+				if len(prepared.recordFiles) > 0 {
+					written, err := services.Proposals.Write(prepared.orgClonePath, "", prepared.recordFiles)
 					if err != nil {
 						return err
 					}
@@ -191,7 +204,11 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 	if err != nil {
 		return preparedProposal{}, err
 	}
-	problems := document.Check(tree.Labels)
+	registry, recordFiles, labelChanges, err := applyLabelChanges(document, tree, services.Clock())
+	if err != nil {
+		return preparedProposal{}, err
+	}
+	problems := document.Check(registry)
 	if len(problems) > 0 {
 		return preparedProposal{}, refusal.New("the proposal cannot go as it is:\n  " + strings.Join(problems, "\n  "))
 	}
@@ -226,7 +243,9 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 		levelID:      levelIDOf(document.DistilledFrom),
 		filesByLevel: map[string]map[string]string{},
 		documents:    map[string]string{},
+		recordFiles:  recordFiles,
 	}
+	prepared.Labels = labelChanges
 	if isFile {
 		prepared.File = request.Source
 	}
@@ -234,6 +253,9 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 	for _, level := range levels {
 		var declared []proposal.Candidate
 		for _, candidate := range byLevel[level] {
+			if candidate.Kind == distill.KindLabels {
+				continue
+			}
 			if candidate.Kind == distill.KindDocuments {
 				// a document goes into the project's clone, not the org repository
 				documentPath := path.Clean(candidate.Path)
@@ -284,7 +306,7 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 			}
 		}
 	}
-	if len(prepared.Included) == 0 {
+	if len(prepared.Included) == 0 && len(prepared.recordFiles) == 0 {
 		return preparedProposal{}, refusal.New("nothing to propose: every included candidate is identical to a declaration the organisation has")
 	}
 	byPath := map[string]map[string]string{}
@@ -359,6 +381,96 @@ func loadProposal(services Services, request ProposeRequest) (document proposal.
 		document.Candidates = append(document.Candidates, proposal.FromCandidate(candidate, level, true, nil, nil))
 	}
 	return document, false, nil
+}
+
+// applyLabelChanges applies the label candidates that go to a copy of the
+// registry and of the project records: additions first, so an assignment
+// or an applyIf may use a label added in the same proposal. It returns the
+// registry the candidates are checked against, the record files to write
+// under declarations/, and what changed.
+func applyLabelChanges(document proposal.Proposal, tree declaration.Tree, now time.Time) (map[string]declaration.LabelCategory, map[string]string, []string, error) {
+	registry := map[string]declaration.LabelCategory{}
+	for name, category := range tree.Labels {
+		copied := category
+		copied.Labels = map[string]string{}
+		for value, meaning := range category.Labels {
+			copied.Labels[value] = meaning
+		}
+		registry[name] = copied
+	}
+	files := map[string]string{}
+	var changes []string
+	projects := map[string]declaration.Project{}
+	for _, action := range []string{distill.LabelAdd, distill.LabelAssign} {
+		for _, candidate := range document.Candidates {
+			if candidate.Kind != distill.KindLabels || !candidate.Goes() {
+				continue
+			}
+			var change distill.LabelSuggestion
+			for _, content := range candidate.Files {
+				parsed, err := distill.ParseLabelChange(content)
+				if err != nil {
+					return nil, nil, nil, refusal.New(fmt.Sprintf("%s/%s: %v", candidate.Kind, candidate.ID, err))
+				}
+				change = parsed
+			}
+			if change.Action != action {
+				continue
+			}
+			where := candidate.Kind + "/" + candidate.ID
+			categoryName, value, ok := declaration.SplitLabel(change.Label)
+			if !ok {
+				return nil, nil, nil, refusal.New(fmt.Sprintf("%s: %q is not category:value", where, change.Label))
+			}
+			switch action {
+			case distill.LabelAdd:
+				category, exists := registry[categoryName]
+				if !exists {
+					category = declaration.LabelCategory{Category: categoryName, Labels: map[string]string{}}
+				}
+				if _, taken := category.Labels[value]; taken {
+					return nil, nil, nil, refusal.New(fmt.Sprintf("%s: %s is in the registry already; assign it instead", where, change.Label))
+				}
+				category.Labels[value] = change.Meaning
+				registry[categoryName] = category
+				relativePath, content, err := scaffold.LabelCategoryRecord(category)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				files[strings.TrimPrefix(relativePath, "declarations/")] = content
+				changes = append(changes, fmt.Sprintf("add %s: %s", change.Label, change.Meaning))
+			case distill.LabelAssign:
+				slug := path.Base(strings.ReplaceAll(candidate.Level, ".", "/"))
+				project, found := projects[slug]
+				if !found {
+					project, found = tree.Projects[slug]
+					project.Labels = append([]string{}, project.Labels...)
+				}
+				if !found {
+					return nil, nil, nil, refusal.New(fmt.Sprintf("%s: %s is not a project's level", where, candidate.Level))
+				}
+				if _, known := registry[categoryName].Labels[value]; !known {
+					return nil, nil, nil, refusal.New(fmt.Sprintf("%s: %s is not in the registry; add it instead", where, change.Label))
+				}
+				if !contains(project.Labels, change.Label) {
+					project.Labels = append(project.Labels, change.Label)
+				}
+				conflicts := declaration.SingleValueConflicts(registry, project.Labels)
+				if len(conflicts) > 0 {
+					return nil, nil, nil, refusal.New(fmt.Sprintf("%s: the project %s would carry %s", where, slug, strings.Join(conflicts, "; ")))
+				}
+				project.UpdatedAt = now
+				projects[slug] = project
+				relativePath, content, err := scaffold.ProjectRecord(project)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				files[strings.TrimPrefix(relativePath, "declarations/")] = content
+				changes = append(changes, fmt.Sprintf("assign %s to %s", change.Label, candidate.Level))
+			}
+		}
+	}
+	return registry, files, changes, nil
 }
 
 // cloneOfProposal is the project clone a pending proposal lives in, under
@@ -559,6 +671,12 @@ func pullRequestBody(source string, prepared preparedProposal) string {
 		fmt.Fprintf(&body, "\nDocuments for the project's repository, written into its clone and left for the developer to commit:\n")
 		for _, documentPath := range prepared.Documents {
 			fmt.Fprintf(&body, "- %s\n", documentPath)
+		}
+	}
+	if len(prepared.Labels) > 0 {
+		fmt.Fprintf(&body, "\nLabel changes:\n")
+		for _, change := range prepared.Labels {
+			fmt.Fprintf(&body, "- %s\n", change)
 		}
 	}
 	if len(prepared.document.Skipped) > 0 {
