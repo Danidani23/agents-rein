@@ -2258,3 +2258,11 @@ writes is read from the next session on, not in the same one.
   been asked; nothing is written. Test first; `task rein:check` green. Seen and not yet fixed:
   a proposal already pending for the snapshot is refused only in the writing step, after the
   distiller has run for minutes.
+- (2026-10-25) Decided (Q43, Q44 h) and done, each test first: the files in conflict close
+  `distill`'s output, each as its full path with what it conflicts with; the notes, the next
+  step and `propose`'s refusal name the candidate's own file and `conflict.resolution`, no
+  longer `proposal.yaml`; a retried answer that is believed reports no problems; the brief
+  names the categories of one value and the answer's validation refuses a second value of one,
+  carried or assigned twice, so the distiller answers again; a pending proposal is refused
+  right after the snapshot is read, before the distiller is asked. `task rein:check` green,
+  `go vet` for Windows green. Left: P2.44's gate, the website distilled again.
