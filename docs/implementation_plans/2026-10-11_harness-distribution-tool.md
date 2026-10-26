@@ -356,6 +356,12 @@ committed instead of gitignored (D4).
   JetBrains' 2026 survey ([findings](../harness-management.md#which-agents-developers-use)).
   Google's agents and OpenCode follow them. Each is designed on its item and approved before
   it is built.
+- ✅ **D44 — A provider's key lives in the developer's keychain.** Decided 2026-10-26 by the
+  user (Q59 KS1). `providers.yaml` names the variable, never the key (D22, D42); the key itself
+  goes into the operating system's keychain with `rein key set`, through standard input, beside
+  the GitHub token (D25), so it lies in no shell profile. The distiller reads the keychain first
+  and the environment second, where CI's secret store puts it. The keychain is macOS's until
+  Linux and Windows follow, as for the tokens. P2.55.
 - ✅ **D43 — Kimi Code CLI is the fifth agent.** Decided 2026-10-26 by the user (Q47 q), after
   the three of D31. Its instructions are `AGENTS.md`, its skills `.kimi/skills/` or
   `.agents/skills/`, and it reads tool servers only from `~/.kimi/mcp.json` and hooks only
@@ -1383,6 +1389,12 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- ✅ **P2.55 — `rein key` keeps the distiller's key in the keychain (D44).** [EXECUTED]
+  Approved and built 2026-10-26 (Q59 KS1). `rein key set [NAME]` reads the key from standard
+  input, refusing it typed at a terminal, and keeps it under the account `key:<NAME>` of the
+  keychain's `agents-rein` entries; `rein key remove` takes it out; without `NAME`, the active
+  organisation's `key_variable`. The `api` backend finds its key in the keychain, then the
+  environment.
 - ✅ **P2.54 — `distill` says what the distiller does and how far it has come.** [EXECUTED]
   Approved and built 2026-10-26 (Q50 w). The step names who answers, "claude with your
   default model"; a line above it says what is judged against what and how long it usually
@@ -2410,3 +2422,7 @@ writes is read from the next session on, not in the same one.
   Homebrew 6 loads a third-party tap only once trusted; a fully qualified
   `brew install --cask Danidani23/tap/rein` trusts that cask alone
   ([docs](https://docs.brew.sh/Tap-Trust)).
+- (2026-10-26) Decided D44 (Q59 KS1) and built P2.55, tests first: the keychain port keeps a
+  key beside the tokens, the credentials service reads the keychain then the environment and
+  refuses a name that is no variable's, `rein key set` and `remove`, the query
+  `DistillerKeyName`. The README says plainly that no key enters the repository.
