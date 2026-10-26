@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0] - 2026-10-26
+
+### Features
+
+- **rein:** the keychain on Linux and Windows (ab93675)
+- **rein:** rein key keeps the distiller provider's key in the keychain (d448c9e)
+
 ## [1.0.2] - 2026-10-26
 
 ### Bug Fixes
