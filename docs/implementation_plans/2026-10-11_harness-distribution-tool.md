@@ -356,6 +356,41 @@ committed instead of gitignored (D4).
   JetBrains' 2026 survey ([findings](../harness-management.md#which-agents-developers-use)).
   Google's agents and OpenCode follow them. Each is designed on its item and approved before
   it is built.
+- ✅ **D43 — Kimi Code CLI is the fifth agent.** Decided 2026-10-26 by the user (Q47 q), after
+  the three of D31. Its instructions are `AGENTS.md`, its skills `.kimi/skills/` or
+  `.agents/skills/`, and it reads tool servers only from `~/.kimi/mcp.json` and hooks only
+  from `~/.kimi/config.toml`, both the user's
+  ([docs](https://moonshotai.github.io/kimi-cli/llms-full.txt),
+  [MCP](https://moonshotai.github.io/kimi-cli/en/customization/mcp.md),
+  [hooks](https://moonshotai.github.io/kimi-cli/en/customization/hooks.md)), so a project's
+  tool servers and hooks have no place in a clone. P2.53.
+- ✅ **D42 — Kimi and DeepSeek serve as the distiller's provider, through the `api` backend.**
+  Decided 2026-10-26 by the user (Q47 p). Both offer an endpoint speaking Anthropic's Messages
+  API ([DeepSeek](https://api-docs.deepseek.com/guides/anthropic_api); Moonshot's
+  `https://api.moonshot.ai/anthropic` documented only by third parties so far,
+  [apidog](https://apidog.com/fr/blog/kimi-k2-5-claude-code-integration)), which is the `api`
+  backend D23 named. The organisation's `providers` declaration and that backend are built
+  ahead of `rein review`, which keeps P2.13; the README says which providers the distiller
+  can use. DeepSeek has no agent of its own to support
+  ([Verdent](https://www.verdent.ai/guides/deepseek-coding-plan-2026)). P2.52.
+- ✅ **D41 — `rein status` starts with the project you are in.** Decided 2026-10-26 by the user
+  (Q48 s, Q51 x for its load line). Run inside a clone it shows that project first: its address
+  and team, labels, the agent `sync` writes for, its settings counted by kind with the rules
+  split into always on and by path, the size of what loads into every session and of the
+  skill listing, sync's files, and its proposals; then the machine, the organisations and the
+  other projects. P2.50.
+- ✅ **D40 — Labels say what a project uses, and a lift says whom it reaches.** Decided
+  2026-10-26 by the user (Q51 x). The website's distillation lifted a skill and a rule to the
+  whole organisation without labels, so the Go CLI resolves them, and `opentofu` could never
+  reach the website: its label is `kind:infrastructure` and `kind` takes one value. So: a
+  `stack` category of several values names what a project uses, seeded for a new
+  organisation; the distiller may add a category and says whether it takes several values; a
+  lift to the organisation or a team names its `applyIf` or says in `everywhere` why it holds
+  for every project; a lift keeps reaching the project it came from, which carries its label;
+  the brief lists the organisation's projects with their labels; `distill` and the pull
+  request name the projects each lifted declaration reaches. OpenTofu and Terraform are one
+  (the user): `stack:opentofu` covers both, and the `opentofu` skill holds the rules of both.
+  P2.49.
 - ✅ **D39 — Whatever is committed to the org repository arrives as a pull request; what a
   person writes, as a proposal first.** Decided 2026-10-24 by the user (Q31, Q33, Q34 R1).
   Settings, their moves and removals, and the team, project and label records are written
@@ -538,8 +573,8 @@ project folder; the tool can emit that file from the records.
 
 - Labels are a registry, not free text. A category is a declaration,
   `organizations.{org}.labels.{category}`; a label is referenced as `category:value`, for
-  instance `language:go`. Categories are seeded with defaults (`language`, `kind`, `data`) that
-  the organisation edits. Organisation level only to start.
+  instance `language:go`. Categories are seeded with defaults (`language`, `kind`, `data`, and
+  `stack` for what a project uses, of several values, since D40) that the organisation edits. Organisation level only to start.
 - `label create`, `label rename` and `label delete` edit the category files. Rename rewrites
   every reference in one commit; delete is refused while a reference exists.
 - A project's effective labels are its own plus those of its teams and of its organisation.
@@ -1347,6 +1382,47 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- 🟢 **P2.53 — Kimi Code CLI as an agent (D43).** [PENDING] Approved 2026-10-26 (Q47 q), built
+  after P2.40 to P2.42. Detected by `kimi` on the PATH; home `~/.kimi`. Writes `AGENTS.md`
+  with the levels inline and the path-scoped rules stated under their globs, as for Codex,
+  and `.kimi/skills/`. No place in a clone: tool servers and hooks, which Kimi reads only
+  from the user's `~/.kimi/mcp.json` and `~/.kimi/config.toml`; the session-start sync goes
+  into the latter once, as a placement in the agent's home. Init moves out `AGENTS.md`,
+  `.kimi/AGENTS.md` and `.kimi/skills/`. Trust is undocumented, so the adapter answers
+  trusted. `kimi --print` may later serve as a distiller backend. Gate: a Kimi session in a
+  synced clone shows the instructions and the skills, and starts with a sync.
+- 🟢 **P2.52 — The `providers` declaration and the `api` backend: Kimi and DeepSeek distil
+  (D42).** [PENDING] Approved 2026-10-26 (Q47 p), the part of P2.13 that `distill` needs.
+  The organisation declares its distiller's endpoint, protocol, model and the name of the
+  variable that holds the key, never the key (D22); the `api` adapter speaks Anthropic's
+  Messages API over the standard library, one request, no tools, the same fifteen minutes;
+  an organisation's provider wins over `agent-cli` (D23) and `--distiller none` still skips.
+  The README names the providers the distiller can use: the developer's `claude`, or any
+  Messages endpoint, Anthropic's, DeepSeek's or Moonshot's for Kimi. Gate: a distillation of
+  this repository through DeepSeek or Kimi with a real key.
+- ✅ **P2.51 — `distill` ends with the command that opens its conversation.** [EXECUTED]
+  Approved and built 2026-10-26 (Q49). Claude Code keeps `claude -p` runs out of its session picker,
+  and `claude --resume <id>` finds one from any folder
+  ([docs](https://code.claude.com/docs/en/sessions#loop-p-agent-sdk-and-background-sessions)),
+  so the last line names that command, from the backend that ran.
+- 🟢 **P2.50 — `rein status` shows the project you are in first (D41).** [PENDING] Approved
+  2026-10-26 (Q48 s). The layout of D41; outside a clone the first line says so and names
+  `rein init`. The load line: the characters of what loads into every session, the rules
+  without `paths` and the instructions, and of the skill listing, which Claude Code budgets
+  at 1% of the context window and cuts beyond it
+  ([docs](https://code.claude.com/docs/en/skills#skill-descriptions-are-cut-short)).
+- 🔨 **P2.49 — Labels say what a project uses; a lift says whom it reaches (D40).** [IN PROGRESS]
+  Approved 2026-10-26 (Q51 x). (a) A new organisation's registry has `stack`, of several
+  values, `opentofu` among them for OpenTofu and Terraform. (b) A label suggestion that adds
+  a category says with `multiple` whether a project may carry several of its values. (c) A
+  lift to the organisation or a team without `applyIf` needs an `everywhere` reason, or the
+  answer goes back; a lift whose labels leave out the distilled project goes back too,
+  unless the same answer assigns the label, which may be one it adds. (d) The brief lists
+  the organisation's projects with their labels. (e) `distill` and the pull request name
+  the projects each lifted declaration reaches. (f) For the organisation `dani`, a proposal
+  the developer reviews: `stack` with `opentofu`, the `opentofu` skill under
+  `applyIf stack:opentofu` with the website's Terraform rules merged in, the website
+  carrying `stack:opentofu`, and the two unlabelled lifts labelled.
 - 🟢 **P2.48 — `init`'s binding is a pull request `rein` opens itself (D39).** [PENDING]
   Approved 2026-10-24. The fingerprint and the path go into the project record on a branch;
   `init` opens the pull request, registers the clone and finishes; `init` in another clone
@@ -2275,3 +2351,17 @@ writes is read from the next session on, not in the same one.
   files, the `rein` skill, the MCP server's instructions, the put-back's commit message and the
   docs name the new commands. A breaking change, so the next release is v1.0.0 (D37).
   `task rein:check` green.
+- (2026-10-26) Decided D40 to D43 (Q47 p and q, Q48 s, Q49, Q51 x): labels say what a project
+  uses and a lift says whom it reaches, `status` starts with the project you are in, Kimi and
+  DeepSeek distil through the `api` backend, Kimi Code CLI is the fifth agent; P2.49 to P2.53.
+- (2026-10-26) P2.51 done, test first: the judge port names the command that opens a
+  conversation, `claude --resume <id>` for Claude Code, and `distill` ends with it instead of
+  the bare id on the distiller's line.
+- (2026-10-26) P2.49 steps (a) to (e) done, tests first: `stack` is seeded, of several values,
+  `opentofu` for OpenTofu and Terraform; a label that opens a category says `multiple`, and a
+  label added in an answer may be assigned in it; a lift to the organisation or a team
+  without `applyIf` needs `everywhere`, and a labelled lift must keep reaching its project,
+  or the answer goes back; the brief lists the organisation's projects; `resolve.Reaches`
+  names the projects a declaration reaches, which `distill` prints under each candidate and
+  the pull request lists. Tests that invented `stack` as a new category now invent `cloud`.
+  `task rein:check` green, `go vet` for Windows green. Left: (f), the proposal for `dani`.
