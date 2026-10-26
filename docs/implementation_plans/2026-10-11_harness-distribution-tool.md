@@ -1389,7 +1389,7 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
-- 🔨 **P2.56 — The keychain on Linux and Windows (D25, D44).** [IN PROGRESS] Approved
+- ✅ **P2.56 — The keychain on Linux and Windows (D25, D44).** [EXECUTED] Approved
   2026-10-26. Linux keeps a secret in the desktop's keyring through `secret-tool`, the secret
   on standard input; Windows in Credential Manager through `CredWriteW`, `CredReadW` and
   `CredDeleteW` of `advapi32`, reached through the standard library; macOS as before; all
@@ -2440,3 +2440,6 @@ writes is read from the next session on, not in the same one.
   passes `go vet` for amd64 and arm64. The real round trip is the build-tagged
   `TestSystemKeychain`, run by `task rein:test-keychain` and by CI. Left: CI's verdict on the
   three systems.
+- (2026-10-26) P2.56's gate passed: CI run 40367173967 on e90090b round-tripped a token and a
+  key through GNOME Keyring on Ubuntu, Credential Manager on Windows and the login keychain on
+  macOS, each step `ok` with the test run, not skipped (`REIN_KEYCHAIN_REQUIRED`).
