@@ -1,13 +1,16 @@
 package orchestration
 
 import (
-	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
-	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
-	"github.com/Danidani23/agents-rein/internal/app/2_services/proposal"
+	"fmt"
 	"os"
+	"path"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/proposal"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
@@ -96,22 +99,138 @@ func (orchestrator Orchestrator) Status() (StatusReport, error) {
 		for _, entry := range pending {
 			report.Pending = append(report.Pending, PendingProposal{Path: entry.Path, ID: entry.Proposal.ID, Level: entry.Proposal.DistilledFrom, Candidates: len(entry.Proposal.Candidates), DistilledAt: entry.Proposal.DistilledAt})
 		}
-		status := CloneStatus{ProjectClone: clone, Snapshot: snapshotFate(services, clone, pending)}
-		inserts, err := services.Ledger.InsertsOf(clone.Organization, clone.ClonePath)
+		status, err := cloneStatusOf(services, clone, pending)
 		if err != nil {
 			return StatusReport{}, err
 		}
-		recorded := map[string]string{}
-		for _, insert := range inserts {
-			recorded[insert.Path] = insert.SHA256
-		}
-		verification := services.WorkingCopy.Verify(clone.ClonePath, recorded)
-		status.Inserts = len(inserts)
-		status.Modified = len(verification.Modified)
-		status.Missing = len(verification.Missing)
 		report.Clones = append(report.Clones, status)
 	}
 	return report, nil
+}
+
+// cloneStatusOf is the drift of what sync wrote into a clone and what became
+// of its latest snapshot.
+func cloneStatusOf(services Services, clone machine.ProjectClone, pending []proposalfiles.Pending) (CloneStatus, error) {
+	status := CloneStatus{ProjectClone: clone, Snapshot: snapshotFate(services, clone, pending)}
+	inserts, err := services.Ledger.InsertsOf(clone.Organization, clone.ClonePath)
+	if err != nil {
+		return CloneStatus{}, err
+	}
+	recorded := map[string]string{}
+	for _, insert := range inserts {
+		recorded[insert.Path] = insert.SHA256
+	}
+	verification := services.WorkingCopy.Verify(clone.ClonePath, recorded)
+	status.Inserts = len(inserts)
+	status.Modified = len(verification.Modified)
+	status.Missing = len(verification.Missing)
+	return status, nil
+}
+
+// skillListingCap is the most of a skill's description Claude Code lists
+// ([docs](https://code.claude.com/docs/en/skills#skill-descriptions-are-cut-short)).
+const skillListingCap = 1536
+
+// ProjectHere is the initialised project a folder is in, which status shows
+// first (D41): its record, the agents sync writes for, what it resolves by
+// kind, and how much of that the agent loads.
+type ProjectHere struct {
+	CloneStatus
+	Teams  []string
+	Labels []string
+	// Agents are the agents sync writes for, those whose harness rein
+	// compiles.
+	Agents []string
+	// Settings counts the declarations the project resolves, by kind;
+	// AlwaysOn and ByPath split the rules by whether they carry paths.
+	Settings map[string]int
+	AlwaysOn int
+	ByPath   int
+	// EverySession is the characters of the rules without paths, which
+	// load into every session; SkillListing those of the skills' names and
+	// descriptions, which the agent keeps listed on every turn.
+	EverySession int
+	SkillListing int
+	// Problem says why the settings are not known, "" when they are.
+	Problem string
+	// Pending are the proposals waiting in the clone.
+	Pending []PendingProposal
+}
+
+// ProjectHere finds the initialised project clone directory is in and
+// describes it; found is false outside one, which is no error. It reads
+// the org clone as it is and changes nothing.
+func (orchestrator Orchestrator) ProjectHere(directory string) (here ProjectHere, found bool, err error) {
+	services := orchestrator.Services
+	location, err := services.WorkingCopy.Locate(directory)
+	if err != nil {
+		return ProjectHere{}, false, nil
+	}
+	clones, err := services.Organizations.ProjectClones()
+	if err != nil {
+		return ProjectHere{}, false, err
+	}
+	var clone machine.ProjectClone
+	for _, registered := range clones {
+		if registered.ClonePath == location.Folder {
+			clone, found = registered, true
+		}
+	}
+	if !found {
+		return ProjectHere{}, false, nil
+	}
+	pending, err := services.ProposalFiles.ListPending(proposalfiles.PendingFolderOf(clone.ClonePath))
+	if err != nil {
+		return ProjectHere{}, false, err
+	}
+	here.CloneStatus, err = cloneStatusOf(services, clone, pending)
+	if err != nil {
+		return ProjectHere{}, false, err
+	}
+	for _, entry := range pending {
+		here.Pending = append(here.Pending, PendingProposal{Path: entry.Path, ID: entry.Proposal.ID, Level: entry.Proposal.DistilledFrom, Candidates: len(entry.Proposal.Candidates), DistilledAt: entry.Proposal.DistilledAt})
+	}
+	// sync writes for the agents whose harness rein compiles, Claude Code's today
+	for _, agent := range services.Snapshots.Agents {
+		if agent.Format() == "claude-code" {
+			here.Agents = append(here.Agents, agent.Name())
+		}
+	}
+	here.Settings = map[string]int{}
+	parsed, err := address.Parse(clone.Address)
+	if err != nil {
+		here.Problem = err.Error()
+		return here, true, nil
+	}
+	resolution, err := orchestrator.ResolveProject(parsed.OrganizationSlug(), parsed.ID())
+	if err != nil {
+		here.Problem = err.Error()
+		return here, true, nil
+	}
+	here.Teams, here.Labels = resolution.Teams, resolution.Labels
+	if len(resolution.Result.Problems) > 0 {
+		here.Problem = fmt.Sprintf("%d problems, which rein resolve shows", len(resolution.Result.Problems))
+	}
+	for _, chosen := range resolution.Result.Chosen {
+		here.Settings[chosen.Kind]++
+		for relative, content := range chosen.Files {
+			switch {
+			case chosen.Kind == address.Rules && strings.HasSuffix(relative, ".md"):
+				rule, _, _ := declaration.ParseRuleDeclaration(relative, []byte(content))
+				if len(rule.Paths) > 0 {
+					here.ByPath++
+					continue
+				}
+				here.AlwaysOn++
+				_, body, _, _ := declaration.SplitFrontmatter(content)
+				here.EverySession += len(body)
+			case chosen.Kind == address.Skills && path.Base(relative) == "SKILL.md":
+				skill, _, _ := declaration.ParseSkill(relative, path.Dir(relative), []byte(content))
+				here.SkillListing += len(skill.Name) + min(len(skill.Description), skillListingCap)
+			}
+		}
+	}
+	return here, true, nil
 }
 
 // ResetPlan is what a reset would put back and remove; the gateway shows

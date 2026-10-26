@@ -327,8 +327,8 @@ func TestStatus(t *testing.T) {
 		fixture.state.Current.Placements = []machine.Placement{{Path: "/a", Target: filepath.Join(fixture.home, "nowhere"), Mode: "link", Owner: "import"}}
 		fixture.state.Current.Organizations = []machine.OrganizationRef{{Slug: "acme", Remote: "r"}}
 		fixture.state.Current.Active = "acme"
-		code, out, _ := fixture.run("status")
-		for _, expected := range []string{"logins      Danidani23", "agents      fake-agent", "placements  1", "missing  import", "1 targets are missing", "* acme  r"} {
+		code, out, _ := fixture.run("status", "--path", t.TempDir())
+		for _, expected := range []string{"this folder is not a rein project; rein init puts it under rein", "\nmachine\n  login        Danidani23 · agents fake-agent · home ", " · 1 file in your agent's home", "  missing      /a -> ", "rein reset machine removes the dangling links", "\norganisations\n  * acme        r"} {
 			if code != ExitWorked || !strings.Contains(out, expected) {
 				t.Fatalf("missing %q: code %d out %q", expected, code, out)
 			}
@@ -338,9 +338,29 @@ func TestStatus(t *testing.T) {
 		fixture := newHarness(t)
 		fixture.state.Current.Logins = nil
 		fixture.agent.Present = false
-		code, out, _ := fixture.run("status")
-		if code != ExitWorked || !strings.Contains(out, "logins      none; run rein login") || !strings.Contains(out, "agents      none found") {
+		code, out, _ := fixture.run("status", "--path", t.TempDir())
+		if code != ExitWorked || !strings.Contains(out, "  login        none; run rein login · agents none found") {
 			t.Fatalf("code %d out %q", code, out)
+		}
+	})
+	t.Run("inside a project that project comes first (D41)", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.agent.HarnessFormat = "claude-code"
+		_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+		_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+		_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
+		folder, _ := filepath.EvalSymlinks(t.TempDir())
+		_ = fake.NewProjectClone(folder, []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, []string{"INSTRUCTIONS.md"})
+		_ = os.WriteFile(filepath.Join(folder, "INSTRUCTIONS.md"), []byte("be brief"), 0o644)
+		_, _, _ = fixture.run("init", "--path", folder, "--project", "shop", "--yes")
+		code, out, _ := fixture.run("status", "--path", folder)
+		for _, expected := range []string{"this project   shop\n", "  address      organizations.acme.projects.shop · team web\n", "  labels       kind:service\n", "  agent        fake-agent\n", "  settings     ", "  load         ", "  sync         never synced; rein sync\n", "  proposals    none pending", "\nmachine\n", "\norganisations\n"} {
+			if code != ExitWorked || !strings.Contains(out, expected) {
+				t.Fatalf("missing %q: code %d out %q", expected, code, out)
+			}
+		}
+		if !strings.HasPrefix(out, "this project") || strings.Contains(out, "other projects") {
+			t.Fatalf("the project is not first, or listed twice: %q", out)
 		}
 	})
 }
@@ -722,6 +742,9 @@ func TestDistillJudgeFlags(t *testing.T) {
 	}
 	fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"organization","everywhere":"nothing in it is stack-specific","reason":"general"}]}`}}
 	code, out, _ = fixture.run("distill", "--project", "shop", "--force")
+	if !strings.Contains(out, "    the distiller judges 1 candidate against 0 of the organisation's declarations, cuts the mixed ones into units of one concern and reviews the labels; usually 5 to 10 minutes\n  ✓ asking the distiller, fake-judge with your default model (") {
+		t.Fatalf("what the distiller does: out %q", out)
+	}
 	if code != ExitWorked || !strings.Contains(out, "distiller: new; lift to organizations.acme, every project: nothing in it is stack-specific: general") || !strings.Contains(out, "             reaches: shop\n") || !strings.Contains(out, "distiller: fake-judge answered\n") {
 		t.Fatalf("code %d out %q", code, out)
 	}
@@ -834,8 +857,8 @@ func TestSync(t *testing.T) {
 	if code != ExitWorked || !strings.Contains(out, "rein: organizations.acme.projects.shop synced for fake-agent, 0 files written, 5 unchanged") || strings.Contains(out, "just written") {
 		t.Fatalf("hook: code %d out %q", code, out)
 	}
-	code, out, _ = fixture.run("status")
-	if code != ExitWorked || !strings.Contains(out, "project clones  1") || !strings.Contains(out, "5 files from sync") {
+	code, out, _ = fixture.run("status", "--path", folder)
+	if code != ExitWorked || !strings.Contains(out, "this project   shop") || !strings.Contains(out, "  sync         5 files, last ") {
 		t.Fatalf("status: code %d out %q", code, out)
 	}
 	_ = os.WriteFile(filepath.Join(folder, "CLAUDE.md"), []byte("mine"), 0o644)
@@ -1019,6 +1042,17 @@ func TestSpinner(t *testing.T) {
 	text := out.String()
 	if !strings.Contains(text, "\r\x1b[2K  \x1b[2m⠋\x1b[0m \x1b[2masking the judge …\x1b[0m \x1b[2m0s\x1b[0m") || !strings.HasSuffix(text, "\r\x1b[2K  \x1b[32m✓ asking the judge (400ms)\x1b[0m\n") || environment.spinner != nil {
 		t.Fatalf("out %q", text)
+	}
+	// what a step does goes on a line above it, how far it has come into its spinner (P2.54)
+	out.Reset()
+	environment.printProgress(orchestration.ProgressEvent{Kind: orchestration.ProgressStarted, Step: "asking the distiller"})
+	environment.printProgress(orchestration.ProgressEvent{Kind: orchestration.ProgressDetail, Step: "asking the distiller", Note: "judges 2 candidates"})
+	environment.printProgress(orchestration.ProgressEvent{Kind: orchestration.ProgressNote, Step: "asking the distiller", Note: "thinking"})
+	time.Sleep(3 * spinnerInterval)
+	environment.printProgress(orchestration.ProgressEvent{Kind: orchestration.ProgressDone, Step: "asking the distiller", Elapsed: time.Second})
+	text = out.String()
+	if !strings.Contains(text, "\r\x1b[2K    \x1b[2mjudges 2 candidates\x1b[0m\n  \x1b[2masking the distiller …\x1b[0m") || !strings.Contains(text, "\x1b[2masking the distiller …\x1b[0m \x1b[2mthinking\x1b[0m \x1b[2m0s\x1b[0m") || !strings.HasSuffix(text, "\r\x1b[2K  \x1b[32m✓ asking the distiller (1s)\x1b[0m\n") {
+		t.Fatalf("detail and note: %q", text)
 	}
 	quiet := &commandEnvironment{out: &out, errOut: &out}
 	out.Reset()

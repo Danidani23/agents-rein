@@ -82,6 +82,9 @@ func (environment *commandEnvironment) releaseLockNow() {
 type spinner struct {
 	stop chan struct{}
 	done chan struct{}
+	// note is how far the step has come, drawn after its name.
+	note   string
+	noting sync.Mutex
 }
 
 // spinnerFrames are the glyphs, one per tick.
@@ -109,7 +112,13 @@ func (environment *commandEnvironment) startSpinner(text string) {
 				return
 			case <-ticker.C:
 				elapsed := time.Since(started).Round(time.Second)
-				fmt.Fprintf(environment.out, "\r\033[2K  %s %s %s", style.Dim(spinnerFrames[frame%len(spinnerFrames)]), style.Dim(text+" …"), style.Dim(elapsed.String()))
+				current.noting.Lock()
+				note := current.note
+				current.noting.Unlock()
+				if note != "" {
+					note = style.Dim(note) + " "
+				}
+				fmt.Fprintf(environment.out, "\r\033[2K  %s %s %s%s", style.Dim(spinnerFrames[frame%len(spinnerFrames)]), style.Dim(text+" …"), note, style.Dim(elapsed.String()))
 				frame++
 			}
 		}
@@ -187,7 +196,27 @@ func (environment *commandEnvironment) printProgress(event orchestration.Progres
 		environment.openLine(event.Step, style.Dim("↩ undoing "+event.Step+" …"))
 	case orchestration.ProgressUndone:
 		environment.closeLine(event.Step, style.Yellow("↩ undone "+event.Step+" ("+elapsed+")"))
+	case orchestration.ProgressDetail:
+		environment.detailLine(event.Step, style.Dim(event.Note))
+	case orchestration.ProgressNote:
+		if environment.terminal && environment.pendingStep == event.Step && environment.spinner != nil {
+			environment.spinner.noting.Lock()
+			environment.spinner.note = event.Note
+			environment.spinner.noting.Unlock()
+		}
 	}
+}
+
+// detailLine prints what a running step does on a line of its own, above
+// the step's open line on a terminal, which goes on under it.
+func (environment *commandEnvironment) detailLine(step string, text string) {
+	if !environment.terminal || environment.pendingStep != step {
+		fmt.Fprintf(environment.out, "    %s\n", text)
+		return
+	}
+	environment.stopSpinner()
+	fmt.Fprintf(environment.out, "\r\033[2K    %s\n  %s", text, environment.style().Dim(step+" …"))
+	environment.startSpinner(step)
 }
 
 // openLine starts a step's line on a terminal, without ending it, so the

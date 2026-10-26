@@ -157,8 +157,14 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 		},
 	}
 	if judging && !request.DryRun {
+		judgeStep := "asking the distiller, " + services.Judge.Describe(request.Model)
+		report := func(kind ProgressKind, note string) {
+			if services.Progress != nil {
+				services.Progress(ProgressEvent{Kind: kind, Step: judgeStep, Note: note})
+			}
+		}
 		steps = append(steps, Step{
-			Name: "asking the distiller " + services.Judge.Name() + ", which can take several minutes",
+			Name: judgeStep,
 			Do: func() error {
 				if len(candidates) == 0 {
 					return nil
@@ -168,7 +174,13 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 				if !available {
 					return refusal.New(fmt.Sprintf("the distiller %s is not available: %s; install or log in to it, or take rein's own cut alone with --distiller none", services.Judge.Name(), reason))
 				}
-				document.Judge, candidates = services.Judge.JudgeCandidates(level, candidates, corpus, request.Model)
+				// what the distiller does, said once, then how far it has come (P2.54)
+				judged := "candidates"
+				if len(candidates) == 1 {
+					judged = "candidate"
+				}
+				report(ProgressDetail, fmt.Sprintf("the distiller judges %d %s against %d of the organisation's declarations, cuts the mixed ones into units of one concern and reviews the labels; usually 5 to 10 minutes", len(candidates), judged, len(corpus.Passages)))
+				document.Judge, candidates = services.Judge.JudgeCandidates(level, candidates, corpus, request.Model, func(note string) { report(ProgressNote, note) })
 				// a failed distiller leaves nothing behind, so the next distill starts fresh
 				if document.Judge.Status == distill.JudgeFailed {
 					return refusal.New(fmt.Sprintf("the distiller %s failed, so nothing was written: %s; distill again, name a faster model with --model, or take rein's own cut alone with --distiller none", document.Judge.Backend, strings.Join(document.Judge.Problems, "; ")))

@@ -162,6 +162,40 @@ func TestDisconnectOrganization(t *testing.T) {
 	})
 }
 
+func TestProjectHere(t *testing.T) {
+	t.Run("the project status runs in: its record, what it resolves, what loads every session", func(t *testing.T) {
+		fixture, created := withTeam(t)
+		fixture.agent.HarnessFormat = "claude-code"
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}, Labels: []string{"language:go"}})
+		folder := projectClone(t)
+		_, err := fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
+		if err != nil {
+			t.Fatalf("init: %v", err)
+		}
+		for relative, content := range map[string]string{
+			"rules/brief.md":         "Be brief.\n",
+			"rules/go.md":            "---\npaths:\n    - '**/*.go'\n---\nTwo-line errors.\n",
+			"skills/review/SKILL.md": "---\nname: review\ndescription: Review a change.\n---\nSteps.\n",
+		} {
+			path := filepath.Join(created.Connected.OrgClonePath, "declarations", filepath.FromSlash(relative))
+			_ = os.MkdirAll(filepath.Dir(path), 0o755)
+			_ = os.WriteFile(path, []byte(content), 0o644)
+		}
+		here, found, err := fixture.orchestrator().ProjectHere(folder)
+		if err != nil || !found || here.Address != "organizations.acme.projects.shop" || strings.Join(here.Teams, ",") != "web" || strings.Join(here.Labels, ",") != "language:go" || strings.Join(here.Agents, ",") != "fake-agent" {
+			t.Fatalf("here %+v found %v err %v", here, found, err)
+		}
+		// the rules split by paths, and the characters that load every session and every turn (D41)
+		if here.Settings["rules"] != 2 || here.AlwaysOn != 1 || here.ByPath != 1 || here.Settings["skills"] != 1 || here.EverySession != len("Be brief.\n") || here.SkillListing != len("review")+len("Review a change.") || here.Problem != "" {
+			t.Fatalf("settings %v always %d by path %d every session %d listing %d problem %q", here.Settings, here.AlwaysOn, here.ByPath, here.EverySession, here.SkillListing, here.Problem)
+		}
+		_, found, err = fixture.orchestrator().ProjectHere(t.TempDir())
+		if err != nil || found {
+			t.Fatalf("outside a clone: found %v err %v", found, err)
+		}
+	})
+}
+
 func TestStatus(t *testing.T) {
 	t.Run("a machine without a login is reported, not refused", func(t *testing.T) {
 		fixture := newHarness(t)

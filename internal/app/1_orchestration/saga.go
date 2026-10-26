@@ -16,15 +16,21 @@ const (
 	ProgressFailed  ProgressKind = "failed"
 	ProgressUndoing ProgressKind = "undoing"
 	ProgressUndone  ProgressKind = "undone"
+	// ProgressDetail says once what a running step does, and ProgressNote
+	// how far it has come; a step reports both itself (P2.54).
+	ProgressDetail ProgressKind = "detail"
+	ProgressNote   ProgressKind = "note"
 )
 
 // ProgressEvent is one thing the saga runner reports: a step starting,
-// finishing with its duration, failing with its error, or being undone.
+// finishing with its duration, failing with its error, or being undone;
+// or a running step's detail or note.
 type ProgressEvent struct {
 	Kind    ProgressKind
 	Step    string
 	Elapsed time.Duration
 	Error   string
+	Note    string
 }
 
 // Step is one activity of a workflow with its compensation. Do performs it;

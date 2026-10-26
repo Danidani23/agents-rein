@@ -32,7 +32,10 @@ func TestMain(tests *testing.M) {
 	if strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe") == "claude" {
 		if len(os.Args) > 1 && os.Args[1] == "-p" {
 			_, _ = io.Copy(io.Discard, os.Stdin)
-			fmt.Print(stubJudgeAnswer)
+			// the answer streams as one text delta, and the result ends the stream
+			delta, _ := json.Marshal(map[string]any{"type": "stream_event", "event": map[string]any{"type": "content_block_delta", "delta": map[string]any{"type": "text_delta", "text": stubJudgeAnswer}}})
+			final, _ := json.Marshal(map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": stubJudgeAnswer})
+			fmt.Printf("%s\n%s\n", delta, final)
 		}
 		// the arguments it was started with, for a test to read
 		if recorded := os.Getenv("REIN_TEST_CLAUDE_ARGUMENTS"); recorded != "" {
@@ -187,8 +190,8 @@ func isolate(t *testing.T, login string) (reinHome string) {
 	return reinHome
 }
 
-// stubJudgeAnswer is claude's JSON envelope around a judge answer.
-const stubJudgeAnswer = `{"result":"{\"version\":2,\"candidates\":[{\"candidate\":\"rules/go\",\"verdict\":\"new\",\"suggestion\":\"keep\",\"reason\":\"fine\"},{\"candidate\":\"rules/instructions\",\"verdict\":\"new\",\"suggestion\":\"keep\",\"reason\":\"fine\"}]}","is_error":false}`
+// stubJudgeAnswer is the judge answer the stub claude streams.
+const stubJudgeAnswer = `{"version":2,"candidates":[{"candidate":"rules/go","verdict":"new","suggestion":"keep","reason":"fine"},{"candidate":"rules/instructions","verdict":"new","suggestion":"keep","reason":"fine"}]}`
 
 func scratchOrgRepository(t *testing.T) string {
 	t.Helper()
@@ -214,7 +217,7 @@ func TestWiring(t *testing.T) {
 	t.Run("status shows the stubbed identity and agent", func(t *testing.T) {
 		isolate(t, "Danidani23")
 		code, out, _ := run("status")
-		if code != cli.ExitWorked || !strings.Contains(out, "logins      Danidani23") || !strings.Contains(out, "agents      claude-code") {
+		if code != cli.ExitWorked || !strings.Contains(out, "  login        Danidani23 · agents claude-code") {
 			t.Fatalf("code %d out %q", code, out)
 		}
 	})
@@ -225,7 +228,7 @@ func TestWiring(t *testing.T) {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
 		code, out, _ := run("status")
-		if code != cli.ExitWorked || !strings.Contains(out, "logins      none") {
+		if code != cli.ExitWorked || !strings.Contains(out, "  login        none; run rein login") {
 			t.Fatalf("code %d out %q", code, out)
 		}
 	})

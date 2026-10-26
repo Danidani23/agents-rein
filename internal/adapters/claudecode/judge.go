@@ -36,12 +36,62 @@ func (Judge) Available() (string, bool) {
 	return "", true
 }
 
-// envelope is the JSON claude -p prints around its answer, on success and
-// on failure alike.
+// envelope is the result claude -p ends its stream with, on success and on
+// failure alike.
 type envelope struct {
+	Type    string `json:"type"`
 	Result  string `json:"result"`
 	IsError bool   `json:"is_error"`
 	Subtype string `json:"subtype"`
+}
+
+// streamEvent is a line of claude's stream that carries a piece of the
+// answer: a text delta, or a thinking one
+// ([docs](https://code.claude.com/docs/en/headless#stream-responses)).
+type streamEvent struct {
+	Type  string `json:"type"`
+	Event struct {
+		Delta struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"delta"`
+	} `json:"event"`
+}
+
+// judgeStream follows claude's stream as it comes and tells progress what
+// the answer holds so far.
+type judgeStream struct {
+	progress func(ports.JudgeProgress)
+	written  strings.Builder
+}
+
+// line reads one line of the stream; a line that is no event is skipped.
+func (stream *judgeStream) line(text string) {
+	var event streamEvent
+	if stream.progress == nil || json.Unmarshal([]byte(text), &event) != nil || event.Type != "stream_event" {
+		return
+	}
+	switch event.Event.Delta.Type {
+	case "thinking_delta":
+		if stream.written.Len() == 0 {
+			stream.progress(ports.JudgeProgress{Thinking: true})
+		}
+	case "text_delta":
+		stream.written.WriteString(event.Event.Delta.Text)
+		stream.progress(ports.JudgeProgress{Written: stream.written.String()})
+	}
+}
+
+// resultOf finds the result that ends claude's stream.
+func resultOf(stdout string) (envelope, bool) {
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	for index := len(lines) - 1; index >= 0; index-- {
+		var final envelope
+		if json.Unmarshal([]byte(lines[index]), &final) == nil && final.Type == "result" {
+			return final, true
+		}
+	}
+	return envelope{}, false
 }
 
 // judgeTimeout is how long the distiller may think: a large harness with
@@ -53,17 +103,17 @@ const judgeTimeout = 15 * time.Minute
 // folder without tools, so no project's instructions, hooks or tools
 // colour the verdict; model names the model, "" for the developer's
 // default. Never --bare: it skips the login with the hooks.
-func (Judge) Ask(brief string, model string) (string, string, error) {
+func (Judge) Ask(brief string, model string, progress func(ports.JudgeProgress)) (string, string, error) {
 	scratch, err := os.MkdirTemp("", "rein-judge-*")
 	if err != nil {
 		return "", "", err
 	}
 	defer os.RemoveAll(scratch)
 	session := newSessionID()
-	result, err := execute.RunWith(execute.Options{Directory: scratch, Input: brief, Timeout: judgeTimeout}, "claude", judgeArguments(model, session)...)
+	stream := &judgeStream{progress: progress}
+	result, err := execute.RunWith(execute.Options{Directory: scratch, Input: brief, Timeout: judgeTimeout, Lines: stream.line}, "claude", judgeArguments(model, session)...)
 	err = explainFailure(err)
-	var output envelope
-	parsed := json.Unmarshal([]byte(result.Stdout), &output) == nil
+	output, parsed := resultOf(result.Stdout)
 	if err != nil {
 		if parsed && strings.TrimSpace(output.Result) != "" {
 			return "", session, fmt.Errorf("claude reported: %s (%s)", strings.TrimSpace(output.Result), output.Subtype)
@@ -74,7 +124,7 @@ func (Judge) Ask(brief string, model string) (string, string, error) {
 		return "", session, err
 	}
 	if !parsed {
-		return "", session, fmt.Errorf("claude answered with something other than its JSON envelope: %s", lastLines(result.Stdout, 3))
+		return "", session, fmt.Errorf("claude's stream ended without its result: %s", lastLines(result.Stdout, 3))
 	}
 	if output.IsError {
 		return "", session, fmt.Errorf("claude reported an error: %s", strings.TrimSpace(output.Result))
@@ -89,9 +139,10 @@ func (Judge) ResumeCommand(session string) string {
 }
 
 // judgeArguments are claude's arguments for one brief: one turn, no tools,
-// JSON out, the session's id, and the model when one is named.
+// the answer streamed as it is written (P2.54), the session's id, and the
+// model when one is named.
 func judgeArguments(model string, session string) []string {
-	arguments := []string{"-p", "--output-format", "json", "--max-turns", "1", "--tools", "", "--session-id", session}
+	arguments := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--max-turns", "1", "--tools", "", "--session-id", session}
 	if model != "" {
 		arguments = append(arguments, "--model", model)
 	}

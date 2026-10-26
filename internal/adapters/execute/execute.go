@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -70,6 +71,35 @@ type Options struct {
 	Environment []string
 	// Unset removes variables from the program's environment.
 	Unset []string
+	// Lines, when set, receives each line of standard output as it comes,
+	// without its newline; Result.Stdout still holds all of it.
+	Lines func(line string)
+}
+
+// lineWriter hands what a program writes on, one whole line at a time.
+type lineWriter struct {
+	each    func(line string)
+	pending []byte
+}
+
+func (writer *lineWriter) Write(written []byte) (int, error) {
+	writer.pending = append(writer.pending, written...)
+	for {
+		end := bytes.IndexByte(writer.pending, '\n')
+		if end < 0 {
+			return len(written), nil
+		}
+		writer.each(strings.TrimSuffix(string(writer.pending[:end]), "\r"))
+		writer.pending = writer.pending[end+1:]
+	}
+}
+
+// flush hands on the last line, which no newline ended.
+func (writer *lineWriter) flush() {
+	if len(writer.pending) > 0 {
+		writer.each(string(writer.pending))
+		writer.pending = nil
+	}
 }
 
 // generation is the context every run shares; Interrupt cancels it and
@@ -146,7 +176,15 @@ func RunWith(options Options, name string, arguments ...string) (Result, error) 
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr
+	var lines *lineWriter
+	if options.Lines != nil {
+		lines = &lineWriter{each: options.Lines}
+		command.Stdout = io.MultiWriter(&stdout, lines)
+	}
 	err := command.Run()
+	if lines != nil {
+		lines.flush()
+	}
 	result := Result{Stdout: stdout.String(), Stderr: stderr.String()}
 	if err == nil {
 		return result, nil

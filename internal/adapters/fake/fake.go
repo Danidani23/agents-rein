@@ -592,6 +592,8 @@ type Judge struct {
 	Briefs      []string
 	// Models are the models asked for, one per brief.
 	Models []string
+	// Progress is what each Ask reports before it answers.
+	Progress []ports.JudgeProgress
 }
 
 // Name is the fake's name.
@@ -613,9 +615,14 @@ func (*Judge) ResumeCommand(session string) string {
 }
 
 // Ask records the brief and returns the next scripted answer.
-func (judge *Judge) Ask(brief string, model string) (string, string, error) {
+func (judge *Judge) Ask(brief string, model string, progress func(ports.JudgeProgress)) (string, string, error) {
 	judge.Briefs = append(judge.Briefs, brief)
 	judge.Models = append(judge.Models, model)
+	for _, update := range judge.Progress {
+		if progress != nil {
+			progress(update)
+		}
+	}
 	if len(judge.Answers) == 0 {
 		return "", "", errors.New("fake judge has no answer left")
 	}

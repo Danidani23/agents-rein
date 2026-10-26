@@ -220,11 +220,19 @@ type Judge interface {
 	Available() (reason string, ok bool)
 	// Ask sends the brief and returns the answer's text, with the id of
 	// the conversation it ran as, "" when the backend keeps none, so a
-	// person can open it again.
-	Ask(brief string, model string) (answer string, session string, err error)
+	// person can open it again. progress, which may be nil, hears how far
+	// the answer has come while it is written.
+	Ask(brief string, model string, progress func(JudgeProgress)) (answer string, session string, err error)
 	// ResumeCommand is the command a person runs to open a conversation
 	// again, "" when the backend keeps none.
 	ResumeCommand(session string) string
+}
+
+// JudgeProgress is how far an answer has come: the model still thinking,
+// or the text it has written so far.
+type JudgeProgress struct {
+	Thinking bool
+	Written  string
 }
 
 // MachineLock keeps two rein processes from changing this machine at once:

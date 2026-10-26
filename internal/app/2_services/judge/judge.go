@@ -34,6 +34,15 @@ func (service Service) Name() string {
 	return service.Judge.Name()
 }
 
+// Describe names who answers, for a person: the backend without its kind,
+// and the model, or the developer's default.
+func (service Service) Describe(model string) string {
+	if model == "" {
+		model = "your default model"
+	}
+	return strings.TrimPrefix(service.Name(), "agent-cli:") + " with " + model
+}
+
 // ResumeCommand is the command that opens the conversation of a run, ""
 // when there is none.
 func (service Service) ResumeCommand(session string) string {
@@ -47,13 +56,17 @@ func (service Service) ResumeCommand(session string) string {
 // back once, and returns the candidates with the judgements it believes,
 // the units cut out in place of the candidates they came from. The run says
 // what happened; a failed run returns the candidates as the mechanical pass
-// had them.
-func (service Service) JudgeCandidates(level string, candidates []distill.Candidate, corpus distill.Corpus, model string) (distill.JudgeRun, []distill.Candidate) {
+// had them. report, which may be nil, hears in a few words how far the
+// answer has come (P2.54).
+func (service Service) JudgeCandidates(level string, candidates []distill.Candidate, corpus distill.Corpus, model string, report func(note string)) (distill.JudgeRun, []distill.Candidate) {
 	run := distill.JudgeRun{Backend: service.Name(), Dropped: corpus.Dropped}
 	// the first line names the conversation in the agent's history
 	brief := fmt.Sprintf("rein distill, the distiller's brief for %s, %s\n\n", level, time.Now().Format("2006-01-02 15:04")) + distill.Brief(level, candidates, corpus)
 	for attempt := 0; attempt < 2; attempt++ {
-		text, session, err := service.Judge.Ask(brief, model)
+		if attempt > 0 && report != nil {
+			report("its first answer was not accepted; asking again with the problems")
+		}
+		text, session, err := service.Judge.Ask(brief, model, progressNotes(report))
 		run.Session = session
 		if err != nil {
 			run.Status = distill.JudgeFailed
@@ -78,4 +91,32 @@ func (service Service) JudgeCandidates(level string, candidates []distill.Candid
 	}
 	run.Status = distill.JudgeFailed
 	return run, candidates
+}
+
+// progressNotes turns an answer's progress into notes for a person, each
+// said once: thinking, then how many judgements the answer holds so far.
+func progressNotes(report func(note string)) func(ports.JudgeProgress) {
+	if report == nil {
+		return nil
+	}
+	said := ""
+	return func(update ports.JudgeProgress) {
+		note := ""
+		switch {
+		case update.Written != "":
+			note = "writing its answer"
+			judged := strings.Count(update.Written, `"verdict"`)
+			if judged == 1 {
+				note += ", 1 judgement so far"
+			} else if judged > 1 {
+				note += fmt.Sprintf(", %d judgements so far", judged)
+			}
+		case update.Thinking:
+			note = "thinking"
+		}
+		if note != "" && note != said {
+			said = note
+			report(note)
+		}
+	}
 }
