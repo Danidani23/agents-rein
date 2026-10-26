@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.1] - 2026-10-26
+
+### Bug Fixes
+
+- **release:** a publish run again replaces the files the first left (4c552db)
+
 ## [1.0.0] - 2026-10-26
 
 ### ⚠ BREAKING CHANGES
