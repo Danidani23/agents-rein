@@ -37,7 +37,7 @@ func TestFilesMakeAnOrgRepositoryTheLintAccepts(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 	tree, problems, err := declaration.LoadTree(root)
-	if err != nil || len(problems) != 0 || len(tree.Labels) != 3 {
+	if err != nil || len(problems) != 0 || len(tree.Labels) != 4 {
 		t.Fatalf("tree err %v problems %+v labels %d", err, problems, len(tree.Labels))
 	}
 	codeowners, _ := os.ReadFile(filepath.Join(root, "CODEOWNERS"))

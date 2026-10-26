@@ -135,10 +135,12 @@ type Comparison struct {
 
 // Judgement is the judge's view with the level resolved to an address.
 type Judgement struct {
-	Verdict    string          `yaml:"verdict"`
-	Suggestion string          `yaml:"suggestion"`
-	Level      string          `yaml:"level"`
-	ApplyIf    []string        `yaml:"applyIf"`
+	Verdict    string   `yaml:"verdict"`
+	Suggestion string   `yaml:"suggestion"`
+	Level      string   `yaml:"level"`
+	ApplyIf    []string `yaml:"applyIf"`
+	// Everywhere is why a lift without applyIf holds for every project.
+	Everywhere string          `yaml:"everywhere,omitempty"`
 	Reason     string          `yaml:"reason"`
 	Quotes     []distill.Quote `yaml:"quotes"`
 }

@@ -34,6 +34,15 @@ func (service Service) Name() string {
 	return service.Judge.Name()
 }
 
+// ResumeCommand is the command that opens the conversation of a run, ""
+// when there is none.
+func (service Service) ResumeCommand(session string) string {
+	if service.Judge == nil || session == "" {
+		return ""
+	}
+	return service.Judge.ResumeCommand(session)
+}
+
 // JudgeCandidates sends the brief, validates the answer, sends the problems
 // back once, and returns the candidates with the judgements it believes,
 // the units cut out in place of the candidates they came from. The run says

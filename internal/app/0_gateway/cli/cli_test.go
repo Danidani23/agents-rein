@@ -720,10 +720,14 @@ func TestDistillJudgeFlags(t *testing.T) {
 	if code != ExitWorked || !strings.Contains(out, "distiller: fake-judge skipped: not asked") {
 		t.Fatalf("code %d out %q", code, out)
 	}
-	fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"organization","reason":"general"}]}`}}
+	fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"organization","everywhere":"nothing in it is stack-specific","reason":"general"}]}`}}
 	code, out, _ = fixture.run("distill", "--project", "shop", "--force")
-	if code != ExitWorked || !strings.Contains(out, "distiller: new; lift to organizations.acme: general") || !strings.Contains(out, "distiller: fake-judge answered, conversation fake-session") {
+	if code != ExitWorked || !strings.Contains(out, "distiller: new; lift to organizations.acme, every project: nothing in it is stack-specific: general") || !strings.Contains(out, "             reaches: shop\n") || !strings.Contains(out, "distiller: fake-judge answered\n") {
 		t.Fatalf("code %d out %q", code, out)
+	}
+	// the last line is the command that opens the distiller's conversation (Q49)
+	if !strings.HasSuffix(out, "\nthe distiller's conversation, to read or go on with it: fake-judge --resume fake-session\n") {
+		t.Fatalf("no command for the conversation: out %q", out)
 	}
 	code, out, _ = fixture.run("distill", "--project", "shop", "--distiller", "none", "--force")
 	if code != ExitWorked || !strings.Contains(out, "distiller: fake-judge skipped: not asked") || strings.Contains(out, "asking the distiller") {
@@ -946,20 +950,20 @@ func TestProjectEditAndLabelRegistry(t *testing.T) {
 	if code != ExitRefused || !strings.Contains(errOut, "kind:worker is already in the registry") {
 		t.Fatalf("add twice: code %d err %q", code, errOut)
 	}
-	// category: 4 is the new one after data, kind, language; then its name, the value, the description, required yes, several no, confirm
-	code, out, errOut = fixture.runInteractive("4\nstack\naws\nruns on AWS\ny\nn\n\n", "label", "add")
-	if code != ExitWorked || !strings.Contains(out, "4) a new category") || !strings.Contains(out, "Must every project carry one value of stack?") || !strings.Contains(out, "May a project carry several values of stack?") || !strings.Contains(out, "This will create the category stack in the registry of acme, required: every project carries one of its values, one value per project, with its first value aws (runs on AWS)") || !strings.Contains(out, "created the category stack with stack:aws in acme") {
+	// category: 5 is the new one after data, kind, language, stack; then its name, the value, the description, required yes, several no, confirm
+	code, out, errOut = fixture.runInteractive("5\ncloud\naws\nruns on AWS\ny\nn\n\n", "label", "add")
+	if code != ExitWorked || !strings.Contains(out, "5) a new category") || !strings.Contains(out, "Must every project carry one value of cloud?") || !strings.Contains(out, "May a project carry several values of cloud?") || !strings.Contains(out, "This will create the category cloud in the registry of acme, required: every project carries one of its values, one value per project, with its first value aws (runs on AWS)") || !strings.Contains(out, "created the category cloud with cloud:aws in acme") {
 		t.Fatalf("interactive add: code %d out %q err %q", code, out, errOut)
 	}
 	code, out, _ = fixture.run("label", "list")
-	if !strings.Contains(out, "stack  required") || !strings.Contains(out, "  aws              runs on AWS") || !strings.Contains(out, "  worker           a background worker") {
+	if !strings.Contains(out, "cloud  required") || !strings.Contains(out, "  aws              runs on AWS") || !strings.Contains(out, "  worker           a background worker") {
 		t.Fatalf("list after: out %q", out)
 	}
 	code, _, errOut = fixture.run("label", "remove", "kind:cli", "--yes")
 	if code != ExitRefused || !strings.Contains(errOut, "kind:cli is carried by the projects shop; change them first with rein project edit") {
 		t.Fatalf("remove carried: code %d err %q", code, errOut)
 	}
-	code, _, errOut = fixture.run("label", "remove", "stack:aws", "--yes")
+	code, _, errOut = fixture.run("label", "remove", "cloud:aws", "--yes")
 	if code != ExitRefused || !strings.Contains(errOut, "the last value of its category") {
 		t.Fatalf("remove last: code %d err %q", code, errOut)
 	}
@@ -971,7 +975,7 @@ func TestProjectEditAndLabelRegistry(t *testing.T) {
 	if code != ExitWorked || !strings.Contains(out, "This will make the category language required, so every project created or edited from now on carries one of its values in acme") || !strings.Contains(out, "the category language in acme is required, several values per project") {
 		t.Fatalf("set required: code %d out %q err %q", code, out, errOut)
 	}
-	code, _, errOut = fixture.run("project", "create", "--name", "Blog", "--team", "web", "--label", "kind:web-app", "--label", "stack:aws", "--yes")
+	code, _, errOut = fixture.run("project", "create", "--name", "Blog", "--team", "web", "--label", "kind:web-app", "--label", "cloud:aws", "--yes")
 	if code != ExitRefused || !strings.Contains(errOut, "the label category language is required") {
 		t.Fatalf("create after require: code %d err %q", code, errOut)
 	}
@@ -991,9 +995,9 @@ func TestProjectEditAndLabelRegistry(t *testing.T) {
 	if code != ExitRefused || !strings.Contains(errOut, "data takes one value; given internal, public") {
 		t.Fatalf("two values with flags: code %d err %q", code, errOut)
 	}
-	// name, description, teams, kind and stack (single choices, both required by now), other labels twice: two data values refused, then one; path, confirm
+	// name, description, teams, cloud and kind (single choices, both required by now), other labels twice: two data values refused, then one; path, confirm
 	code, out, errOut = fixture.runInteractive("Three\n\n\n1\n1\ndata:internal,data:public\ndata:public\n\n\n", "project", "create")
-	if code != ExitWorked || !strings.Contains(out, "Label kind, required: one value.") || !strings.Contains(out, "\x1b[1mChoose\x1b[0m: ") || !strings.Contains(out, "data takes one value; given internal, public. Other labels") || !strings.Contains(out, "with labels kind:cli, stack:aws, data:public") {
+	if code != ExitWorked || !strings.Contains(out, "Label kind, required: one value.") || !strings.Contains(out, "\x1b[1mChoose\x1b[0m: ") || !strings.Contains(out, "data takes one value; given internal, public. Other labels") || !strings.Contains(out, "with labels cloud:aws, kind:cli, data:public") {
 		t.Fatalf("two values asked again: code %d out %q err %q", code, out, errOut)
 	}
 	code, _, errOut = fixture.run("label", "remove", "nope")
@@ -1001,7 +1005,7 @@ func TestProjectEditAndLabelRegistry(t *testing.T) {
 		t.Fatalf("bad label: code %d err %q", code, errOut)
 	}
 	code, _, errOut = fixture.run("label", "set", "nope", "--required", "--yes")
-	if code != ExitRefused || !strings.Contains(errOut, `category "nope" is not in the registry; categories are data, kind, language, stack`) {
+	if code != ExitRefused || !strings.Contains(errOut, `category "nope" is not in the registry; categories are cloud, data, kind, language, stack`) {
 		t.Fatalf("unknown category: code %d err %q", code, errOut)
 	}
 }

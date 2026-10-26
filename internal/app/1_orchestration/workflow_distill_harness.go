@@ -13,6 +13,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/proposal"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/proposalfiles"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/resolve"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/snapshots"
 )
 
@@ -39,12 +40,16 @@ type DistillRequest struct {
 }
 
 // DistillResult is what DistillHarness did: the proposal it wrote and
-// where, or the brief on a dry run.
+// where, or the brief on a dry run, and the command that opens the
+// distiller's conversation, "" without one. Reaches names, by kind/id,
+// the projects each candidate for the organisation or a team reaches.
 type DistillResult struct {
-	Level    string
-	File     string
-	Proposal proposal.Proposal
-	Brief    string
+	Level        string
+	File         string
+	Proposal     proposal.Proposal
+	Brief        string
+	Conversation string
+	Reaches      map[string][]string
 }
 
 // DistillHarness turns the harness a snapshot holds into candidate
@@ -131,6 +136,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 				}
 				corpus.Labels, corpus.SingleValued = registryLabels(services, orgClonePath)
 				corpus.ProjectLabels = projectLabelsOf(services, orgClonePath, level)
+				corpus.Projects = projectsOf(services, orgClonePath)
 				// a document goes beside the clone's tracked Markdown, so only a project clone offers it
 				if stored[0].Project != "" && folderExists(stored[0].Folder) {
 					documents, err := services.WorkingCopy.TrackedMarkdown(stored[0].Folder)
@@ -198,6 +204,11 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 					return refusal.New(err.Error())
 				}
 				result.Proposal = document
+				result.Conversation = services.Judge.ResumeCommand(document.Judge.Session)
+				tree, err := services.Records.Tree(orgClonePath)
+				if err == nil {
+					result.Reaches = reachesOf(tree, document)
+				}
 				return nil
 			},
 		})
@@ -234,7 +245,7 @@ func placeJudged(services Services, orgClonePath string, organization machine.Or
 		resolved := &proposal.Judgement{Verdict: judgement.Verdict, Suggestion: judgement.Suggestion, Level: target, ApplyIf: []string{}, Reason: judgement.Reason, Quotes: []distill.Quote{}}
 		return proposal.FromCandidate(candidate, target, judgement.Suggestion != distill.LabelRedundant, nil, resolved)
 	}
-	resolved := &proposal.Judgement{Verdict: judgement.Verdict, Suggestion: judgement.Suggestion, ApplyIf: orEmptyList(judgement.ApplyIf), Reason: judgement.Reason, Quotes: judgement.Quotes}
+	resolved := &proposal.Judgement{Verdict: judgement.Verdict, Suggestion: judgement.Suggestion, ApplyIf: orEmptyList(judgement.ApplyIf), Everywhere: judgement.Everywhere, Reason: judgement.Reason, Quotes: judgement.Quotes}
 	if resolved.Quotes == nil {
 		resolved.Quotes = []distill.Quote{}
 	}
@@ -298,6 +309,53 @@ func projectLabelsOf(services Services, orgClonePath string, level string) []str
 		return nil
 	}
 	return append([]string{}, project.Labels...)
+}
+
+// projectsOf lists the organisation's projects with their teams and
+// labels, for the distiller to see whom a lift reaches; none when the
+// records cannot be read.
+func projectsOf(services Services, orgClonePath string) []distill.Project {
+	tree, err := services.Records.Tree(orgClonePath)
+	if err != nil {
+		return nil
+	}
+	var projects []distill.Project
+	for _, slug := range sortedKeys(tree.Projects) {
+		projects = append(projects, distill.Project{Slug: slug, Teams: tree.Projects[slug].Teams, Labels: tree.Projects[slug].Labels})
+	}
+	return projects
+}
+
+// reachesOf names, by kind/id, the projects each candidate going to the
+// organisation or a team reaches, counting the labels the proposal assigns
+// to the project it was distilled from (D40).
+func reachesOf(tree declaration.Tree, document proposal.Proposal) map[string][]string {
+	added := map[string][]string{}
+	segments := strings.Split(document.DistilledFrom, ".")
+	if len(segments) == 4 && segments[2] == address.Projects {
+		for _, candidate := range document.Candidates {
+			if candidate.Kind != distill.KindLabels || !candidate.Goes() {
+				continue
+			}
+			for _, content := range candidate.Files {
+				change, err := distill.ParseLabelChange(content)
+				if err == nil && change.Action == distill.LabelAssign {
+					added[segments[3]] = append(added[segments[3]], change.Label)
+				}
+			}
+		}
+	}
+	reaches := map[string][]string{}
+	for _, candidate := range document.Candidates {
+		if !candidate.Goes() || candidate.Kind == distill.KindLabels || candidate.Kind == distill.KindDocuments {
+			continue
+		}
+		reached := resolve.Reaches(tree, candidate.Level, declaration.Selectors{ApplyIf: candidate.ApplyIf, DoNotApplyIf: candidate.DoNotApplyIf}, added)
+		if reached != nil {
+			reaches[candidate.Kind+"/"+candidate.ID] = reached
+		}
+	}
+	return reaches
 }
 
 // readmeOf is the README at the top of a project's folder, whatever its

@@ -22,7 +22,9 @@ type Judgement struct {
 	Suggestion string   `yaml:"suggestion" json:"suggestion"`
 	Level      string   `yaml:"level,omitempty" json:"level,omitempty"`
 	ApplyIf    []string `yaml:"applyIf,omitempty" json:"applyIf,omitempty"`
-	Reason     string   `yaml:"reason" json:"reason"`
+	// Everywhere says why a lift without applyIf holds for every project.
+	Everywhere string `yaml:"everywhere,omitempty" json:"everywhere,omitempty"`
+	Reason     string `yaml:"reason" json:"reason"`
 }
 
 // Quote is a passage the judge points at, verbatim.
@@ -46,7 +48,10 @@ type LabelSuggestion struct {
 	Action  string `json:"action" yaml:"action"`
 	Label   string `json:"label" yaml:"label"`
 	Meaning string `json:"meaning,omitempty" yaml:"meaning,omitempty"`
-	Reason  string `json:"reason" yaml:"-"`
+	// Multiple says, for a category the registry lacks, whether a project
+	// may carry several of its values.
+	Multiple *bool  `json:"multiple,omitempty" yaml:"multiple,omitempty"`
+	Reason   string `json:"reason" yaml:"-"`
 }
 
 // ParseLabelChange reads a label entry of a proposal, which the developer
@@ -142,7 +147,7 @@ func Brief(level string, candidates []Candidate, corpus Corpus) string {
 		if len(corpus.ProjectLabels) > 0 {
 			carried = strings.Join(corpus.ProjectLabels, ", ")
 		}
-		fmt.Fprintf(&brief, "Review the project's labels too, in `labels`, each with an `action`, the `label` as category:value and a one-sentence `reason`: `assign` a registry label the project plainly has but does not carry; `add` a label the registry lacks, with its `meaning`, only when an entry or unit you lift needs it in `applyIf` and no registry label fits; `redundant` for a registry label that says the same as another. The project carries %s.", carried)
+		fmt.Fprintf(&brief, "Review the project's labels too, in `labels`, each with an `action`, the `label` as category:value and a one-sentence `reason`: `assign` a registry label the project plainly has but does not carry; `add` a label the registry lacks, with its `meaning`, only when an entry or unit you lift needs it in `applyIf` and no registry label fits, and for a category the registry lacks say with `multiple`, true or false, whether a project may carry several of its values: what a project uses, its tools, frameworks and platforms, takes several, what it is takes one; `redundant` for a registry label that says the same as another. A label you add may be assigned in the same answer. The project carries %s.", carried)
 		if len(corpus.SingleValued) > 0 {
 			fmt.Fprintf(&brief, " These categories take one value per project: %s.", strings.Join(corpus.SingleValued, ", "))
 		}
@@ -152,13 +157,13 @@ func Brief(level string, candidates []Candidate, corpus Corpus) string {
 	fmt.Fprintf(&brief, "- verdict: `new` when nothing existing covers it; `duplicate` when an existing declaration says the same; `overlaps` when an existing one covers part of it or says something similar; `contradicts` when following both is impossible.\n")
 	fmt.Fprintf(&brief, "- related: the addresses of the existing declarations the verdict rests on, from the headings below, none for `new`.\n")
 	fmt.Fprintf(&brief, "- quotes: for `duplicate`, `overlaps` and `contradicts`, the passage of the related declaration that shows it, copied verbatim from below, with its address.\n")
-	fmt.Fprintf(&brief, "- suggestion: `keep` the candidate at this level; `drop` it because an existing declaration already covers it; `lift` it to a higher level because it is general, giving `level` (organization, team, project or user) and `applyIf` labels when it should apply to some projects only.\n")
+	fmt.Fprintf(&brief, "- suggestion: `keep` the candidate at this level; `drop` it because an existing declaration already covers it; `lift` it to a higher level because it is general, giving `level` (organization, team, project or user) and `applyIf` labels when it should apply to some projects only. A lift to the organization or a team reaches every project listed under \"The organisation's projects\" that carries one of its `applyIf` labels, a team's only its own; without `applyIf` it reaches all of them, so say in `everywhere` why it holds for every one. A lift keeps reaching this project: it carries one of the `applyIf` labels, or you assign it one in `labels`.\n")
 	if len(corpus.Labels) > 0 {
 		fmt.Fprintf(&brief, "- applyIf labels come from the organisation's registry and nowhere else: %s. A stack-specific declaration, such as one for a language or a kind of project, is lifted with the label that names that stack.\n", strings.Join(corpus.Labels, ", "))
 	}
 	fmt.Fprintf(&brief, "- reason: one sentence.\n\n")
 	fmt.Fprintf(&brief, "Judge meaning, not wording. Declarations that apply to this level are marked `applies`; the others belong to other teams and are here because they look related, which matters for `lift`. Answer with JSON only, no prose around it, in this exact shape:\n\n")
-	fmt.Fprintf(&brief, "```json\n{\"version\": %d, \"candidates\": [{\"candidate\": \"rules/example\", \"verdict\": \"overlaps\", \"related\": [\"organizations.acme.rules.style\"], \"quotes\": [{\"address\": \"organizations.acme.rules.style\", \"text\": \"verbatim passage\"}], \"suggestion\": \"drop\", \"level\": \"\", \"applyIf\": [], \"reason\": \"one sentence\"}], \"units\": [{\"id\": \"deploy-branch\", \"kind\": \"rules\", \"from\": [{\"candidate\": \"rules/git\", \"lines\": \"5-6\"}], \"shape\": \"paths\", \"paths\": [\"deploy/**\"], \"heading\": \"\", \"description\": \"\", \"verdict\": \"new\", \"related\": [], \"quotes\": [], \"suggestion\": \"keep\", \"level\": \"\", \"applyIf\": [], \"reason\": \"one sentence\"}]}\n```\n\n", AnswerVersion)
+	fmt.Fprintf(&brief, "```json\n{\"version\": %d, \"candidates\": [{\"candidate\": \"rules/example\", \"verdict\": \"overlaps\", \"related\": [\"organizations.acme.rules.style\"], \"quotes\": [{\"address\": \"organizations.acme.rules.style\", \"text\": \"verbatim passage\"}], \"suggestion\": \"drop\", \"level\": \"\", \"applyIf\": [], \"everywhere\": \"\", \"reason\": \"one sentence\"}], \"units\": [{\"id\": \"deploy-branch\", \"kind\": \"rules\", \"from\": [{\"candidate\": \"rules/git\", \"lines\": \"5-6\"}], \"shape\": \"paths\", \"paths\": [\"deploy/**\"], \"heading\": \"\", \"description\": \"\", \"verdict\": \"new\", \"related\": [], \"quotes\": [], \"suggestion\": \"keep\", \"level\": \"\", \"applyIf\": [], \"reason\": \"one sentence\"}]}\n```\n\n", AnswerVersion)
 	fmt.Fprintf(&brief, "Every candidate below is judged once, keyed by its `kind/id` heading, or cut into units. A rule's and a skill's lines are numbered.\n\n# Candidates\n\n")
 	for _, candidate := range candidates {
 		fmt.Fprintf(&brief, "## %s/%s\n\n", candidate.Kind, candidate.ID)
@@ -198,6 +203,21 @@ func Brief(level string, candidates []Candidate, corpus Corpus) string {
 			for _, file := range corpus.ProjectFiles {
 				fmt.Fprintf(&brief, "- %s\n", file)
 			}
+		}
+		fmt.Fprintf(&brief, "\n")
+	}
+	if len(corpus.Projects) > 0 {
+		fmt.Fprintf(&brief, "# The organisation's projects\n\nWhom a lift reaches, with the labels each carries.\n\n")
+		for _, project := range corpus.Projects {
+			name := project.Slug
+			switch len(project.Teams) {
+			case 0:
+			case 1:
+				name += ", team " + project.Teams[0]
+			default:
+				name += ", teams " + strings.Join(project.Teams, ", ")
+			}
+			fmt.Fprintf(&brief, "- %s: %s\n", name, describeLabels(project.Labels))
 		}
 		fmt.Fprintf(&brief, "\n")
 	}
@@ -288,6 +308,7 @@ func Validate(answer Answer, candidates []Candidate, corpus Corpus) (problems []
 		taken[entry.Candidate] = true
 		problems = append(problems, judgementProblems(entry.Candidate, entry.Judgement, texts)...)
 	}
+	problems = append(problems, liftProblems(answer, corpus)...)
 	cut := map[string]bool{}
 	lineCounts := map[string]map[int]int{}
 	fileCounts := map[string]map[string]int{}
@@ -480,6 +501,54 @@ func documentProblems(unit Unit, label string, documents []string) (problems []s
 	return problems
 }
 
+// liftProblems is everything wrong with whom the lifts reach: a lift to the
+// organisation or a team without applyIf and without a reason it holds for
+// every project, and a lift whose labels leave out the project it came
+// from, counting the labels the answer assigns it (D40).
+func liftProblems(answer Answer, corpus Corpus) (problems []string) {
+	carried := append([]string{}, corpus.ProjectLabels...)
+	for _, suggestion := range answer.Labels {
+		if suggestion.Action == LabelAssign {
+			carried = append(carried, suggestion.Label)
+		}
+	}
+	check := func(label string, judgement Judgement) {
+		if judgement.Suggestion != "lift" || (judgement.Level != "organization" && judgement.Level != "team") {
+			return
+		}
+		if len(judgement.ApplyIf) == 0 {
+			if strings.TrimSpace(judgement.Everywhere) == "" {
+				problems = append(problems, fmt.Sprintf("%s: lifted to the %s without applyIf; name the labels of the projects it is for, or say in everywhere why it holds for every project", label, judgement.Level))
+			}
+			return
+		}
+		if corpus.ProjectLabels == nil {
+			return
+		}
+		for _, wanted := range judgement.ApplyIf {
+			if contains(carried, wanted) {
+				return
+			}
+		}
+		problems = append(problems, fmt.Sprintf("%s: applyIf %s leaves out this project, which carries %s; assign one of them to it in labels too, or lift with a label it carries", label, strings.Join(judgement.ApplyIf, " "), describeLabels(corpus.ProjectLabels)))
+	}
+	for _, entry := range answer.Candidates {
+		check(entry.Candidate, entry.Judgement)
+	}
+	for _, unit := range answer.Units {
+		check("unit "+unit.ID, unit.Judgement)
+	}
+	return problems
+}
+
+// describeLabels lists labels for a sentence, or says there are none.
+func describeLabels(labels []string) string {
+	if len(labels) == 0 {
+		return "no labels"
+	}
+	return strings.Join(labels, ", ")
+}
+
 // labelProblems is everything wrong with the label suggestions: an unknown
 // action, a label that is not category:value, an assignment of a label the
 // registry lacks or the project carries, or a second value of a category of
@@ -504,16 +573,29 @@ func labelProblems(answer Answer, corpus Corpus) (problems []string) {
 	seen := map[string]bool{}
 	// the label already assigned in this answer, by category
 	assigned := map[string]string{}
+	// a label added here may be assigned here too, and a category the
+	// registry lacks says whether it takes several values
+	added := map[string]bool{}
+	categories := map[string]bool{}
+	for _, suggestion := range answer.Labels {
+		if suggestion.Action == LabelAdd {
+			added[suggestion.Label] = true
+		}
+	}
+	for _, registered := range corpus.Labels {
+		category, _, _ := strings.Cut(registered, ":")
+		categories[category] = true
+	}
 	for _, suggestion := range answer.Labels {
 		label := fmt.Sprintf("label %s %s", suggestion.Action, suggestion.Label)
 		category, value, isLabel := strings.Cut(suggestion.Label, ":")
 		if !isLabel || !address.IsSlug(category) || !address.IsSlug(value) {
 			problems = append(problems, fmt.Sprintf("%s: %q is not category:value", label, suggestion.Label))
 		}
-		if seen[suggestion.Label] {
+		if seen[suggestion.Action+" "+suggestion.Label] {
 			problems = append(problems, fmt.Sprintf("%s: the label is suggested twice", label))
 		}
-		seen[suggestion.Label] = true
+		seen[suggestion.Action+" "+suggestion.Label] = true
 		inRegistry := contains(corpus.Labels, suggestion.Label)
 		switch suggestion.Action {
 		case LabelAssign:
@@ -522,7 +604,7 @@ func labelProblems(answer Answer, corpus Corpus) (problems []string) {
 				problems = append(problems, fmt.Sprintf("%s: there is no project to assign it to", label))
 			case contains(corpus.ProjectLabels, suggestion.Label):
 				problems = append(problems, fmt.Sprintf("%s: the project carries it", label))
-			case !inRegistry:
+			case !inRegistry && !added[suggestion.Label]:
 				problems = append(problems, fmt.Sprintf("%s: the registry has no such label; add it instead", label))
 			case contains(corpus.SingleValued, category):
 				for _, carried := range corpus.ProjectLabels {
@@ -544,6 +626,9 @@ func labelProblems(answer Answer, corpus Corpus) (problems []string) {
 			}
 			if !lifted[suggestion.Label] {
 				problems = append(problems, fmt.Sprintf("%s: no entry or unit lifted in this answer uses it in applyIf", label))
+			}
+			if isLabel && !categories[category] && suggestion.Multiple == nil {
+				problems = append(problems, fmt.Sprintf("%s: %s is a new category; say with multiple whether a project may carry several of its values", label, category))
 			}
 		case LabelRedundant:
 			if !inRegistry {
@@ -703,8 +788,14 @@ func Apply(answer Answer, candidates []Candidate) []Candidate {
 	for _, unit := range answer.Units {
 		result = append(result, unitCandidates(unit, byKey)...)
 	}
+	labelIDs := map[string]bool{}
 	for _, suggestion := range answer.Labels {
 		id := slugOf(suggestion.Label)
+		// a label added and assigned in one answer is two changes
+		if labelIDs[id] {
+			id += "-" + suggestion.Action
+		}
+		labelIDs[id] = true
 		content, _ := yaml.Marshal(suggestion)
 		judgement := Judgement{Verdict: VerdictNew, Suggestion: suggestion.Action, Reason: suggestion.Reason}
 		result = append(result, Candidate{Kind: KindLabels, ID: id, Sources: []string{}, Files: map[string]string{path.Join(KindLabels, id+".yaml"): string(content)}, Judgement: &judgement})

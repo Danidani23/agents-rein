@@ -607,6 +607,11 @@ func (judge *Judge) Available() (string, bool) {
 	return "", true
 }
 
+// ResumeCommand names the fake's conversation.
+func (*Judge) ResumeCommand(session string) string {
+	return "fake-judge --resume " + session
+}
+
 // Ask records the brief and returns the next scripted answer.
 func (judge *Judge) Ask(brief string, model string) (string, string, error) {
 	judge.Briefs = append(judge.Briefs, brief)

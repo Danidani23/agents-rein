@@ -362,7 +362,7 @@ func TestWiring(t *testing.T) {
 		if !strings.Contains(string(passed), "--model sonnet") {
 			t.Fatalf("claude was started with %q, without the model", passed)
 		}
-		if code != cli.ExitWorked || !strings.Contains(out, "distilled 2 candidates for organizations.acme.projects.shop") || !strings.Contains(out, "rules/go") || !strings.Contains(out, "written to "+filepath.Join(project, ".rein", "proposals", "proposal-")) || !strings.Contains(out, "distiller: agent-cli:claude answered, conversation ") {
+		if code != cli.ExitWorked || !strings.Contains(out, "distilled 2 candidates for organizations.acme.projects.shop") || !strings.Contains(out, "rules/go") || !strings.Contains(out, "written to "+filepath.Join(project, ".rein", "proposals", "proposal-")) || !strings.Contains(out, "distiller: agent-cli:claude answered\n") || !strings.Contains(out, "the distiller's conversation, to read or go on with it: claude --resume ") {
 			t.Fatalf("distill: code %d out %q err %q", code, out, errOut)
 		}
 		ignore, _ = os.ReadFile(filepath.Join(project, ".gitignore"))

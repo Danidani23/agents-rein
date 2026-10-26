@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -262,6 +263,38 @@ func matches(selectors declaration.Selectors, labels map[string]bool) bool {
 		}
 	}
 	return false
+}
+
+// Reaches lists, in order, the projects a declaration at an organisation's
+// or a team's level would apply to by its selectors, counting the labels
+// added gives a project beyond its record; nil for another level. Skip
+// lists are not counted: they name what a project refuses, not who is
+// reached (D40).
+func Reaches(tree declaration.Tree, level string, selectors declaration.Selectors, added map[string][]string) []string {
+	segments := strings.Split(level, ".")
+	team := ""
+	switch {
+	case len(segments) == 2 && segments[0] == address.Organizations:
+	case len(segments) == 4 && segments[0] == address.Organizations && segments[2] == address.Teams:
+		team = segments[3]
+	default:
+		return nil
+	}
+	reached := []string{}
+	for slug, project := range tree.Projects {
+		if team != "" && !slices.Contains(project.Teams, team) {
+			continue
+		}
+		labels := map[string]bool{}
+		for _, label := range append(append([]string{}, project.Labels...), added[slug]...) {
+			labels[label] = true
+		}
+		if matches(selectors, labels) {
+			reached = append(reached, slug)
+		}
+	}
+	sort.Strings(reached)
+	return reached
 }
 
 // skipOf finds a skip list below the declaration's level that names it: a

@@ -222,6 +222,9 @@ type Judge interface {
 	// the conversation it ran as, "" when the backend keeps none, so a
 	// person can open it again.
 	Ask(brief string, model string) (answer string, session string, err error)
+	// ResumeCommand is the command a person runs to open a conversation
+	// again, "" when the backend keeps none.
+	ResumeCommand(session string) string
 }
 
 // MachineLock keeps two rein processes from changing this machine at once:

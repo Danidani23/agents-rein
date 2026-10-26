@@ -82,6 +82,12 @@ func (Judge) Ask(brief string, model string) (string, string, error) {
 	return output.Result, session, nil
 }
 
+// ResumeCommand opens the conversation from any folder: claude keeps a
+// claude -p run out of its session picker but finds it by its id.
+func (Judge) ResumeCommand(session string) string {
+	return "claude --resume " + session
+}
+
 // judgeArguments are claude's arguments for one brief: one turn, no tools,
 // JSON out, the session's id, and the model when one is named.
 func judgeArguments(model string, session string) []string {

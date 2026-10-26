@@ -43,6 +43,9 @@ type PlannedCandidate struct {
 	Related []string
 	// Judge is the judge's reason, "" when the candidate was not judged.
 	Judge string
+	// Reaches are the projects a candidate for the organisation or a team
+	// applies to; nil at another level.
+	Reaches []string
 }
 
 // ProposalPlan is what a proposal would do: each candidate at its level,
@@ -206,6 +209,7 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 	if err != nil {
 		return preparedProposal{}, err
 	}
+	reaches := reachesOf(tree, document)
 	registry, recordFiles, labelChanges, err := applyLabelChanges(document, tree, services.Clock())
 	if err != nil {
 		return preparedProposal{}, err
@@ -282,6 +286,7 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 		distill.Compare(group, catalogue, level)
 		for index, compared := range group {
 			planned := plannedOf(declared[index], compared)
+			planned.Reaches = reaches[planned.Kind+"/"+planned.ID]
 			if compared.Verdict == distill.VerdictIdentical {
 				prepared.LeftOut = append(prepared.LeftOut, planned)
 				continue
@@ -430,7 +435,7 @@ func applyLabelChanges(document proposal.Proposal, tree declaration.Tree, now ti
 			case distill.LabelAdd:
 				category, exists := registry[categoryName]
 				if !exists {
-					category = declaration.LabelCategory{Category: categoryName, Labels: map[string]string{}}
+					category = declaration.LabelCategory{Category: categoryName, Multiple: change.Multiple != nil && *change.Multiple, Labels: map[string]string{}}
 				}
 				if _, taken := category.Labels[value]; taken {
 					return nil, nil, nil, refusal.New(fmt.Sprintf("%s: %s is in the registry already; assign it instead", where, change.Label))
@@ -494,6 +499,9 @@ func plannedOf(candidate proposal.Candidate, compared distill.Candidate) Planned
 	planned := PlannedCandidate{Kind: candidate.Kind, ID: candidate.ID, Level: candidate.Level, ApplyIf: candidate.ApplyIf, Verdict: compared.Verdict, Related: compared.Related}
 	if candidate.Judge != nil {
 		planned.Judge = candidate.Judge.Suggestion + ": " + candidate.Judge.Reason
+		if candidate.Judge.Everywhere != "" {
+			planned.Judge += "; every project: " + candidate.Judge.Everywhere
+		}
 	}
 	if candidate.Conflict != nil && candidate.Judge != nil {
 		with := strings.Join(candidate.Conflict.With, ", ")
@@ -636,6 +644,20 @@ func pullRequestBody(source string, prepared preparedProposal) string {
 	fmt.Fprintf(&body, "| kind | id | level | labels | compared with the organisation | the distiller |\n|---|---|---|---|---|---|\n")
 	for _, planned := range prepared.Included {
 		fmt.Fprintf(&body, "| %s | %s | %s | %s | %s | %s |\n", planned.Kind, planned.ID, planned.Level, strings.Join(planned.ApplyIf, " "), describeVerdict(planned), escapeCell(orDash(planned.Judge)))
+	}
+	var reached []string
+	for _, planned := range prepared.Included {
+		if planned.Reaches == nil {
+			continue
+		}
+		projects := "no project yet"
+		if len(planned.Reaches) > 0 {
+			projects = strings.Join(planned.Reaches, ", ")
+		}
+		reached = append(reached, fmt.Sprintf("- %s/%s at %s: %s", planned.Kind, planned.ID, planned.Level, projects))
+	}
+	if len(reached) > 0 {
+		fmt.Fprintf(&body, "\nThe projects each declaration for the organisation or a team reaches:\n%s\n", strings.Join(reached, "\n"))
 	}
 	if prepared.document.Judge.Backend != "" {
 		fmt.Fprintf(&body, "\nDistiller: %s, %s", prepared.document.Judge.Backend, prepared.document.Judge.Status)

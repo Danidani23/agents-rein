@@ -28,6 +28,13 @@ type Passage struct {
 	Resolved    bool
 }
 
+// Project is one of the organisation's projects as the brief lists it.
+type Project struct {
+	Slug   string
+	Teams  []string
+	Labels []string
+}
+
 // Corpus is what the judge compares the candidates with.
 type Corpus struct {
 	Passages []Passage
@@ -45,6 +52,9 @@ type Corpus struct {
 	// SingleValued are the registry's categories of one value, of which a
 	// project carries one label at most.
 	SingleValued []string
+	// Projects are the organisation's projects with their labels: whom a
+	// lift reaches.
+	Projects []Project
 	// ProjectReadme is the first part of the project's README, and
 	// ProjectFiles the names of files its repository tracks, the first of
 	// ProjectFilesTotal: what the project is, for the labels and the

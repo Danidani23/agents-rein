@@ -234,6 +234,11 @@ func SeededLabels() []LabelCategory {
 		{Category: "data", Labels: map[string]string{
 			"public": "no data that must stay inside the organisation", "internal": "internal data", "regulated": "data under a regulation",
 		}},
+		// what a project uses, beside what it is: several at once (D40)
+		{Category: "stack", Multiple: true, Labels: map[string]string{
+			"opentofu": "OpenTofu or Terraform, which are compatible", "docker": "containers built with Docker",
+			"kubernetes": "deployed to Kubernetes", "react": "a React front end",
+		}},
 	}
 }
 

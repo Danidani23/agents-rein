@@ -93,8 +93,12 @@ func TestParseLabelCategory(t *testing.T) {
 	})
 	t.Run("the seeded registry is valid", func(t *testing.T) {
 		for _, category := range SeededLabels() {
-			if len(category.Labels) == 0 || !strings.Contains("language kind data", category.Category) {
+			if len(category.Labels) == 0 || !strings.Contains("language kind data stack", category.Category) {
 				t.Fatalf("seeded %+v", category)
+			}
+			// what a project uses takes several values, OpenTofu and Terraform one of them (D40)
+			if category.Category == "stack" && (!category.Multiple || !strings.Contains(category.Labels["opentofu"], "Terraform")) {
+				t.Fatalf("stack %+v", category)
 			}
 		}
 	})

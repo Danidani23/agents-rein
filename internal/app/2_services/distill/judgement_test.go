@@ -23,7 +23,7 @@ const goodAnswer = `Here you go:
 ` + "```json" + `
 {"version": 2, "candidates": [
   {"candidate": "rules/go-testing", "verdict": "overlaps", "related": ["organizations.acme.teams.platform.rules.go-style"], "quotes": [{"address": "organizations.acme.teams.platform.rules.go-style", "text": "table-driven   tests only"}], "suggestion": "drop", "reason": "the team rule already says it"},
-  {"candidate": "rules/brief", "verdict": "new", "suggestion": "lift", "level": "organization", "applyIf": [], "reason": "every project benefits"}
+  {"candidate": "rules/brief", "verdict": "new", "suggestion": "lift", "level": "organization", "applyIf": [], "everywhere": "brevity helps every kind of project", "reason": "every project benefits"}
 ]}
 ` + "```"
 
@@ -239,8 +239,9 @@ func TestLabels(t *testing.T) {
 	corpus := exampleCorpus()
 	corpus.Labels = []string{"kind:static-site", "kind:web-app", "language:go", "language:typescript"}
 	corpus.ProjectLabels = []string{"kind:static-site"}
+	corpus.Projects = []Project{{Slug: "shop", Teams: []string{"web"}, Labels: []string{"kind:static-site"}}, {Slug: "tool", Labels: []string{"kind:cli", "language:go"}}}
 	brief := Brief("organizations.acme.projects.shop", exampleCandidates(), corpus)
-	for _, expected := range []string{"`labels`", "`assign`", "`add`", "`redundant`", "The project carries kind:static-site."} {
+	for _, expected := range []string{"`labels`", "`assign`", "`add`", "`redundant`", "The project carries kind:static-site.", "`multiple`", "`everywhere`", "# The organisation's projects", "- shop, team web: kind:static-site", "- tool: kind:cli, language:go"} {
 		if !strings.Contains(brief, expected) {
 			t.Fatalf("brief lacks %q:\n%s", expected, brief)
 		}
@@ -251,7 +252,8 @@ func TestLabels(t *testing.T) {
 	  {"candidate": "rules/brief", "verdict": "new", "suggestion": "lift", "level": "organization", "applyIf": ["framework:astro"], "reason": "every Astro site"}],
 	"labels": [
 	  {"action": "assign", "label": "language:typescript", "reason": "the pages are TypeScript"},
-	  {"action": "add", "label": "framework:astro", "meaning": "Sites built with Astro", "reason": "the lifted brief needs it"},
+	  {"action": "add", "label": "framework:astro", "meaning": "Sites built with Astro", "multiple": true, "reason": "the lifted brief needs it"},
+	  {"action": "assign", "label": "framework:astro", "reason": "the shop is built with Astro"},
 	  {"action": "redundant", "label": "kind:web-app", "reason": "the same as kind:static-site here"}]}`)
 	candidates := exampleCandidates()
 	problems := Validate(answer, candidates, corpus)
@@ -260,7 +262,7 @@ func TestLabels(t *testing.T) {
 	}
 	indexed := byID(Apply(answer, candidates))
 	add := indexed["labels/framework-astro"]
-	if add.Files["labels/framework-astro.yaml"] != "action: add\nlabel: framework:astro\nmeaning: Sites built with Astro\n" || add.Judgement == nil || add.Judgement.Suggestion != "add" || add.Judgement.Reason != "the lifted brief needs it" {
+	if add.Files["labels/framework-astro.yaml"] != "action: add\nlabel: framework:astro\nmeaning: Sites built with Astro\nmultiple: true\n" || add.Judgement == nil || add.Judgement.Suggestion != "add" || add.Judgement.Reason != "the lifted brief needs it" {
 		t.Fatalf("add %+v", add)
 	}
 	if indexed["labels/language-typescript"].Judgement.Suggestion != "assign" || indexed["labels/kind-web-app"].Judgement.Suggestion != "redundant" {
@@ -320,6 +322,24 @@ func TestLabels(t *testing.T) {
 	joined = strings.Join(Validate(two, exampleCandidates(), corpus), "\n")
 	if !strings.Contains(joined, "label assign kind:static-site: kind takes one value and this answer assigns kind:web-app too") || strings.Contains(joined, "language") {
 		t.Fatalf("two values: %s", joined)
+	}
+	// a new category says whether it takes several values; a lift says whom it is for and keeps its project (D40)
+	corpus.ProjectLabels = []string{"kind:static-site"}
+	lifts, _ := ParseAnswer(`{"version": 2,
+	"candidates": [
+	  {"candidate": "rules/go-testing", "verdict": "new", "suggestion": "lift", "level": "team", "applyIf": [], "reason": "x"},
+	  {"candidate": "rules/brief", "verdict": "new", "suggestion": "lift", "level": "organization", "applyIf": ["framework:astro"], "reason": "x"}],
+	"labels": [
+	  {"action": "add", "label": "framework:astro", "meaning": "Sites built with Astro", "reason": "x"}]}`)
+	joined = strings.Join(Validate(lifts, exampleCandidates(), corpus), "\n")
+	for _, expected := range []string{
+		"label add framework:astro: framework is a new category; say with multiple whether a project may carry several of its values",
+		"rules/go-testing: lifted to the team without applyIf; name the labels of the projects it is for, or say in everywhere why it holds for every project",
+		"rules/brief: applyIf framework:astro leaves out this project, which carries kind:static-site; assign one of them to it in labels too, or lift with a label it carries",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing %q in\n%s", expected, joined)
+		}
 	}
 	// without a project there are no project labels to review
 	if strings.Contains(Brief("organizations.acme.users.dani", exampleCandidates(), exampleCorpus()), "`assign`") {

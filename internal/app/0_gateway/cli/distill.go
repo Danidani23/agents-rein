@@ -96,11 +96,16 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 		if candidate.Judge != nil {
 			fmt.Fprintf(environment.out, "             distiller: %s\n", describeJudgementLine(candidate))
 		}
+		// whom a declaration for the organisation or a team reaches (D40)
+		if reached, found := result.Reaches[candidate.Kind+"/"+candidate.ID]; found {
+			projects := "no project yet"
+			if len(reached) > 0 {
+				projects = strings.Join(reached, ", ")
+			}
+			fmt.Fprintf(environment.out, "             reaches: %s\n", projects)
+		}
 	}
 	line := fmt.Sprintf("distiller: %s %s", document.Judge.Backend, document.Judge.Status)
-	if document.Judge.Session != "" {
-		line += ", conversation " + document.Judge.Session
-	}
 	if len(document.Judge.Problems) > 0 {
 		line += ": " + strings.Join(document.Judge.Problems, "; ")
 	}
@@ -124,9 +129,13 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 			fmt.Fprintf(environment.out, "  %s  with %s\n", filepath.Join(result.File, proposal.CandidateFileName(candidate)), strings.Join(candidate.Conflict.With, ", "))
 		}
 		printNext(environment, "set conflict.resolution in each file in conflict, review the rest, then rein propose opens the pull request")
-		return nil
+	} else {
+		printNext(environment, "review and edit it, then rein propose opens the pull request")
 	}
-	printNext(environment, "review and edit it, then rein propose opens the pull request")
+	// the last line opens the distiller's conversation, which claude keeps out of its picker (Q49)
+	if result.Conversation != "" {
+		fmt.Fprintf(environment.out, "\nthe distiller's conversation, to read or go on with it: %s\n", result.Conversation)
+	}
 	return nil
 }
 
@@ -143,6 +152,8 @@ func describeJudgementLine(candidate proposal.Candidate) string {
 		line += "; lift to " + candidate.Level
 		if len(candidate.ApplyIf) > 0 {
 			line += ", applyIf " + strings.Join(candidate.ApplyIf, " ")
+		} else if judgement.Everywhere != "" {
+			line += ", every project: " + judgement.Everywhere
 		}
 	case "drop":
 		line += "; drop, left out"

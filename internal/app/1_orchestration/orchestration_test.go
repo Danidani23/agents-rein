@@ -510,7 +510,7 @@ func TestCreateProject(t *testing.T) {
 			}
 		}
 		description, err := fixture.orchestrator().DescribeOrganization("")
-		if err != nil || description.Slug != "acme" || len(description.Teams) != 1 || description.Teams[0].Slug != "web" || len(description.LabelCategories) != 3 || description.LabelCategories[0].Category != "data" {
+		if err != nil || description.Slug != "acme" || len(description.Teams) != 1 || description.Teams[0].Slug != "web" || len(description.LabelCategories) != 4 || description.LabelCategories[0].Category != "data" {
 			t.Fatalf("description %+v err %v", description, err)
 		}
 	})
@@ -864,14 +864,14 @@ func TestProposeDeclarations(t *testing.T) {
 	})
 	t.Run("the judge's lifts and drops are written into the proposal, and the file is what propose follows after an edit", func(t *testing.T) {
 		fixture, created := withTeam(t)
-		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}, Labels: []string{"language:go"}})
 		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", "")
 		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "mcpservers", "docs.yaml")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
 		_ = os.WriteFile(existing, []byte("description: the docs server\ntransport: http\nurl: https://docs.example/other\n"), 0o644)
 		fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[` +
 			`{"candidate":"rules/instructions","verdict":"new","suggestion":"lift","level":"organization","applyIf":["language:go","not a label"],"reason":"general"},` +
-			`{"candidate":"rules/go","verdict":"new","suggestion":"lift","level":"team","reason":"the team's style"},` +
+			`{"candidate":"rules/go","verdict":"new","suggestion":"lift","level":"team","everywhere":"every project of the team writes Go","reason":"the team's style"},` +
 			`{"candidate":"mcpservers/docs","verdict":"duplicate","related":["organizations.acme.mcpservers.docs"],"suggestion":"drop","reason":"already declared"}]}`}}
 		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
 		if err != nil {
@@ -938,7 +938,7 @@ func TestProposeDeclarations(t *testing.T) {
 		_, _ = fixture.orchestrator().CreateTeam(CreateTeamRequest{Name: "Ops"})
 		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web", "ops"}})
 		_ = claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", "")
-		fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[{"candidate":"rules/go","verdict":"new","suggestion":"lift","level":"team","reason":"style"},{"candidate":"rules/instructions","verdict":"new","suggestion":"keep","reason":"fine"},{"candidate":"mcpservers/docs","verdict":"new","suggestion":"keep","reason":"fine"}]}`}}
+		fixture.judge = &fake.Judge{Answers: []string{`{"version":2,"candidates":[{"candidate":"rules/go","verdict":"new","suggestion":"lift","level":"team","everywhere":"the whole team writes Go","reason":"style"},{"candidate":"rules/instructions","verdict":"new","suggestion":"keep","reason":"fine"},{"candidate":"mcpservers/docs","verdict":"new","suggestion":"keep","reason":"fine"}]}`}}
 		distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
 		if err != nil {
 			t.Fatalf("distill: %v", err)
@@ -983,11 +983,11 @@ func TestProposeDeclarations(t *testing.T) {
 				t.Fatalf("%s: err %v", expected, err)
 			}
 		}
-		broken := proposal.Proposal{Version: proposal.Version, Status: proposal.StatusPending, Organization: "acme", DistilledFrom: "organizations.acme", Candidates: []proposal.Candidate{{Kind: "rules", ID: "x", Include: true, Level: "nowhere", ApplyIf: []string{"stack:aws"}, Files: map[string]string{"x.md": "x"}}}}
+		broken := proposal.Proposal{Version: proposal.Version, Status: proposal.StatusPending, Organization: "acme", DistilledFrom: "organizations.acme", Candidates: []proposal.Candidate{{Kind: "rules", ID: "x", Include: true, Level: "nowhere", ApplyIf: []string{"cloud:aws"}, Files: map[string]string{"x.md": "x"}}}}
 		brokenPath := filepath.Join(t.TempDir(), "proposal-abc")
 		_ = broken.WriteFolder(brokenPath)
 		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: brokenPath})
-		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "cannot go as it is") || !strings.Contains(err.Error(), `level "nowhere" is not one`) || !strings.Contains(err.Error(), `label "stack:aws" names no category`) {
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "cannot go as it is") || !strings.Contains(err.Error(), `level "nowhere" is not one`) || !strings.Contains(err.Error(), `label "cloud:aws" names no category`) {
 			t.Fatalf("broken: %v", err)
 		}
 		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: brokenPath, Level: "organizations.acme"})
@@ -1043,7 +1043,7 @@ func TestDistillWithTheJudge(t *testing.T) {
 	answer := `{"version":2,"candidates":[
 	 {"candidate":"rules/instructions","verdict":"new","suggestion":"keep","reason":"nothing covers it"},
 	 {"candidate":"rules/go","verdict":"duplicate","related":["organizations.acme.rules.go"],"quotes":[{"address":"organizations.acme.rules.go","text":"Two-line errors."}],"suggestion":"drop","reason":"the organisation says it"},
-	 {"candidate":"mcpservers/docs","verdict":"new","suggestion":"lift","level":"organization","reason":"everyone reads the docs"}]}`
+	 {"candidate":"mcpservers/docs","verdict":"new","suggestion":"lift","level":"organization","everywhere":"every project has docs","reason":"everyone reads the docs"}]}`
 	prepare := func(t *testing.T) (*harness, CreateResult) {
 		t.Helper()
 		fixture, created := withTeam(t)
@@ -1177,7 +1177,7 @@ func TestDistillWithTheJudge(t *testing.T) {
 			t.Fatalf("proposal %q", content)
 		}
 		proposed, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: result.File})
-		if err != nil || !strings.Contains(fixture.host.PullRequests[0].Body, "| the distiller |") || !strings.Contains(fixture.host.PullRequests[0].Body, "| mcpservers | docs | organizations.acme |  | new | lift: everyone reads the docs |") || !strings.Contains(fixture.host.PullRequests[0].Body, "Distiller: fake-judge, answered") || !strings.Contains(fixture.host.PullRequests[0].Body, "- rules/go: drop: the organisation says it") {
+		if err != nil || !strings.Contains(fixture.host.PullRequests[0].Body, "| the distiller |") || !strings.Contains(fixture.host.PullRequests[0].Body, "| mcpservers | docs | organizations.acme |  | new | lift: everyone reads the docs; every project: every project has docs |") || !strings.Contains(fixture.host.PullRequests[0].Body, "Distiller: fake-judge, answered") || !strings.Contains(fixture.host.PullRequests[0].Body, "- rules/go: drop: the organisation says it") {
 			t.Fatalf("proposed %+v err %v body %q", proposed, err, fixture.host.PullRequests[0].Body)
 		}
 	})
@@ -1483,12 +1483,12 @@ func TestEditLabelRegistry(t *testing.T) {
 		t.Fatalf("add: result %+v err %v registry %+v", result, err, registry("kind"))
 	}
 	yes, no := true, false
-	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelAdd, Category: "stack", Value: "aws", Description: "runs on AWS", Required: &yes, Multiple: &yes})
-	if err != nil || !result.CreatedCategory || !result.Required || !result.Multiple || result.RelativePath != "declarations/labels/stack.yaml" || !registry("stack").Required || !registry("stack").Multiple || registry("stack").Labels["aws"] != "runs on AWS" {
+	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelAdd, Category: "cloud", Value: "aws", Description: "runs on AWS", Required: &yes, Multiple: &yes})
+	if err != nil || !result.CreatedCategory || !result.Required || !result.Multiple || result.RelativePath != "declarations/labels/cloud.yaml" || !registry("cloud").Required || !registry("cloud").Multiple || registry("cloud").Labels["aws"] != "runs on AWS" {
 		t.Fatalf("create: result %+v err %v", result, err)
 	}
-	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelSet, Category: "stack", Required: &no})
-	if err != nil || result.Required || !result.Multiple || registry("stack").Required || !registry("stack").Multiple {
+	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelSet, Category: "cloud", Required: &no})
+	if err != nil || result.Required || !result.Multiple || registry("cloud").Required || !registry("cloud").Multiple {
 		t.Fatalf("optional keeps multiple: result %+v err %v", result, err)
 	}
 	result, err = fixture.orchestrator().EditLabelRegistry(LabelRegistryRequest{Operation: LabelSet, Category: "language", Required: &yes, Multiple: &no})
@@ -1512,7 +1512,7 @@ func TestEditLabelRegistry(t *testing.T) {
 	for expected, request := range map[string]LabelRegistryRequest{
 		"is already in the registry":             {Operation: LabelAdd, Category: "kind", Value: "service"},
 		"is carried by the projects poly, shop":  {Operation: LabelRemove, Category: "kind", Value: "service"},
-		"is the last value of its category":      {Operation: LabelRemove, Category: "stack", Value: "aws"},
+		"is the last value of its category":      {Operation: LabelRemove, Category: "cloud", Value: "aws"},
 		`category "nope" is not in the registry`: {Operation: LabelSet, Category: "nope", Required: &yes},
 		"nothing to set":                         {Operation: LabelSet, Category: "kind"},
 		`category "Not Slug" is not a slug`:      {Operation: LabelAdd, Category: "Not Slug", Value: "x"},
@@ -1631,7 +1631,7 @@ func TestDeclarationEditAndRemove(t *testing.T) {
 			`"organizations.acme.rules.x" is not a level`:                                     {Address: "organizations.acme.rules.style", Level: "organizations.acme.rules.x"},
 			"the level organizations.other is not in acme":                                    {Address: "organizations.acme.rules.style", Level: "organizations.other"},
 			`team "ops" does not exist in acme`:                                               {Address: "organizations.acme.rules.style", Level: "organizations.acme.teams.ops"},
-			`label "stack:aws" names no category`:                                             {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"stack:aws"}}},
+			`label "cloud:aws" names no category`:                                             {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"cloud:aws"}}},
 			"applyIf data takes one value":                                                    {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"data:public", "data:internal"}}},
 			`enforcement "maybe" is neither`:                                                  {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{Enforcement: "maybe"}},
 			"organizations.acme.users.danidani23.rules.style already exists; remove it first": {Address: "organizations.acme.rules.style", Level: "organizations.acme.users.danidani23", Selectors: declaration.Selectors{ApplyIf: []string{"language:go"}}},
@@ -1778,11 +1778,16 @@ func TestProposeLabels(t *testing.T) {
 	 {"candidate":"mcpservers/docs","verdict":"new","suggestion":"keep","reason":"fine"}],
 	"labels":[
 	 {"action":"assign","label":"language:typescript","reason":"the pages are TypeScript"},
-	 {"action":"add","label":"framework:astro","meaning":"Sites built with Astro","reason":"the lifted instructions need it"},
+	 {"action":"add","label":"framework:astro","meaning":"Sites built with Astro","multiple":true,"reason":"the lifted instructions need it"},
+	 {"action":"assign","label":"framework:astro","reason":"the shop is built with Astro"},
 	 {"action":"redundant","label":"kind:web-app","reason":"the same as kind:static-site here"}]}`}}
 	distilled, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
 	if err != nil {
 		t.Fatalf("distill: %v", err)
+	}
+	// the lift reaches the shop through the label the same proposal assigns it (D40)
+	if strings.Join(distilled.Reaches["rules/instructions"], ",") != "shop" {
+		t.Fatalf("reaches %v", distilled.Reaches)
 	}
 	// the distiller saw what the project carries
 	if !strings.Contains(fixture.judge.Briefs[0], "The project carries no labels yet.") {
@@ -1804,11 +1809,11 @@ func TestProposeLabels(t *testing.T) {
 	registry, _ := os.ReadFile(filepath.Join(published, "declarations", "labels", "framework.yaml"))
 	project, _ := os.ReadFile(filepath.Join(published, "declarations", "projects", "shop", "project.yaml"))
 	instructions, _ := os.ReadFile(filepath.Join(published, "declarations", "rules", "instructions.md"))
-	if !strings.Contains(string(registry), "astro: Sites built with Astro") || !strings.Contains(string(project), "- language:typescript") || !strings.Contains(string(instructions), "framework:astro") {
+	if !strings.Contains(string(registry), "astro: Sites built with Astro") || !strings.Contains(string(registry), "multiple: true") || !strings.Contains(string(project), "- language:typescript") || !strings.Contains(string(project), "- framework:astro") || !strings.Contains(string(instructions), "framework:astro") {
 		t.Fatalf("registry %q project %q instructions %q", registry, project, instructions)
 	}
 	body := fixture.host.PullRequests[0].Body
-	for _, expected := range []string{"Label changes:", "- add framework:astro: Sites built with Astro", "- assign language:typescript to organizations.acme.projects.shop", "labels/kind-web-app: redundant: the same as kind:static-site here"} {
+	for _, expected := range []string{"Label changes:", "- add framework:astro: Sites built with Astro", "- assign language:typescript to organizations.acme.projects.shop", "labels/kind-web-app: redundant: the same as kind:static-site here", "The projects each declaration for the organisation or a team reaches:\n- rules/instructions at organizations.acme: shop"} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("missing %q in body %q", expected, body)
 		}
