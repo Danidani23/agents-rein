@@ -1363,8 +1363,8 @@ from that project's snapshot.
   its labels and enforcement the same way, as fields of the candidate in `proposal.yaml`, and
   `declaration remove` writes a removal entry; `propose` applies a move and a removal on its
   branch. After P2.44 step (b), which makes proposals folders.
-- 🟢 **P2.45 — `rein reset project` and `rein reset machine` (D36).** [PENDING] Approved
-  2026-10-24. The two subcommands replace `rein restore` and `rein reset`, with what each does
+- ✅ **P2.45 — `rein reset project` and `rein reset machine` (D36).** [EXECUTED] Approved
+  2026-10-24, built 2026-10-26. The two subcommands replace `rein restore` and `rein reset`, with what each does
   unchanged; `rein reset` alone refuses and names them; the docs, the next-step hints and the
   `rein` skill follow. A breaking change, so its release is v1.0.0 (D37).
 - 🟢 **P2.44 — `distill` cuts into units and the distiller shapes them (D34).** [PENDING]
@@ -2269,3 +2269,9 @@ writes is read from the next session on, not in the same one.
 - (2026-10-25) Decided (Q45 j) and done, test first: `propose`'s refusals of a document over a
   file the clone has and of `--level` on a proposal name the candidate's own file and its field,
   `path` or `level`, no longer `proposal.yaml`. `task rein:check` green.
+- (2026-10-26) P2.45 done, tests first: `rein reset project` is what `rein restore` was and
+  `rein reset machine` what `rein reset` was, each unchanged; `rein reset` alone refuses, names
+  both and changes nothing; `rein restore` is gone. The messages, the headers of rein's own
+  files, the `rein` skill, the MCP server's instructions, the put-back's commit message and the
+  docs name the new commands. A breaking change, so the next release is v1.0.0 (D37).
+  `task rein:check` green.
