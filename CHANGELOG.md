@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.0.0] - 2026-10-26
+
+### ⚠ BREAKING CHANGES
+
+- feat(rein)rein reset takes a scope, project or machine (6b39059)
+
+### Features
+
+- **rein:** Kimi and DeepSeek distil through the organisation's providers.yaml (d6372e1)
+- **rein:** status starts with the project you are in; distill shows what the distiller does and how far it has come (c81d499)
+- **rein:** labels say what a project uses and a lift says whom it reaches; distill names its conversation (ca43ff2)
+- **rein:** distill lists the files in conflict and refuses a pending proposal first (ea44d4b)
+- **rein:** a distiller that is not there refuses instead of being skipped (4e3b748)
+- **rein:** the distiller sees the project's README and its files' names (b654ac3)
+- **rein:** a proposal is one YAML file per candidate beside proposal.yaml (7bef8e6)
+- **rein:** the distiller gets fifteen minutes and --model; a failed run writes nothing (02089c3)
+- **rein:** the distiller reviews the labels; propose applies them on the same branch (2689287)
+- **rein:** knowledge about the code becomes a document with a rule pointing at it (8d51c9f)
+- **rein:** the distiller cuts mixed rules and skills into units; conflicts block propose (1d73cf2)
+- **rein:** distill cuts CLAUDE.md and rule files at their ## headings (6fec41e)
+- **rein:** a proposal is a folder, one entry per candidate beside proposal.yaml (8aaa803)
+- **rein:** agent settings go through rein; sync names what it did not write (39c3e9d)
+- **rein:** rein update knows winget, nix and the linux packages (d6629d8)
+- **release:** a green check gates the release; six package channels (f1f9e4c)
+
+### Bug Fixes
+
+- **rein:** propose's refusals name the candidate's file, not proposal.yaml (3a0a545)
+- **rein:** the distiller assigns no second value to a category of one value (9eb57fb)
+- **rein:** a retried answer that is believed reports no problems (5af2c1f)
+- **rein:** prose that starts with backticks no longer stops the cut (ca32f79)
+- **rein:** the distiller selects and never merges; a merge's text was dropped (cede7e8)
+
 ## [0.3.1] - 2026-10-24
 
 ### Bug Fixes
