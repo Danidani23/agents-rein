@@ -63,13 +63,15 @@ release:
 
 # The tap and the bucket are written only when reinctl found their
 # repositories and set their variables; without them, the release still happens.
+# GoReleaser takes a repository token only as {{ .Env.NAME }}; an unset variable
+# leaves skip_upload true, so the token is never read.
 homebrew_casks:
   - name: rein
     ids: [rein]
     repository:
       owner: Danidani23
       name: homebrew-tap
-      token: '{{ index .Env "REIN_TAP_TOKEN" }}'
+      token: '{{ .Env.REIN_TAP_TOKEN }}'
     skip_upload: '{{ if index .Env "REIN_TAP_TOKEN" }}false{{ else }}true{{ end }}'
     directory: Casks
     homepage: https://github.com/Danidani23/agents-rein
@@ -89,7 +91,7 @@ scoops:
     repository:
       owner: Danidani23
       name: scoop-bucket
-      token: '{{ index .Env "REIN_BUCKET_TOKEN" }}'
+      token: '{{ .Env.REIN_BUCKET_TOKEN }}'
     skip_upload: '{{ if index .Env "REIN_BUCKET_TOKEN" }}false{{ else }}true{{ end }}'
     homepage: https://github.com/Danidani23/agents-rein
     description: Keeps the settings of AI coding agents in one repository per organisation and brings them to every project
@@ -140,7 +142,7 @@ winget:
       owner: Danidani23
       name: winget-pkgs
       branch: rein-{{ .Version }}
-      token: '{{ index .Env "REIN_WINGET_TOKEN" }}'
+      token: '{{ .Env.REIN_WINGET_TOKEN }}'
       pull_request:
         enabled: true
         base:
@@ -158,5 +160,5 @@ nix:
     repository:
       owner: Danidani23
       name: nur-packages
-      token: '{{ index .Env "REIN_NUR_TOKEN" }}'
+      token: '{{ .Env.REIN_NUR_TOKEN }}'
     skip_upload: '{{ if index .Env "REIN_NUR_TOKEN" }}false{{ else }}true{{ end }}'
