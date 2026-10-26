@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.2] - 2026-10-26
+
+### Bug Fixes
+
+- **release:** a repository token is written as {{ .Env.NAME }}, the one form GoReleaser takes (a244ca4)
+
 ## [1.0.1] - 2026-10-26
 
 ### Bug Fixes
