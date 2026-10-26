@@ -1389,6 +1389,14 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- 🔨 **P2.56 — The keychain on Linux and Windows (D25, D44).** [IN PROGRESS] Approved
+  2026-10-26. Linux keeps a secret in the desktop's keyring through `secret-tool`, the secret
+  on standard input; Windows in Credential Manager through `CredWriteW`, `CredReadW` and
+  `CredDeleteW` of `advapi32`, reached through the standard library; macOS as before; all
+  three behind one backend under the encoding of tokens and keys. `task rein:test-keychain`
+  round-trips a token and a key through the real keychain, and CI runs it on all three
+  systems, GNOME Keyring unlocked in a D-Bus session of its own on Linux. Gate: that CI
+  step green on the three systems.
 - ✅ **P2.55 — `rein key` keeps the distiller's key in the keychain (D44).** [EXECUTED]
   Approved and built 2026-10-26 (Q59 KS1). `rein key set [NAME]` reads the key from standard
   input, refusing it typed at a terminal, and keeps it under the account `key:<NAME>` of the
@@ -2426,3 +2434,9 @@ writes is read from the next session on, not in the same one.
   key beside the tokens, the credentials service reads the keychain then the environment and
   refuses a name that is no variable's, `rein key set` and `remove`, the query
   `DistillerKeyName`. The README says plainly that no key enters the repository.
+- (2026-10-26) P2.56 built, tests first: the keychain adapter is one encoding of tokens and keys
+  over a backend per system; the Linux backend's commands and its silent not-found are unit
+  tested with a stubbed runner, the encoding over an in-memory backend; the Windows backend
+  passes `go vet` for amd64 and arm64. The real round trip is the build-tagged
+  `TestSystemKeychain`, run by `task rein:test-keychain` and by CI. Left: CI's verdict on the
+  three systems.
