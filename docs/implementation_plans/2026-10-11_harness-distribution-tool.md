@@ -547,6 +547,7 @@ be added or removed without moving files, and several teams can work on one proj
 declarations/
   organizations/<org>/
     organization.yaml               id, name, description, minimum_rein_version
+    providers.yaml                  the distiller's endpoint and key variable (D42), optional
     labels/<category>.yaml          one file per category, listing its labels
     exceptions/<id>.yaml
     skills/  rules/  mcpservers/  hooks/  permissions/
@@ -1397,8 +1398,8 @@ from that project's snapshot.
   `.kimi/AGENTS.md` and `.kimi/skills/`. Trust is undocumented, so the adapter answers
   trusted. `kimi --print` may later serve as a distiller backend. Gate: a Kimi session in a
   synced clone shows the instructions and the skills, and starts with a sync.
-- 🟢 **P2.52 — The `providers` declaration and the `api` backend: Kimi and DeepSeek distil
-  (D42).** [PENDING] Approved 2026-10-26 (Q47 p), the part of P2.13 that `distill` needs.
+- 🔨 **P2.52 — The `providers` declaration and the `api` backend: Kimi and DeepSeek distil
+  (D42).** [IN PROGRESS] Approved 2026-10-26 (Q47 p), the part of P2.13 that `distill` needs.
   The organisation declares its distiller's endpoint, protocol, model and the name of the
   variable that holds the key, never the key (D22); the `api` adapter speaks Anthropic's
   Messages API over the standard library, one request, no tools, the same fifteen minutes;
@@ -2386,3 +2387,14 @@ writes is read from the next session on, not in the same one.
   line; the judge port's `Ask` hears progress, which the Claude Code adapter reads from the
   streamed answer; the judge service turns it into notes; a step reports a detail, said
   once above its line, and notes, drawn into its spinner. The race detector is quiet.
+- (2026-10-26) Q52 AP1 done, tests first: `applyIf` holding two values of a category of one
+  value is no longer refused by the proposal's check nor by `declaration edit`, since
+  `applyIf` means any of its labels (P2.4). The draft for `dani` now passes the check.
+- (2026-10-26) P2.52 built, tests first (Q53 PV1): `declarations/providers.yaml`, parsed
+  strictly, its `distiller` an `anthropic` endpoint over https or on this machine, a model, an
+  `auth` of `x-api-key` or `bearer`, the key's variable name and an optional `max_tokens`, in
+  the tree and the lint; the `messagesapi` adapter sends the brief as one streamed Messages
+  request over the standard library, reads text and thinking deltas, and says a refusal, an
+  error event, a cut answer and an early end as they are; `distill` asks the organisation's
+  provider when it declares one and refuses `--distiller agent-cli` then (D23). The README
+  says which models distil. `task rein:check` green. Left: the gate with a real key.
