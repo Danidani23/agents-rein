@@ -51,8 +51,10 @@ release:
   github:
     owner: Danidani23
     name: agents-rein
-  # a publish run again for the same tag replaces what the first left
+  # a publish run again for the same tag replaces what the first left: the
+  # notes through mode, the files through replace_existing_artifacts
   mode: replace
+  replace_existing_artifacts: true
   draft: false
   prerelease: auto
   header: |
