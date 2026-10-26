@@ -1528,7 +1528,7 @@ from that project's snapshot.
 - 🔨 **P2.36 — `.deb`, `.rpm` and `.apk` on every release (D30).** [IN PROGRESS] Approved
   2026-10-24. Built by nFPM beside the archives, with no package repository behind them;
   `rein update` names the download for a package install, which no package manager updates.
-- 🔨 **P2.35 — The Homebrew tap and the Scoop bucket go live (D30).** [IN PROGRESS] Approved
+- ✅ **P2.35 — The Homebrew tap and the Scoop bucket go live (D30).** [EXECUTED] Approved
   2026-10-24. The two empty repositories (you); the cask's quarantine step runs on macOS
   only, so the same cask installs on Linux. The first release after them fills both.
 - 🔨 **P2.34 — A release needs GitHub's check green on its commit (D29).** [IN PROGRESS]
@@ -2398,3 +2398,15 @@ writes is read from the next session on, not in the same one.
   error event, a cut answer and an early end as they are; `distill` asks the organisation's
   provider when it declares one and refuses `--distiller agent-cli` then (D23). The README
   says which models distil. `task rein:check` green. Left: the gate with a real key.
+- (2026-10-26) Released v1.0.0, the scoped reset its breaking change (D37). The tap and the
+  bucket went live on the third try (P2.35). A publish run again for v1.0.0 failed on files
+  that already existed: `mode: replace` replaces only the notes, so
+  `replace_existing_artifacts` came in, which `task rein:publish` needs for any retry (v1.0.1).
+  v1.0.1 then failed at the tap and the bucket: GoReleaser takes a repository token only as
+  `{{ .Env.NAME }}` ([tmpl.go](https://github.com/goreleaser/goreleaser/blob/v2.19.0/internal/tmpl/tmpl.go#L414)),
+  checked only when a channel is written, so `goreleaser check` passed; the four tokens were
+  rewritten and a snapshot build with every channel's variable unset passed (v1.0.2). v1.0.2
+  wrote `Casks/rein.rb` and `rein.json`, their checksums those of the release's files.
+  Homebrew 6 loads a third-party tap only once trusted; a fully qualified
+  `brew install --cask Danidani23/tap/rein` trusts that cask alone
+  ([docs](https://docs.brew.sh/Tap-Trust)).
