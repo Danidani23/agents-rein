@@ -135,7 +135,7 @@ read by `rein status`:
 |---|---|
 | `state.yaml` | the logins, the connected organisations with the login that acts on each, the active one, the clones of org repositories, the initialised project clones, the placements in your agents' homes; `state.yaml.previous` is the copy before the last write |
 | `orgs/<id>/` | the clone of each connected org repository |
-| `snapshots/` | what was there before rein: your agents' homes at connect, a project's harness at `init`, a hand-edited file before `sync --force`; `rein restore` reads them, `rein reset` removes them |
+| `snapshots/` | what was there before rein: your agents' homes at connect, a project's harness at `init`, a hand-edited file before `sync --force`; `rein reset project` reads them, `rein reset machine` removes them |
 | `removals.yaml`, `inserts/<org id>.yaml` | the ledger: every file `init` moved out and every file `sync` wrote, with its hash |
 | `proposals/` | the history of every proposal `rein propose` opened, one folder per organisation and proposal, and under `pending/` the proposals distilled from your agents' homes that wait for `propose`; a project's pending proposals wait in its own `.rein/proposals/` instead |
 

@@ -11,21 +11,21 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 )
 
-func newRestoreCommand(environment *commandEnvironment) *cobra.Command {
+func newResetProjectCommand(environment *commandEnvironment) *cobra.Command {
 	var request orchestration.RestoreRequest
 	var yes bool
 	command := &cobra.Command{
-		Use:   "restore",
+		Use:   "project",
 		Short: "Put a project clone back as it was before rein init, and commit the put-back",
-		Long: "restore reverses init for one clone: the agent's files init moved out come back from their\n" +
+		Long: "reset project reverses init for one clone: the agent's files init moved out come back from their\n" +
 			"snapshots, the rein block leaves .gitignore, the clone is forgotten on this machine, the\n" +
 			"removals are marked restored in the ledger, and the put-back is committed as the move-out\n" +
 			"was; --no-commit leaves it staged. A file now in the way of the put-back stops it unless\n" +
-			"--force overwrites it. The snapshots stay until rein reset.",
-		Example: "  rein restore\n  rein restore --path services/shop --yes",
+			"--force overwrites it. The snapshots stay until rein reset machine.",
+		Example: "  rein reset project\n  rein reset project --path services/shop --yes",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			return runRestore(environment, request, yes)
+			return runResetProject(environment, request, yes)
 		},
 	}
 	command.Flags().StringVar(&request.Directory, "path", ".", "the project's folder")
@@ -35,7 +35,7 @@ func newRestoreCommand(environment *commandEnvironment) *cobra.Command {
 	return command
 }
 
-func runRestore(environment *commandEnvironment, request orchestration.RestoreRequest, yes bool) error {
+func runResetProject(environment *commandEnvironment, request orchestration.RestoreRequest, yes bool) error {
 	orchestrator, release, err := environment.orchestrateLocked()
 	if err != nil {
 		return err
@@ -51,7 +51,7 @@ func runRestore(environment *commandEnvironment, request orchestration.RestoreRe
 		if !prompter.CanAsk() {
 			return refusal.New("no terminal to confirm on; pass --yes")
 		}
-		confirmed, err := prompter.Confirm("Continue?", "The files come back from ~/.rein/snapshots/ exactly as they were. The commit holds only the files that were tracked and .gitignore; pushing it is yours. The snapshots stay until rein reset.")
+		confirmed, err := prompter.Confirm("Continue?", "The files come back from ~/.rein/snapshots/ exactly as they were. The commit holds only the files that were tracked and .gitignore; pushing it is yours. The snapshots stay until rein reset machine.")
 		if err != nil {
 			return refusal.New(err.Error())
 		}
@@ -85,11 +85,11 @@ func printRestored(environment *commandEnvironment, result orchestration.Restore
 	}
 	switch {
 	case result.Commit != "":
-		fmt.Fprintf(environment.out, "committed %s: %s\n", result.Commit[:7], "restore agent settings from rein (rein restore)")
+		fmt.Fprintf(environment.out, "committed %s: %s\n", result.Commit[:7], "restore agent settings from rein (rein reset project)")
 	case result.CommitError != "":
 		fmt.Fprintf(environment.errOut, "%s\n", environment.style().Yellow(fmt.Sprintf("warning: the put-back is staged but not committed: %s", result.CommitError)))
 	default:
 		fmt.Fprintf(environment.out, "the put-back is staged, not committed\n")
 	}
-	printNext(environment, "the clone is as before rein init; rein init puts it under rein again, rein org destroy and rein reset take the rest off this machine")
+	printNext(environment, "the clone is as before rein init; rein init puts it under rein again, rein org destroy and rein reset machine take the rest off this machine")
 }

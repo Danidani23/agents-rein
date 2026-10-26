@@ -59,7 +59,7 @@ func printStatus(environment *commandEnvironment, report orchestration.StatusRep
 		fmt.Fprintf(environment.out, "  %s  %-6s %-4s %s -> %s\n", mark, placed.Owner, placed.Mode, placed.Path, placed.Target)
 	}
 	if report.Missing > 0 {
-		fmt.Fprintf(environment.out, "  %d targets are missing; run rein reset to remove the dangling links\n", report.Missing)
+		fmt.Fprintf(environment.out, "  %d targets are missing; run rein reset machine to remove the dangling links\n", report.Missing)
 	}
 	fmt.Fprintf(environment.out, "\norganisations  %d\n", len(report.Organizations))
 	for _, ref := range report.Organizations {

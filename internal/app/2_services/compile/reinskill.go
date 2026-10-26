@@ -8,7 +8,7 @@ const ReinSkillID = "rein"
 // ReinSkill is that skill, in the Agent Skills format.
 const ReinSkill = `---
 name: rein
-description: How the agent settings of this project are managed by rein, the generated files under CLAUDE.md, .claude/ and .mcp.json, why they are never edited by hand, and how a setting is changed through rein propose, checked through rein status and rein resolve, or undone through rein restore. Use before editing CLAUDE.md, .claude/rules, .claude/skills, .claude/hooks, .claude/settings.local.json or .mcp.json in a project rein manages, when a REIN_ variable is reported missing, or when asked how settings reach this project.
+description: How the agent settings of this project are managed by rein, the generated files under CLAUDE.md, .claude/ and .mcp.json, why they are never edited by hand, and how a setting is changed through rein propose, checked through rein status and rein resolve, or undone through rein reset project. Use before editing CLAUDE.md, .claude/rules, .claude/skills, .claude/hooks, .claude/settings.local.json or .mcp.json in a project rein manages, when a REIN_ variable is reported missing, or when asked how settings reach this project.
 ---
 
 # Working in a project managed by rein
@@ -66,10 +66,10 @@ shell lacks; ask the developer to export them. Never write a secret into a file.
 - ` + "`rein status`" + `: what rein knows about this machine.
 - ` + "`rein resolve --project <slug>`" + `: which declarations apply to this project and why.
 - ` + "`rein sync`" + `: deliver the latest; the session-start hook runs it.
-- ` + "`rein restore`" + `: put the files from before ` + "`rein init`" + ` back and forget the clone.
+- ` + "`rein reset project`" + `: put the files from before ` + "`rein init`" + ` back and forget the clone.
 
 The agent runs the read-only commands itself: status, resolve, lint. sync, propose and
-restore change the machine or open pull requests, so the developer runs them, or the agent
+reset change the machine or open pull requests, so the developer runs them, or the agent
 asks first.
 
 The same queries are tools of the MCP server ` + "`rein`" + `, which sync writes into ` + "`.mcp.json`" + `:

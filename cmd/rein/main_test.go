@@ -244,7 +244,7 @@ func TestWiring(t *testing.T) {
 		if code != cli.ExitWorked || !strings.Contains(out, "* acme") {
 			t.Fatalf("list: code %d out %q", code, out)
 		}
-		code, out, _ = run("reset", "--yes")
+		code, out, _ = run("reset", "machine", "--yes")
 		if code != cli.ExitWorked || !strings.Contains(out, "removed  clone") {
 			t.Fatalf("reset: code %d out %q", code, out)
 		}
@@ -394,8 +394,8 @@ func TestWiring(t *testing.T) {
 		if err != nil || strings.TrimSpace(string(current)) != "main" {
 			t.Fatalf("clone on %q err %v", current, err)
 		}
-		// restore puts the project back and commits; the untracked local file returns untracked
-		code, out, errOut = run("restore", "--path", project, "--yes")
+		// reset project puts the project back and commits; the untracked local file returns untracked
+		code, out, errOut = run("reset", "project", "--path", project, "--yes")
 		if code != cli.ExitWorked || !strings.Contains(out, "removed sync's files: .claude/settings.local.json, .claude/skills/rein/SKILL.md, .mcp.json, CLAUDE.md") || !strings.Contains(out, "put back: .claude/rules/go.md, CLAUDE.md") || !strings.Contains(out, ".gitignore: rein block removed") || !strings.Contains(out, "committed ") {
 			t.Fatalf("restore: code %d out %q err %q", code, out, errOut)
 		}
@@ -419,8 +419,8 @@ func TestWiring(t *testing.T) {
 		if err != nil {
 			t.Fatalf("the remote is gone after destroy: %v", err)
 		}
-		// reset wipes the rest
-		code, out, errOut = run("reset", "--yes")
+		// reset machine wipes the rest
+		code, out, errOut = run("reset", "machine", "--yes")
 		if code != cli.ExitWorked || !strings.Contains(out, "removals.yaml") {
 			t.Fatalf("reset: code %d out %q err %q", code, out, errOut)
 		}

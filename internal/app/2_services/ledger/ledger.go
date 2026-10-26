@@ -54,7 +54,7 @@ type Removals struct {
 
 const removalsFile = "removals.yaml"
 
-const header = "# Written by rein: what it removed from this machine, with the snapshot that holds each file.\n# Edit through rein commands; rein restore reads this.\n"
+const header = "# Written by rein: what it removed from this machine, with the snapshot that holds each file.\n# Edit through rein commands; rein reset project reads this.\n"
 
 // Path is the removals file.
 func (service Service) Path() string {

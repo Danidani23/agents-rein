@@ -37,7 +37,7 @@ const (
 	lockStale = 10 * time.Minute
 )
 
-const header = "# Written by rein: what it knows about this machine. Edit through rein commands, not by hand;\n# rein status shows it, rein reset empties it. The previous copy is state.yaml.previous.\n"
+const header = "# Written by rein: what it knows about this machine. Edit through rein commands, not by hand;\n# rein status shows it, rein reset machine empties it. The previous copy is state.yaml.previous.\n"
 
 // Home is the folder of state.yaml, the clones and the snapshots.
 func Home() (string, error) {

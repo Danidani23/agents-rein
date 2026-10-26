@@ -130,7 +130,7 @@ func syncOne(orchestrator Orchestrator, clone machine.ProjectClone, request Sync
 	synced := CloneSync{Folder: clone.ClonePath, Address: clone.Address}
 	_, err := os.Stat(clone.ClonePath)
 	if err != nil {
-		return synced, refusal.New(fmt.Sprintf("the folder %s is gone; rein restore cannot help, rein reset drops it", clone.ClonePath))
+		return synced, refusal.New(fmt.Sprintf("the folder %s is gone; rein reset project cannot help, rein reset machine drops it", clone.ClonePath))
 	}
 	organization, orgClonePath, err := organizationByID(services, clone.Organization)
 	if err != nil {
@@ -150,7 +150,7 @@ func syncOne(orchestrator Orchestrator, clone machine.ProjectClone, request Sync
 	projectSlug := path.Base(strings.ReplaceAll(clone.Address, ".", "/"))
 	context, found := resolve.ContextOf(tree, projectSlug, userSlugOf(organization), services.Clock())
 	if !found {
-		return synced, refusal.New(fmt.Sprintf("the project record %s is gone from the org repository; rein restore puts the clone back", clone.Address))
+		return synced, refusal.New(fmt.Sprintf("the project record %s is gone from the org repository; rein reset project puts the clone back", clone.Address))
 	}
 	declarations, err := resolve.LoadDeclarations(orgClonePath)
 	if err != nil {
@@ -339,5 +339,5 @@ func organizationByID(services Services, organizationID string) (machine.Organiz
 			return services.Organizations.Lookup(organization.Slug)
 		}
 	}
-	return machine.OrganizationRef{}, "", refusal.New(fmt.Sprintf("the organisation %s of this clone is no longer connected; rein org connect it again, or rein restore the clone", organizationID))
+	return machine.OrganizationRef{}, "", refusal.New(fmt.Sprintf("the organisation %s of this clone is no longer connected; rein org connect it again, or put the clone back with rein reset project", organizationID))
 }

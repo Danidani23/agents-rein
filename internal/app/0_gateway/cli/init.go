@@ -52,7 +52,7 @@ func newInitCommand(environment *commandEnvironment) *cobra.Command {
 const initIntro = "init puts this repository under rein.\n\n" +
 	"1. It finds this repository's project in the org repository, or creates one with you now.\n" +
 	"2. It moves the agent's own files, CLAUDE.md, .claude/ with its rules and skills, and .mcp.json, out of\n" +
-	"   this folder. rein manages them from here on. Nothing is lost: rein restore puts them back as they were.\n" +
+	"   this folder. rein manages them from here on. Nothing is lost: rein reset project puts them back as they were.\n" +
 	"3. It adds a few lines to .gitignore, so the agent's settings stay out of the repository and rein can\n" +
 	"   manage them cleanly.\n" +
 	"4. It commits the change.\n\n" +
@@ -113,7 +113,7 @@ func runInit(environment *commandEnvironment, answers initAnswers) error {
 		if !prompter.CanAsk() {
 			return refusal.New("no terminal to confirm on; pass --yes")
 		}
-		confirmed, err := prompter.Confirm("Continue?", "The files are kept in ~/.rein/snapshots/ and listed in ~/.rein/removals.yaml; rein restore puts them back. The commit holds only the removed paths and .gitignore; pushing it is yours.")
+		confirmed, err := prompter.Confirm("Continue?", "The files are kept in ~/.rein/snapshots/ and listed in ~/.rein/removals.yaml; rein reset project puts them back. The commit holds only the removed paths and .gitignore; pushing it is yours.")
 		if err != nil {
 			return refusal.New(err.Error())
 		}

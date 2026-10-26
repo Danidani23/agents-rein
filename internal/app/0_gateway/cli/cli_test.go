@@ -298,7 +298,7 @@ func TestOrg(t *testing.T) {
 			t.Fatalf("declined: code %d out %q err %q", code, out, errOut)
 		}
 		code, out, errOut = fixture.runInteractive("\n", "org", "destroy", "acme")
-		for _, expected := range []string{"disconnected acme: removed the clone at " + clone + " and 1 project registrations", "no active organisation", "To delete Danidani23/acme-agent-settings on GitHub by hand:", "1. Open https://github.com/Danidani23/acme-agent-settings/settings", "Danger Zone", "3. Type Danidani23/acme-agent-settings to confirm", "Afterwards rein reset"} {
+		for _, expected := range []string{"disconnected acme: removed the clone at " + clone + " and 1 project registrations", "no active organisation", "To delete Danidani23/acme-agent-settings on GitHub by hand:", "1. Open https://github.com/Danidani23/acme-agent-settings/settings", "Danger Zone", "3. Type Danidani23/acme-agent-settings to confirm", "Afterwards rein reset machine"} {
 			if code != ExitWorked || !strings.Contains(out, expected) {
 				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 			}
@@ -347,11 +347,20 @@ func TestStatus(t *testing.T) {
 
 func TestReset(t *testing.T) {
 	const placed = "/home/.claude/rules/global.md"
+	// a destructive command has no silent default, so the scope is named (D36)
+	t.Run("alone it refuses, names both scopes and changes nothing", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.state.Current.Placements = []machine.Placement{{Path: placed}}
+		code, _, errOut := fixture.run("reset")
+		if code != ExitRefused || !strings.Contains(errOut, "rein reset project") || !strings.Contains(errOut, "rein reset machine") || len(fixture.agent.Unplaced) != 0 {
+			t.Fatalf("code %d err %q unplaced %v", code, errOut, fixture.agent.Unplaced)
+		}
+	})
 	t.Run("the summary lists the paths, ? explains, and a yes applies", func(t *testing.T) {
 		fixture := newHarness(t)
 		fixture.state.Current.Placements = []machine.Placement{{Path: placed}}
-		code, out, _ := fixture.runInteractive("?\n\n", "reset")
-		if code != ExitWorked || !strings.Contains(out, placed) || !strings.Contains(out, "reset is restore for everything") || !strings.Contains(out, "removed  "+placed) {
+		code, out, _ := fixture.runInteractive("?\n\n", "reset", "machine")
+		if code != ExitWorked || !strings.Contains(out, placed) || !strings.Contains(out, "reset machine is reset project for everything") || !strings.Contains(out, "removed  "+placed) {
 			t.Fatalf("code %d out %q", code, out)
 		}
 		if len(fixture.agent.Unplaced) != 1 || len(fixture.state.Current.Placements) != 0 {
@@ -361,7 +370,7 @@ func TestReset(t *testing.T) {
 	t.Run("a no changes nothing", func(t *testing.T) {
 		fixture := newHarness(t)
 		fixture.state.Current.Placements = []machine.Placement{{Path: placed}}
-		code, _, errOut := fixture.runInteractive("n\n", "reset")
+		code, _, errOut := fixture.runInteractive("n\n", "reset", "machine")
 		if code != ExitRefused || !strings.Contains(errOut, "nothing changed") || len(fixture.agent.Unplaced) != 0 {
 			t.Fatalf("code %d err %q unplaced %v", code, errOut, fixture.agent.Unplaced)
 		}
@@ -369,7 +378,7 @@ func TestReset(t *testing.T) {
 	t.Run("without a terminal and without --yes it refuses", func(t *testing.T) {
 		fixture := newHarness(t)
 		fixture.state.Current.Placements = []machine.Placement{{Path: placed}}
-		code, _, errOut := fixture.run("reset")
+		code, _, errOut := fixture.run("reset", "machine")
 		if code != ExitRefused || !strings.Contains(errOut, "--yes") || len(fixture.agent.Unplaced) != 0 {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
@@ -377,7 +386,7 @@ func TestReset(t *testing.T) {
 	t.Run("a skipped placement is reported, kept, and exits 1", func(t *testing.T) {
 		fixture := newHarness(t)
 		fixture.state.Current.Placements = []machine.Placement{{Path: "/home/.claude/rules/foreign.md"}}
-		code, _, errOut := fixture.run("reset", "--yes")
+		code, _, errOut := fixture.run("reset", "machine", "--yes")
 		if code != ExitRefused || !strings.Contains(errOut, "skipped  /home/.claude/rules/foreign.md: links elsewhere") || len(fixture.state.Current.Placements) != 1 {
 			t.Fatalf("code %d err %q state %+v", code, errOut, fixture.state.Current)
 		}
@@ -391,7 +400,7 @@ func TestReset(t *testing.T) {
 		_ = fake.NewProjectClone(folder, []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, []string{"INSTRUCTIONS.md"})
 		_ = os.WriteFile(filepath.Join(folder, "INSTRUCTIONS.md"), []byte("be brief"), 0o644)
 		_, _, _ = fixture.run("init", "--path", folder, "--project", "shop", "--yes")
-		code, out, errOut := fixture.run("reset", "--yes")
+		code, out, errOut := fixture.run("reset", "machine", "--yes")
 		for _, expected := range []string{"put back 1 initialised projects", "restored " + folder + ", formerly organizations.acme.projects.shop", "put back: INSTRUCTIONS.md", "committed f4ce000", "forget 1 organisations", "removed  clone ", "removed  " + filepath.Join(fixture.home, "orgs"), "reset done"} {
 			if code != ExitWorked || !strings.Contains(out, expected) {
 				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
@@ -405,7 +414,7 @@ func TestReset(t *testing.T) {
 	})
 }
 
-func TestRestore(t *testing.T) {
+func TestResetProject(t *testing.T) {
 	fixture := newHarness(t)
 	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
 	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
@@ -414,17 +423,17 @@ func TestRestore(t *testing.T) {
 	_ = fake.NewProjectClone(folder, []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, []string{"INSTRUCTIONS.md"})
 	_ = os.WriteFile(filepath.Join(folder, "INSTRUCTIONS.md"), []byte("be brief"), 0o644)
 	_, _, _ = fixture.run("init", "--path", folder, "--project", "shop", "--yes")
-	code, _, errOut := fixture.run("restore", "--path", folder)
+	code, _, errOut := fixture.run("reset", "project", "--path", folder)
 	if code != ExitRefused || !strings.Contains(errOut, "--yes") {
 		t.Fatalf("code %d err %q", code, errOut)
 	}
-	code, out, errOut := fixture.run("restore", "--path", folder, "--yes")
-	for _, expected := range []string{"restored " + folder + ", formerly organizations.acme.projects.shop", "put back: INSTRUCTIONS.md", ".gitignore: rein block removed", "committed f4ce000: restore agent settings from rein"} {
+	code, out, errOut := fixture.run("reset", "project", "--path", folder, "--yes")
+	for _, expected := range []string{"restored " + folder + ", formerly organizations.acme.projects.shop", "put back: INSTRUCTIONS.md", ".gitignore: rein block removed", "committed f4ce000: restore agent settings from rein (rein reset project)"} {
 		if code != ExitWorked || !strings.Contains(out, expected) {
 			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 		}
 	}
-	code, _, errOut = fixture.run("restore", "--path", folder, "--yes")
+	code, _, errOut = fixture.run("reset", "project", "--path", folder, "--yes")
 	if code != ExitRefused || !strings.Contains(errOut, "not initialised") {
 		t.Fatalf("code %d err %q", code, errOut)
 	}

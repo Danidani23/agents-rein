@@ -87,8 +87,8 @@ rein distill
 rein propose
 ```
 
-Every command asks what it needs and explains itself with `?`; `rein restore`, `rein org
-destroy` and `rein reset` take everything back. The full list is in
+Every command asks what it needs and explains itself with `?`; `rein reset project`, `rein org
+destroy` and `rein reset machine` take everything back. The full list is in
 [docs/commands.md](docs/commands.md).
 
 ## Supported agents

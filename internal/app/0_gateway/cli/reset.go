@@ -9,8 +9,8 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 )
 
-const resetExplanation = "reset is restore for everything, then forgetting. Every initialised project is put back as\n" +
-	"rein restore does: the files init moved out return from their snapshots, the rein block\n" +
+const resetExplanation = "reset machine is reset project for everything, then forgetting. Every initialised project is put\n" +
+	"back as rein reset project does: the files init moved out return from their snapshots, the rein block\n" +
 	"leaves .gitignore, and the put-back is committed. Every link or copy rein made in an agent's\n" +
 	"home is removed, dangling ones included; one that points somewhere rein did not record is\n" +
 	"left alone and reported. Then the organisations are forgotten and their clones deleted, and\n" +
@@ -18,17 +18,36 @@ const resetExplanation = "reset is restore for everything, then forgetting. Ever
 	"GitHub are never touched. A project whose restore fails stops the reset before anything is\n" +
 	"wiped, so no snapshot is ever lost."
 
+// newResetCommand takes rein back, always with a scope: a destructive
+// command has no silent default (D36).
 func newResetCommand(environment *commandEnvironment) *cobra.Command {
-	var yes bool
 	command := &cobra.Command{
 		Use:   "reset",
+		Short: "Take rein back from one project clone or from this machine",
+		Long: "reset takes rein back, and always says how far: reset project puts one clone back as it\n" +
+			"was before rein init, reset machine does that for every clone and then removes everything\n" +
+			"else rein placed on this machine. reset alone changes nothing.",
+		Example: "  rein reset project\n  rein reset machine",
+		Args:    cobra.NoArgs,
+		RunE: func(command *cobra.Command, arguments []string) error {
+			return refusal.New("reset needs a scope: rein reset project puts this clone back as before rein init, rein reset machine takes everything rein placed off this machine")
+		},
+	}
+	command.AddCommand(newResetProjectCommand(environment), newResetMachineCommand(environment))
+	return command
+}
+
+func newResetMachineCommand(environment *commandEnvironment) *cobra.Command {
+	var yes bool
+	command := &cobra.Command{
+		Use:   "machine",
 		Short: "Put every project back, remove everything rein placed, and forget this machine",
-		Long: "reset leaves the machine as before rein was first used: it restores every initialised\n" +
+		Long: "reset machine leaves the machine as before rein was first used: it puts back every initialised\n" +
 			"project, committing the put-back, removes every link and copy rein made in the agents'\n" +
 			"homes, forgets the connected organisations, deletes their clones, and removes the ledger,\n" +
 			"the snapshots and the proposals. The remotes are never touched. It shows the plan and\n" +
 			"confirms before changing anything; --yes skips that.",
-		Example: "  rein reset\n  rein reset --yes",
+		Example: "  rein reset machine\n  rein reset machine --yes",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
 			return runReset(environment, yes)

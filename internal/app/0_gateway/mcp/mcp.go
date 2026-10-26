@@ -23,7 +23,7 @@ import (
 const ServerName = "rein"
 
 // Instructions tell the agent what the tools are for, before it lists them.
-const Instructions = "rein keeps the settings of AI coding agents as declarations in one repository per organisation and writes them into each project. These tools read what rein knows: this machine, what a project resolves and why, what a declaration holds, which proposals wait, and what a declarations folder lints to. None of them changes anything; rein sync, distill, propose and restore are the developer's commands."
+const Instructions = "rein keeps the settings of AI coding agents as declarations in one repository per organisation and writes them into each project. These tools read what rein knows: this machine, what a project resolves and why, what a declaration holds, which proposals wait, and what a declarations folder lints to. None of them changes anything; rein sync, distill, propose and reset are the developer's commands."
 
 // Serve speaks MCP over in and out until in is closed, which is how the
 // agent ends the session. version is what rein version prints.

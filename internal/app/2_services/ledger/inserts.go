@@ -26,7 +26,7 @@ type Inserts struct {
 	Clones  map[string][]Insert `yaml:"clones"`
 }
 
-const insertsHeader = "# Written by rein: what sync placed into each project clone of this organisation, with the hash\n# of each file as written. Edit through rein commands; rein restore and rein reset read this.\n"
+const insertsHeader = "# Written by rein: what sync placed into each project clone of this organisation, with the hash\n# of each file as written. Edit through rein commands; rein reset project and rein reset machine read this.\n"
 
 // InsertsFolder is where the inserts files live.
 func (service Service) InsertsFolder() string {

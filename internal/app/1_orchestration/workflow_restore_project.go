@@ -34,7 +34,7 @@ type RestoreResult struct {
 	InsertsKept    []string
 }
 
-const restoreCommitMessage = "restore agent settings from rein (rein restore)"
+const restoreCommitMessage = "restore agent settings from rein (rein reset project)"
 
 // RestoreProject puts back what init moved out of a clone, from the ledger
 // and the snapshots, takes the marked block out of .gitignore, forgets the

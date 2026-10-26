@@ -172,7 +172,7 @@ func newOrgDestroyCommand(environment *commandEnvironment) *cobra.Command {
 			"disconnect does, and then prints the steps to delete the repository on the host by hand.\n" +
 			"Rein never deletes a repository: deletion is the one act that cannot be undone, so it stays\n" +
 			"yours, with the host's own confirmation. Project clones initialised for the organisation\n" +
-			"keep their generated files until rein restore runs in each; run that first. Without a\n" +
+			"keep their generated files until rein reset project runs in each; run that first. Without a\n" +
 			"slug it asks which of the connected organisations.",
 		Example: "  rein org destroy\n  rein org destroy acme --yes",
 		Args:    cobra.MaximumNArgs(1),
@@ -217,7 +217,7 @@ func runOrgDestroy(environment *commandEnvironment, arguments []string, yes bool
 	}
 	fmt.Fprintf(environment.out, "This will disconnect %s on this machine: forget it, remove its clone at %s and forget %d project registrations.\n", slug, orgClonePath, len(registered))
 	if len(registered) > 0 {
-		fmt.Fprintf(environment.out, "These project clones keep their generated files until rein restore runs in them:\n")
+		fmt.Fprintf(environment.out, "These project clones keep their generated files until rein reset project runs in them:\n")
 		for _, clonePath := range registered {
 			fmt.Fprintf(environment.out, "  %s\n", clonePath)
 		}
@@ -227,7 +227,7 @@ func runOrgDestroy(environment *commandEnvironment, arguments []string, yes bool
 		if !prompter.CanAsk() {
 			return refusal.New("no terminal to confirm on; pass --yes")
 		}
-		confirmed, err := prompter.Confirm("Continue?", "The clone under ~/.rein/orgs/ is deleted and the organisation and its projects leave this machine's state; the snapshots stay until rein reset. Nothing on the host changes.")
+		confirmed, err := prompter.Confirm("Continue?", "The clone under ~/.rein/orgs/ is deleted and the organisation and its projects leave this machine's state; the snapshots stay until rein reset machine. Nothing on the host changes.")
 		if err != nil {
 			return refusal.New(err.Error())
 		}
@@ -310,12 +310,12 @@ func repositoryPhrase(host string, owner string, name string, remote string) str
 func printDeletionSteps(environment *commandEnvironment, orchestrator orchestration.Orchestrator, organization machine.OrganizationRef) {
 	if organization.Owner == "" || organization.Repository == "" {
 		fmt.Fprintf(environment.out, "The remote %s is untouched; delete it where it lives if you want it gone.\n", organization.Remote)
-		fmt.Fprintf(environment.out, "Afterwards rein reset removes what is left of rein on this machine.\n")
+		fmt.Fprintf(environment.out, "Afterwards rein reset machine removes what is left of rein on this machine.\n")
 		return
 	}
 	fmt.Fprintf(environment.out, "To delete %s/%s on %s by hand:\n", organization.Owner, organization.Repository, hostLabels[organization.Host])
 	fmt.Fprintf(environment.out, "  1. Open %s\n", orchestrator.Hosting.RepositorySettingsURL(organization.Owner, organization.Repository))
 	fmt.Fprintf(environment.out, "  2. At the bottom of the page, under Danger Zone, choose Delete this repository.\n")
 	fmt.Fprintf(environment.out, "  3. Type %s/%s to confirm; %s asks for your password or passkey.\n", organization.Owner, organization.Repository, hostLabels[organization.Host])
-	fmt.Fprintf(environment.out, "Afterwards rein reset removes what is left of rein on this machine.\n")
+	fmt.Fprintf(environment.out, "Afterwards rein reset machine removes what is left of rein on this machine.\n")
 }
