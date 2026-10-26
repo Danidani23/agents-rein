@@ -112,3 +112,41 @@ func TestResolveAndLogout(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 }
+
+func TestKeys(t *testing.T) {
+	service, _, keychain := newService(&fake.Host{})
+	service.Environment = func(name string) (string, bool) { return "from-environment", name == "DEEPSEEK_API_KEY" }
+	// the environment answers until the keychain holds the key, as on CI (Q59)
+	value, found := service.Key("DEEPSEEK_API_KEY")
+	if !found || value != "from-environment" {
+		t.Fatalf("from the environment %q %v", value, found)
+	}
+	err := service.StoreKey("DEEPSEEK_API_KEY", "sk-keychain\n")
+	value, found = service.Key("DEEPSEEK_API_KEY")
+	if err != nil || !found || value != "sk-keychain" {
+		t.Fatalf("from the keychain %q %v err %v", value, found, err)
+	}
+	for expected, call := range map[string]func() error{
+		"sk-123 is not the name of an environment variable": func() error { return service.StoreKey("sk-123", "x") },
+		"no key came": func() error { return service.StoreKey("SOME_KEY", "  \n") },
+	} {
+		err := call()
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), expected) {
+			t.Fatalf("%s: %v", expected, err)
+		}
+	}
+	err = service.DeleteKey("DEEPSEEK_API_KEY")
+	value, _ = service.Key("DEEPSEEK_API_KEY")
+	if err != nil || value != "from-environment" {
+		t.Fatalf("after delete %q err %v", value, err)
+	}
+	// without a keychain, keeping a key is refused and the environment still answers
+	keychain.Unavailable = "no keychain on this machine"
+	err = service.StoreKey("DEEPSEEK_API_KEY", "sk")
+	if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "no keychain on this machine") || !strings.Contains(err.Error(), "export DEEPSEEK_API_KEY") {
+		t.Fatalf("no keychain: %v", err)
+	}
+	if value, found := service.Key("DEEPSEEK_API_KEY"); !found || value != "from-environment" {
+		t.Fatalf("no keychain, environment %q %v", value, found)
+	}
+}

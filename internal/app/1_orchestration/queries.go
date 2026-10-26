@@ -637,3 +637,21 @@ func snapshotFate(services Services, clone machine.ProjectClone, pending []propo
 	}
 	return "snapshot not distilled yet; rein distill"
 }
+
+// DistillerKeyName is the variable that holds the key of the named or
+// active organisation's distiller, which rein key set and remove act on
+// when no name is given (Q59). It reads the org clone and changes nothing.
+func (orchestrator Orchestrator) DistillerKeyName(organizationSlug string) (string, error) {
+	organization, orgClonePath, err := resolveOrganization(orchestrator.Services, organizationSlug)
+	if err != nil {
+		return "", err
+	}
+	tree, err := orchestrator.Services.Records.Tree(orgClonePath)
+	if err != nil {
+		return "", err
+	}
+	if tree.Providers.Distiller == nil {
+		return "", refusal.New(fmt.Sprintf("%s declares no distiller provider in %s; name the variable: rein key set NAME", organization.Slug, declaration.ProvidersFile))
+	}
+	return tree.Providers.Distiller.KeyVariable, nil
+}

@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
@@ -23,6 +25,8 @@ type Service struct {
 	Clock    func() time.Time
 	// Sleep waits between polls of the device flow; nil means time.Sleep.
 	Sleep func(time.Duration)
+	// Environment reads a variable; nil means os.LookupEnv.
+	Environment func(name string) (string, bool)
 }
 
 // ErrNotLoggedIn is the refusal when no login exists.
@@ -248,4 +252,51 @@ func slugOf(login string) string {
 		builder = append(builder, character)
 	}
 	return string(builder)
+}
+
+// Key is the provider's key a variable names: from the keychain, where
+// rein key set keeps it, else from the environment, as on CI where the
+// pipeline's secret store sets it (Q59).
+func (service Service) Key(name string) (string, bool) {
+	if _, available := service.Keychain.Available(); available {
+		value, found, err := service.Keychain.LoadKey(name)
+		if err == nil && found && value != "" {
+			return value, true
+		}
+	}
+	lookup := service.Environment
+	if lookup == nil {
+		lookup = os.LookupEnv
+	}
+	value, found := lookup(name)
+	return value, found && value != ""
+}
+
+// StoreKey keeps a provider's key in the keychain under the variable's
+// name; the value is trimmed of the newline it came with.
+func (service Service) StoreKey(name string, value string) error {
+	if !declaration.IsVariableName(name) {
+		return refusal.New(fmt.Sprintf("%s is not the name of an environment variable, such as DEEPSEEK_API_KEY; name the variable, never the key", name))
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return refusal.New("no key came through standard input")
+	}
+	reason, available := service.Keychain.Available()
+	if !available {
+		return refusal.New(fmt.Sprintf("%s; export %s in your shell instead", reason, name))
+	}
+	return service.Keychain.StoreKey(name, value)
+}
+
+// DeleteKey removes a provider's key from the keychain.
+func (service Service) DeleteKey(name string) error {
+	if !declaration.IsVariableName(name) {
+		return refusal.New(fmt.Sprintf("%s is not the name of an environment variable", name))
+	}
+	reason, available := service.Keychain.Available()
+	if !available {
+		return refusal.New(reason)
+	}
+	return service.Keychain.DeleteKey(name)
 }

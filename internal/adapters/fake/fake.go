@@ -137,7 +137,29 @@ func (host *Host) CreatePullRequest(accessToken string, owner string, name strin
 // Keychain keeps tokens in memory.
 type Keychain struct {
 	Tokens      map[string]ports.Token
+	Keys        map[string]string
 	Unavailable string
+}
+
+// StoreKey keeps a provider's key.
+func (keychain *Keychain) StoreKey(name string, value string) error {
+	if keychain.Keys == nil {
+		keychain.Keys = map[string]string{}
+	}
+	keychain.Keys[name] = value
+	return nil
+}
+
+// LoadKey reads a provider's key.
+func (keychain *Keychain) LoadKey(name string) (string, bool, error) {
+	value, found := keychain.Keys[name]
+	return value, found, nil
+}
+
+// DeleteKey removes a provider's key.
+func (keychain *Keychain) DeleteKey(name string) error {
+	delete(keychain.Keys, name)
+	return nil
 }
 
 // Available is false with a reason when Unavailable is set.

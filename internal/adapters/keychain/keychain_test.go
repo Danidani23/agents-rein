@@ -37,3 +37,28 @@ func TestFileKeychain(t *testing.T) {
 		t.Fatalf("a file keychain is always available")
 	}
 }
+
+func TestFileKeychainKeys(t *testing.T) {
+	store := FileKeychain{Path: filepath.Join(t.TempDir(), "tokens.json")}
+	_ = store.Store(ports.Token{Login: "x", AccessToken: "token"})
+	err := store.StoreKey("DEEPSEEK_API_KEY", "sk-1")
+	if err != nil {
+		t.Fatalf("store key: %v", err)
+	}
+	value, found, err := store.LoadKey("DEEPSEEK_API_KEY")
+	if err != nil || !found || value != "sk-1" {
+		t.Fatalf("load key %q %v %v", value, found, err)
+	}
+	// a key is no login, and the login's token is untouched
+	_, found, _ = store.Load("DEEPSEEK_API_KEY")
+	token, _, _ := store.Load("x")
+	if found || token.AccessToken != "token" {
+		t.Fatalf("a key read as a login %v, token %+v", found, token)
+	}
+	err = store.DeleteKey("DEEPSEEK_API_KEY")
+	_, found, _ = store.LoadKey("DEEPSEEK_API_KEY")
+	token, _, _ = store.Load("x")
+	if err != nil || found || token.AccessToken != "token" {
+		t.Fatalf("delete key %v found %v token %+v", err, found, token)
+	}
+}

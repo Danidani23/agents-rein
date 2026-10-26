@@ -76,6 +76,37 @@ func (System) Delete(login string) error {
 	return err
 }
 
+// keyAccount is the account a provider's key is kept under, apart from the
+// logins, which hold no colon.
+func keyAccount(name string) string {
+	return "key:" + name
+}
+
+// StoreKey writes a provider's key as a generic password, replacing an
+// earlier one.
+func (System) StoreKey(name string, value string) error {
+	_, err := execute.Run("", "security", "add-generic-password", "-U", "-s", service, "-a", keyAccount(name), "-l", "Agents Rein: "+name, "-w", value)
+	return err
+}
+
+// LoadKey reads a provider's key.
+func (System) LoadKey(name string) (string, bool, error) {
+	result, err := execute.Run("", "security", "find-generic-password", "-s", service, "-a", keyAccount(name), "-w")
+	var failure *execute.Failure
+	if errors.As(err, &failure) && strings.Contains(failure.Stderr, "could not be found") {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return strings.TrimSpace(result.Stdout), true, nil
+}
+
+// DeleteKey removes a provider's key; a missing one is not an error.
+func (System) DeleteKey(name string) error {
+	return System{}.Delete(keyAccount(name))
+}
+
 // FileKeychain keeps the tokens in one JSON file readable by the user only.
 type FileKeychain struct {
 	Path string
@@ -141,4 +172,20 @@ func (keychain FileKeychain) Delete(login string) error {
 	}
 	delete(tokens, login)
 	return keychain.save(tokens)
+}
+
+// StoreKey writes a provider's key beside the tokens, under its own account.
+func (keychain FileKeychain) StoreKey(name string, value string) error {
+	return keychain.Store(ports.Token{Login: keyAccount(name), AccessToken: value})
+}
+
+// LoadKey reads a provider's key.
+func (keychain FileKeychain) LoadKey(name string) (string, bool, error) {
+	token, found, err := keychain.Load(keyAccount(name))
+	return token.AccessToken, found, err
+}
+
+// DeleteKey removes a provider's key.
+func (keychain FileKeychain) DeleteKey(name string) error {
+	return keychain.Delete(keyAccount(name))
 }

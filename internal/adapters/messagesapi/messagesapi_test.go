@@ -113,7 +113,7 @@ func TestJudge(t *testing.T) {
 	t.Run("without its key it is not available, and says why", func(t *testing.T) {
 		judge := Judge{Provider: declaration.Provider{URL: "https://api.deepseek.com/anthropic", KeyVariable: "MISSING_KEY"}, Lookup: lookup}
 		reason, available := judge.Available()
-		if available || !strings.Contains(reason, "MISSING_KEY") || !strings.Contains(reason, "api.deepseek.com") {
+		if available || !strings.Contains(reason, "MISSING_KEY") || !strings.Contains(reason, "api.deepseek.com") || !strings.Contains(reason, "rein key set MISSING_KEY") {
 			t.Fatalf("available %v reason %q", available, reason)
 		}
 	})

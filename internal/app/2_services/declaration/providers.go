@@ -42,6 +42,12 @@ const (
 // holds, so a key pasted there is refused.
 var variablePattern = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 
+// IsVariableName says whether a name is an environment variable's, the
+// only thing a provider's key is known by in a repository or a keychain.
+func IsVariableName(name string) bool {
+	return variablePattern.MatchString(name)
+}
+
 // ParseProviders reads providers.yaml: unknown fields, a protocol other
 // than anthropic, an endpoint that is not https unless it is this machine,
 // no model, an unknown auth, a key_variable that is no variable's name and
@@ -70,7 +76,7 @@ func ParseProviders(content []byte) (Providers, []Problem) {
 	if provider.Auth != "" && provider.Auth != AuthAPIKey && provider.Auth != AuthBearer {
 		fail("auth %q is neither x-api-key nor bearer", provider.Auth)
 	}
-	if !variablePattern.MatchString(provider.KeyVariable) {
+	if !IsVariableName(provider.KeyVariable) {
 		fail("key_variable %q is not the name of an environment variable; it names where the key is, never the key itself", provider.KeyVariable)
 	}
 	if provider.MaxTokens < 0 {

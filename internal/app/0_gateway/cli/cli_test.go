@@ -365,6 +365,41 @@ func TestStatus(t *testing.T) {
 	})
 }
 
+func TestKey(t *testing.T) {
+	fixture := newHarness(t)
+	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+	orchestrator, _ := fixture.orchestrate()
+	_, orgClonePath, _ := orchestrator.Organizations.Lookup("acme")
+	_ = os.WriteFile(filepath.Join(orgClonePath, "declarations", "providers.yaml"), []byte("distiller:\n  protocol: anthropic\n  url: https://api.deepseek.com/anthropic\n  model: deepseek-v4-pro\n  key_variable: DEEPSEEK_API_KEY\n"), 0o644)
+	piped := func(input string, arguments ...string) (int, string, string) {
+		var out, errOut bytes.Buffer
+		code := Run(arguments, strings.NewReader(input), &out, &errOut, fixture.orchestrate)
+		return code, out.String(), errOut.String()
+	}
+	// the key comes through standard input and goes into the keychain under the provider's variable (Q59)
+	code, out, errOut := piped("sk-secret\n", "key", "set")
+	if code != ExitWorked || !strings.Contains(out, "kept DEEPSEEK_API_KEY in your keychain") || fixture.keychain.Keys["DEEPSEEK_API_KEY"] != "sk-secret" || strings.Contains(out, "sk-secret") {
+		t.Fatalf("set: code %d out %q err %q keys %v", code, out, errOut, fixture.keychain.Keys)
+	}
+	// typed at a terminal it would show, so it is refused with the way that shows nothing
+	code, _, errOut = fixture.runInteractive("sk-typed\n", "key", "set")
+	if code != ExitRefused || !strings.Contains(errOut, "pbpaste | rein key set DEEPSEEK_API_KEY") || fixture.keychain.Keys["DEEPSEEK_API_KEY"] != "sk-secret" {
+		t.Fatalf("terminal: code %d err %q", code, errOut)
+	}
+	code, _, _ = piped("sk-other", "key", "set", "OTHER_KEY")
+	if code != ExitWorked || fixture.keychain.Keys["OTHER_KEY"] != "sk-other" {
+		t.Fatalf("named: code %d keys %v", code, fixture.keychain.Keys)
+	}
+	code, _, errOut = piped("x", "key", "set", "sk-123")
+	if code != ExitRefused || !strings.Contains(errOut, "is not the name of an environment variable") {
+		t.Fatalf("bad name: code %d err %q", code, errOut)
+	}
+	code, out, _ = fixture.run("key", "remove")
+	if _, kept := fixture.keychain.Keys["DEEPSEEK_API_KEY"]; code != ExitWorked || !strings.Contains(out, "removed DEEPSEEK_API_KEY from your keychain") || kept {
+		t.Fatalf("remove: code %d out %q", code, out)
+	}
+}
+
 func TestReset(t *testing.T) {
 	const placed = "/home/.claude/rules/global.md"
 	// a destructive command has no silent default, so the scope is named (D36)

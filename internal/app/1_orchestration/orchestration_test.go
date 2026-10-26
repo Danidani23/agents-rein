@@ -168,6 +168,19 @@ func TestDisconnectOrganization(t *testing.T) {
 	})
 }
 
+func TestDistillerKeyName(t *testing.T) {
+	fixture, created := withOrganization(t)
+	_, err := fixture.orchestrator().DistillerKeyName("")
+	if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "declares no distiller") {
+		t.Fatalf("no provider: %v", err)
+	}
+	_ = os.WriteFile(filepath.Join(created.Connected.OrgClonePath, "declarations", "providers.yaml"), []byte("distiller:\n  protocol: anthropic\n  url: https://api.deepseek.com/anthropic\n  model: deepseek-v4-pro\n  key_variable: DEEPSEEK_API_KEY\n"), 0o644)
+	name, err := fixture.orchestrator().DistillerKeyName("")
+	if err != nil || name != "DEEPSEEK_API_KEY" {
+		t.Fatalf("name %q err %v", name, err)
+	}
+}
+
 func TestProjectHere(t *testing.T) {
 	t.Run("the project status runs in: its record, what it resolves, what loads every session", func(t *testing.T) {
 		fixture, created := withTeam(t)

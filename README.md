@@ -136,8 +136,7 @@ open formats, so each is another output of the same compiler
 The distiller runs on your own `claude` login unless the organisation names a model endpoint in
 `declarations/providers.yaml` of its repository. Any endpoint that speaks Anthropic's Messages
 API serves: Anthropic's own, DeepSeek's ([docs](https://api-docs.deepseek.com/guides/anthropic_api))
-or Moonshot's for Kimi. The file names the variable that holds the key, never the key; each
-developer exports that variable.
+or Moonshot's for Kimi.
 
 ```yaml
 distiller:
@@ -145,6 +144,16 @@ distiller:
   url: https://api.deepseek.com/anthropic
   model: deepseek-v4-pro
   key_variable: DEEPSEEK_API_KEY
+```
+
+No key is ever written into the repository. `key_variable` holds only a name, and rein refuses
+anything there that is not an environment variable's name, a pasted key included. Each developer
+keeps the key itself in the operating system's keychain, passing it through standard input so it
+shows nowhere; the distiller reads the keychain first and the environment second, which is where
+CI's secret store puts it. The keychain is macOS's for now; elsewhere, export the variable.
+
+```sh
+pbpaste | rein key set
 ```
 
 For Kimi, `url: https://api.moonshot.ai/anthropic` with `auth: bearer`, which so far only

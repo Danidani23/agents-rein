@@ -34,7 +34,8 @@ const apiVersion = "2023-06-01"
 // Judge asks the organisation's provider.
 type Judge struct {
 	Provider declaration.Provider
-	// Lookup reads an environment variable; nil means os.LookupEnv.
+	// Lookup finds the key the provider's variable names, in the keychain
+	// and then the environment as rein wires it; nil means os.LookupEnv.
 	Lookup func(name string) (string, bool)
 }
 
@@ -63,7 +64,7 @@ func (judge Judge) key() (string, bool) {
 func (judge Judge) Available() (string, bool) {
 	_, found := judge.key()
 	if !found {
-		return fmt.Sprintf("%s, which holds the key for %s, is not set; export it", judge.Provider.KeyVariable, strings.TrimPrefix(judge.Name(), "api:")), false
+		return fmt.Sprintf("%s, the key for %s, is in neither your keychain nor your environment; keep it with: pbpaste | rein key set %s", judge.Provider.KeyVariable, strings.TrimPrefix(judge.Name(), "api:"), judge.Provider.KeyVariable), false
 	}
 	return "", true
 }

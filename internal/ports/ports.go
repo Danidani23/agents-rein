@@ -128,6 +128,12 @@ type Keychain interface {
 	Store(token Token) error
 	Load(login string) (token Token, found bool, err error)
 	Delete(login string) error
+	// StoreKey keeps a provider's key under the name of the variable that
+	// would otherwise hold it, replacing an earlier one (Q59); LoadKey and
+	// DeleteKey read and remove it, a missing one no error.
+	StoreKey(name string, value string) error
+	LoadKey(name string) (value string, found bool, err error)
+	DeleteKey(name string) error
 }
 
 // Repository is version control on this machine. Operations on a remote
