@@ -59,14 +59,47 @@ the start of every chat session with the agent.
   it into units of one concern and suggests the level each belongs to.
 - It is a compiler and a linter, never a service, and never deletes a repository.
 
-## Quick start
+## Install
 
-Install the latest release, on macOS or Linux with the script, which verifies the checksum and
-puts `rein` into `~/.local/bin`, or with Homebrew; Windows, Linux packages, Nix and `go install` are in
-[docs/commands.md](docs/commands.md). Then sign in to GitHub through the Agents Rein app:
+macOS or Linux, with Homebrew:
+
+```sh
+brew install --cask Danidani23/tap/rein
+```
+
+macOS or Linux, with the script, which verifies the checksum and puts `rein` into `~/.local/bin`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Danidani23/agents-rein/main/install.sh | sh
+```
+
+Windows, with Scoop:
+
+```sh
+scoop bucket add danidani23 https://github.com/Danidani23/scoop-bucket
+scoop install rein
+```
+
+Windows, with the script:
+
+```powershell
+irm https://raw.githubusercontent.com/Danidani23/agents-rein/main/install.ps1 | iex
+```
+
+Anywhere with Go:
+
+```sh
+go install github.com/Danidani23/agents-rein/cmd/rein@latest
+```
+
+The `.deb`, `.rpm` and `.apk` packages and every other way are in
+[docs/commands.md](docs/commands.md).
+
+## Quick start
+
+Sign in to GitHub through the Agents Rein app:
+
+```sh
 rein login
 ```
 
