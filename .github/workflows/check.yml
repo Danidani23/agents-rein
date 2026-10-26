@@ -26,6 +26,14 @@ jobs:
       - run: go install github.com/go-task/task/v3/cmd/task@v3.54.0
       - run: task rein:check
       - run: task rein:release-check
+      # a runner has no desktop, so GNOME Keyring is started and unlocked in a session of its own
+      - name: keychain round trip (GNOME Keyring through secret-tool)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gnome-keyring libsecret-tools dbus
+          dbus-run-session -- sh -c 'echo rein | gnome-keyring-daemon --unlock --components=secrets && task rein:test-keychain'
+        env:
+          REIN_KEYCHAIN_REQUIRED: "1"
 
   test:
     name: test (${{ matrix.os }})
@@ -41,3 +49,7 @@ jobs:
           go-version-file: go.mod
       - run: go install github.com/go-task/task/v3/cmd/task@v3.54.0
       - run: task rein:test
+      - name: keychain round trip (the login keychain or Credential Manager)
+        run: task rein:test-keychain
+        env:
+          REIN_KEYCHAIN_REQUIRED: "1"

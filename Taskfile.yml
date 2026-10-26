@@ -39,6 +39,11 @@ tasks:
       - go vet ./...
       - go test ./...
 
+  rein:test-keychain:
+    desc: Round-trip a token and a key through this machine's real keychain; writes a test entry and removes it, so run it on purpose
+    cmds:
+      - go test -tags keychain -count=1 -run TestSystemKeychain ./internal/adapters/keychain
+
   rein:coverage:
     desc: Test every package with statement coverage, print the summary, and leave the HTML report in .tmp/coverage.html
     cmds:

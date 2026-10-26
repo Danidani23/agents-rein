@@ -33,6 +33,7 @@ with their descriptions; the ones a developer reaches for:
 | `task rein:build` | builds rein into `.tmp/rein` for a try without installing it |
 | `task rein:install` | installs rein into the Go bin folder and checks that the shell finds this copy, not another |
 | `task rein:test` | vets and tests every package |
+| `task rein:test-keychain` | round-trips a token and a key through this machine's real keychain, writing a test entry and removing it; CI runs it on all three systems |
 | `task rein:coverage` | tests with statement coverage, prints the summary and leaves the report in `.tmp/coverage.html` |
 | `task rein:lint` | runs `rein lint` on this repository's own harness |
 | `task rein:check` | the gate: format check, vet, tests and lint in one go |

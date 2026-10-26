@@ -150,7 +150,9 @@ No key is ever written into the repository. `key_variable` holds only a name, an
 anything there that is not an environment variable's name, a pasted key included. Each developer
 keeps the key itself in the operating system's keychain, passing it through standard input so it
 shows nowhere; the distiller reads the keychain first and the environment second, which is where
-CI's secret store puts it. The keychain is macOS's for now; elsewhere, export the variable.
+CI's secret store puts it. The keychain is macOS's login keychain, the desktop's keyring on Linux
+(GNOME Keyring or KWallet, through `secret-tool`) or Windows's Credential Manager; a server
+without one reads the variable from the environment.
 
 ```sh
 pbpaste | rein key set

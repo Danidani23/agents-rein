@@ -139,7 +139,9 @@ read by `rein status`:
 | `removals.yaml`, `inserts/<org id>.yaml` | the ledger: every file `init` moved out and every file `sync` wrote, with its hash |
 | `proposals/` | the history of every proposal `rein propose` opened, one folder per organisation and proposal, and under `pending/` the proposals distilled from your agents' homes that wait for `propose`; a project's pending proposals wait in its own `.rein/proposals/` instead |
 
-Tokens are never in these files: they live in the operating system's keychain, one per login.
+Tokens are never in these files: they live in the operating system's keychain, one per login:
+macOS's login keychain, the desktop's keyring on Linux through `secret-tool`, or Windows's
+Credential Manager. A provider's key sits beside them (`rein key set`).
 Secrets a tool server needs are `${REIN_...}` references to variables of your shell, which
 `rein sync` names when they are missing.
 
