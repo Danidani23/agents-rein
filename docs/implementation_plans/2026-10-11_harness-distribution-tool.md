@@ -1382,6 +1382,12 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- ✅ **P2.54 — `distill` says what the distiller does and how far it has come.** [EXECUTED]
+  Approved and built 2026-10-26 (Q50 w). The step names who answers, "claude with your
+  default model"; a line above it says what is judged against what and how long it usually
+  takes; its spinner shows "thinking", then "writing its answer, 12 judgements so far",
+  from Claude Code's streamed answer (`--output-format stream-json --verbose
+  --include-partial-messages`, [docs](https://code.claude.com/docs/en/headless#stream-responses)).
 - 🟢 **P2.53 — Kimi Code CLI as an agent (D43).** [PENDING] Approved 2026-10-26 (Q47 q), built
   after P2.40 to P2.42. Detected by `kimi` on the PATH; home `~/.kimi`. Writes `AGENTS.md`
   with the levels inline and the path-scoped rules stated under their globs, as for Codex,
@@ -1405,8 +1411,8 @@ from that project's snapshot.
   and `claude --resume <id>` finds one from any folder
   ([docs](https://code.claude.com/docs/en/sessions#loop-p-agent-sdk-and-background-sessions)),
   so the last line names that command, from the backend that ran.
-- 🟢 **P2.50 — `rein status` shows the project you are in first (D41).** [PENDING] Approved
-  2026-10-26 (Q48 s). The layout of D41; outside a clone the first line says so and names
+- ✅ **P2.50 — `rein status` shows the project you are in first (D41).** [EXECUTED] Approved
+  and built 2026-10-26 (Q48 s). The layout of D41; outside a clone the first line says so and names
   `rein init`. The load line: the characters of what loads into every session, the rules
   without `paths` and the instructions, and of the skill listing, which Claude Code budgets
   at 1% of the context window and cuts beyond it
@@ -2365,3 +2371,18 @@ writes is read from the next session on, not in the same one.
   names the projects a declaration reaches, which `distill` prints under each candidate and
   the pull request lists. Tests that invented `stack` as a new category now invent `cloud`.
   `task rein:check` green, `go vet` for Windows green. Left: (f), the proposal for `dani`.
+- (2026-10-26) P2.49 (f) drafted, not proposed: a proposal folder for `dani` in the session's
+  scratchpad adds `stack:opentofu`, assigns it to the website, gives `opentofu` the
+  label and the wording of both tools, and labels the two lifts `kind:static-site` or
+  `kind:web-app`. Checked offline with the `proposal` package: `Check` refuses the last two,
+  because it reads an `applyIf` as one project's labels and `kind` takes one value, while
+  `resolve` reads it as any of them (P2.4); asked as Q52.
+- (2026-10-26) P2.50 done, tests first: the query `ProjectHere` finds the clone a folder is
+  in and counts what it resolves, the rules split by `paths`, with the characters of the
+  rules without `paths` and of the skill listing; `status --path` prints it first, then the
+  machine on one line, the organisations and the other projects. On this repository: 5 rules
+  (3 always on), 11 skills, 13,425 characters in every session.
+- (2026-10-26) P2.54 done, tests first (Q50 w): `execute` hands a program's output on line by
+  line; the judge port's `Ask` hears progress, which the Claude Code adapter reads from the
+  streamed answer; the judge service turns it into notes; a step reports a detail, said
+  once above its line, and notes, drawn into its spinner. The race detector is quiet.
