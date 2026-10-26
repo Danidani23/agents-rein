@@ -94,8 +94,31 @@ destroy` and `rein reset machine` take everything back. The full list is in
 ## Supported agents
 
 Claude Code today: instructions, rules, skills, tool servers, hooks and permissions. Codex,
-Cursor, GitHub Copilot, Gemini CLI and OpenCode are planned; each reads the same open formats,
-so each is another output of the same compiler ([findings, Q4](docs/harness-management.md#harness-portability-across-tools)).
+Cursor, GitHub Copilot, Kimi Code CLI, Gemini CLI and OpenCode are planned; each reads the same
+open formats, so each is another output of the same compiler
+([findings, Q4](docs/harness-management.md#harness-portability-across-tools)).
+
+## Which model distils
+
+The distiller runs on your own `claude` login unless the organisation names a model endpoint in
+`declarations/providers.yaml` of its repository. Any endpoint that speaks Anthropic's Messages
+API serves: Anthropic's own, DeepSeek's ([docs](https://api-docs.deepseek.com/guides/anthropic_api))
+or Moonshot's for Kimi. The file names the variable that holds the key, never the key; each
+developer exports that variable.
+
+```yaml
+distiller:
+  protocol: anthropic
+  url: https://api.deepseek.com/anthropic
+  model: deepseek-v4-pro
+  key_variable: DEEPSEEK_API_KEY
+```
+
+For Kimi, `url: https://api.moonshot.ai/anthropic` with `auth: bearer`, which so far only
+third parties document ([guide](https://www.developersdigest.tech/reference/api-compatibility/moonshot)).
+An organisation that declares a provider has everyone distil through it, so the brief goes where
+the organisation decided; `rein distill --distiller none` still skips the model. DeepSeek has no
+coding agent of its own to support yet; its models distil.
 
 ## Read more
 

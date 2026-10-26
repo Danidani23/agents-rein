@@ -200,6 +200,15 @@ func TestRecords(t *testing.T) {
 			t.Fatalf("findings: %v", messages(report))
 		}
 	})
+	t.Run("the providers file is checked (D42)", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "declarations/organization.yaml", organization)
+		writeFile(t, root, "declarations/providers.yaml", "distiller:\n  protocol: anthropic\n  url: https://api.deepseek.com/anthropic\n  model: deepseek-v4-pro\n  key_variable: sk-123\n")
+		report := mustRun(t, root)
+		if report.Errors() != 1 || !strings.Contains(strings.Join(messages(report), "\n"), "is not the name of an environment variable") {
+			t.Fatalf("findings: %v", messages(report))
+		}
+	})
 	t.Run("a broken record and a bad reference are reported with their addresses", func(t *testing.T) {
 		root := t.TempDir()
 		writeFile(t, root, "declarations/organization.yaml", organization)

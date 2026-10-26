@@ -304,10 +304,7 @@ func checkSelectors(registry map[string]declaration.LabelCategory, selectors dec
 			return refusal.New(fmt.Sprintf("label %q is not in the registry; %s has %s", label, category, strings.Join(registered.LabelValues(), ", ")))
 		}
 	}
-	conflicts := declaration.SingleValueConflicts(registry, selectors.ApplyIf)
-	if len(conflicts) > 0 {
-		return refusal.New("applyIf " + strings.Join(conflicts, "; "))
-	}
+	// applyIf means any of its labels, so either value of a category of one value is fine (Q52)
 	if selectors.Enforcement != "" && selectors.Enforcement != declaration.EnforcementRequired && selectors.Enforcement != declaration.EnforcementDefault {
 		return refusal.New(fmt.Sprintf("enforcement %q is neither required nor default", selectors.Enforcement))
 	}

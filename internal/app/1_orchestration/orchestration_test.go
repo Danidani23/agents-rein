@@ -31,6 +31,8 @@ type harness struct {
 	releases   *fake.Releases
 	lock       *fake.Lock
 	keychain   *fake.Keychain
+	// provider answers for an organisation that declares its distiller
+	provider *fake.Judge
 }
 
 func newHarness(t *testing.T) *harness {
@@ -51,7 +53,11 @@ func newHarness(t *testing.T) *harness {
 }
 
 func (fixture *harness) orchestrator() Orchestrator {
-	return New(NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock, fixture.keychain, fixture.releases, "v0.1.0", filepath.Join(fixture.home, "bin", "rein")))
+	services := NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock, fixture.keychain, fixture.releases, "v0.1.0", filepath.Join(fixture.home, "bin", "rein"))
+	if fixture.provider != nil {
+		services.Judge.Provider = func(declaration.Provider) ports.Judge { return fixture.provider }
+	}
+	return New(services)
 }
 
 func (fixture *harness) orgCloneFolders(t *testing.T) []string {
@@ -1215,6 +1221,20 @@ func TestDistillWithTheJudge(t *testing.T) {
 			t.Fatalf("proposed %+v err %v body %q", proposed, err, fixture.host.PullRequests[0].Body)
 		}
 	})
+	t.Run("an organisation that declares its distiller gets it, and agent-cli is refused (D23, D42)", func(t *testing.T) {
+		fixture, created := prepare(t)
+		_ = os.WriteFile(filepath.Join(created.Connected.OrgClonePath, "declarations", "providers.yaml"), []byte("distiller:\n  protocol: anthropic\n  url: https://api.deepseek.com/anthropic\n  model: deepseek-v4-pro\n  key_variable: DEEPSEEK_API_KEY\n"), 0o644)
+		fixture.provider = &fake.Judge{Answers: []string{answer}}
+		fixture.judge = &fake.Judge{Answers: []string{answer}}
+		_, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop", Judge: "agent-cli"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "declares its distiller") || !strings.Contains(err.Error(), "--distiller none") {
+			t.Fatalf("agent-cli: %v", err)
+		}
+		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		if err != nil || result.Proposal.Judge.Status != "answered" || len(fixture.provider.Briefs) != 1 || len(fixture.judge.Briefs) != 0 {
+			t.Fatalf("judge %+v err %v provider asked %d, agent CLI asked %d", result.Proposal.Judge, err, len(fixture.provider.Briefs), len(fixture.judge.Briefs))
+		}
+	})
 	t.Run("an unavailable judge refuses and writes nothing, none skips it, a dry run writes nothing", func(t *testing.T) {
 		fixture, _ := prepare(t)
 		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
@@ -1666,7 +1686,6 @@ func TestDeclarationEditAndRemove(t *testing.T) {
 			"the level organizations.other is not in acme":                                    {Address: "organizations.acme.rules.style", Level: "organizations.other"},
 			`team "ops" does not exist in acme`:                                               {Address: "organizations.acme.rules.style", Level: "organizations.acme.teams.ops"},
 			`label "cloud:aws" names no category`:                                             {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"cloud:aws"}}},
-			"applyIf data takes one value":                                                    {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"data:public", "data:internal"}}},
 			`enforcement "maybe" is neither`:                                                  {Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{Enforcement: "maybe"}},
 			"organizations.acme.users.danidani23.rules.style already exists; remove it first": {Address: "organizations.acme.rules.style", Level: "organizations.acme.users.danidani23", Selectors: declaration.Selectors{ApplyIf: []string{"language:go"}}},
 		} {
@@ -1677,6 +1696,11 @@ func TestDeclarationEditAndRemove(t *testing.T) {
 		}
 		if len(fixture.repository.Branches) != 0 {
 			t.Fatalf("branches %v", fixture.repository.Branches)
+		}
+		// applyIf means any of its labels, so either value of a category of one value is fine (P2.4, Q52)
+		_, err := fixture.orchestrator().EditDeclaration(EditDeclarationRequest{Address: "organizations.acme.rules.style", Level: "organizations.acme", Selectors: declaration.Selectors{ApplyIf: []string{"data:public", "data:internal"}}})
+		if err != nil {
+			t.Fatalf("either value refused: %v", err)
 		}
 	})
 	t.Run("a removal deletes the files on a branch, unless a skip list or an exception names the declaration", func(t *testing.T) {

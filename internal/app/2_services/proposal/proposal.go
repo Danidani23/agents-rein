@@ -390,8 +390,9 @@ func (proposal Proposal) WriteFolder(folder string) error {
 
 // Check says what is wrong with a proposal before propose: a proposed one
 // handed in again, a level that is not one, the same kind and id twice at
-// a level, a label outside the registry or two of a single-valued
-// category, an unknown enforcement, an included candidate without files.
+// a level, a label outside the registry, an unknown enforcement, an
+// included candidate without files. Two values of a category of one value
+// in applyIf are no problem: applyIf means any of its labels.
 func (proposal Proposal) Check(registry map[string]declaration.LabelCategory) []string {
 	var problems []string
 	if proposal.Status == StatusProposed {
@@ -435,9 +436,6 @@ func (proposal Proposal) Check(registry map[string]declaration.LabelCategory) []
 			if _, found := registered.Labels[value]; !found {
 				problems = append(problems, fmt.Sprintf("%s: label %q is not in the registry; %s has %s", where, label, category, strings.Join(registered.LabelValues(), ", ")))
 			}
-		}
-		for _, conflict := range declaration.SingleValueConflicts(registry, candidate.ApplyIf) {
-			problems = append(problems, where+": applyIf "+conflict)
 		}
 		if candidate.Enforcement != "" && candidate.Enforcement != declaration.EnforcementRequired && candidate.Enforcement != declaration.EnforcementDefault {
 			problems = append(problems, fmt.Sprintf("%s: enforcement %q is neither required nor default", where, candidate.Enforcement))

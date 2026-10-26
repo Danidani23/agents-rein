@@ -31,7 +31,7 @@ flowchart TB
         end
     end
     ports["internal/ports<br/>Host, Repository, Agent, State, Prompter, Judge, MachineLock, Keychain"]
-    adapters["internal/adapters<br/>github (REST, device flow), git, claudecode, keychain, localstate, terminal, execute<br/>fake, for the tests"]
+    adapters["internal/adapters<br/>github (REST, device flow), git, claudecode, messagesapi, keychain, localstate, terminal, execute<br/>fake, for the tests"]
 
     main --> gateway
     main --> adapters

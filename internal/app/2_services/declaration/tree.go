@@ -21,6 +21,8 @@ type Tree struct {
 	Users        map[string]User
 	Labels       map[string]LabelCategory
 	Exceptions   []ExceptionRecord
+	// Providers is the organisation's providers.yaml, empty without one.
+	Providers Providers
 	// Declarations are the addresses of every rule, skill, tool server,
 	// permission set and hook in the tree, for the cross-checks.
 	Declarations map[string]bool
@@ -65,6 +67,17 @@ func LoadTree(clone string) (Tree, []TreeProblem, error) {
 	add(orgAddress, matches[0], found)
 	tree := Tree{Organization: organization, Teams: map[string]Team{}, Projects: map[string]Project{}, Users: map[string]User{}, Labels: map[string]LabelCategory{}, Declarations: map[string]bool{}}
 	base := filepath.Join(clone, "declarations")
+	for _, file := range glob(filepath.Join(orgFolder, ProvidersFile)) {
+		content, err := os.ReadFile(file)
+		if err != nil {
+			return Tree{}, nil, err
+		}
+		providers, found := ParseProviders(content)
+		add(orgAddress+".providers", file, found)
+		if len(found) == 0 {
+			tree.Providers = providers
+		}
+	}
 	for _, file := range glob(filepath.Join(orgFolder, "labels", "*.yaml")) {
 		name := strings.TrimSuffix(filepath.Base(file), ".yaml")
 		content, err := os.ReadFile(file)

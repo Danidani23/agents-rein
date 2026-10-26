@@ -68,6 +68,7 @@ const (
 	kindPermissionSet
 	kindHook
 	kindException
+	kindProviders
 )
 
 // classify says what a file is by its name and its folder: a SKILL.md is a
@@ -86,6 +87,8 @@ func classify(filePath string) fileKind {
 		return kindRule
 	case base == "organization.yaml":
 		return kindOrganization
+	case base == declaration.ProvidersFile && parent == "declarations":
+		return kindProviders
 	case base == "team.yaml":
 		return kindTeam
 	case base == "project.yaml":
@@ -145,7 +148,7 @@ func Run(root string) (Report, error) {
 			state.lintRule(filePath)
 		case kindSettings:
 			state.lintSettings(filePath)
-		case kindOrganization, kindTeam, kindProject, kindUser, kindLabels:
+		case kindOrganization, kindTeam, kindProject, kindUser, kindLabels, kindProviders:
 			state.lintRecord(filePath, kind)
 		case kindToolServer, kindPermissionSet, kindHook, kindException:
 			state.lintDeclaration(filePath, kind)
@@ -317,6 +320,8 @@ func (state *run) lintRecord(filePath string, kind fileKind) {
 		_, problems = declaration.ParseUser(folder, content)
 	case kindLabels:
 		_, problems = declaration.ParseLabelCategory(strings.TrimSuffix(filepath.Base(filePath), ".yaml"), content)
+	case kindProviders:
+		_, problems = declaration.ParseProviders(content)
 	}
 	addressText, _ := recordAddress(filePath, kind)
 	for _, problem := range problems {

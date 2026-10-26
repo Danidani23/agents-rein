@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
@@ -16,6 +17,18 @@ import (
 // Service asks the judge.
 type Service struct {
 	Judge ports.Judge
+	// DefaultModel is the model the backend asks when none is named, ""
+	// for the developer's own default.
+	DefaultModel string
+	// Provider builds the backend for an organisation's provider (D42);
+	// nil where none can be built.
+	Provider func(provider declaration.Provider) ports.Judge
+}
+
+// WithProvider is the service asking the organisation's provider instead,
+// its model the default.
+func (service Service) WithProvider(provider declaration.Provider) Service {
+	return Service{Judge: service.Provider(provider), DefaultModel: provider.Model, Provider: service.Provider}
 }
 
 // Available says whether a judge can answer on this machine.
@@ -35,12 +48,15 @@ func (service Service) Name() string {
 }
 
 // Describe names who answers, for a person: the backend without its kind,
-// and the model, or the developer's default.
+// and the model, the provider's, or the developer's default.
 func (service Service) Describe(model string) string {
-	if model == "" {
+	switch {
+	case model == "" && service.DefaultModel != "":
+		model = service.DefaultModel
+	case model == "":
 		model = "your default model"
 	}
-	return strings.TrimPrefix(service.Name(), "agent-cli:") + " with " + model
+	return strings.TrimPrefix(strings.TrimPrefix(service.Name(), "agent-cli:"), "api:") + " with " + model
 }
 
 // ResumeCommand is the command that opens the conversation of a run, ""

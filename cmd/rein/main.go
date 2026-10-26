@@ -13,9 +13,11 @@ import (
 	"github.com/Danidani23/agents-rein/internal/adapters/github"
 	"github.com/Danidani23/agents-rein/internal/adapters/keychain"
 	"github.com/Danidani23/agents-rein/internal/adapters/localstate"
+	"github.com/Danidani23/agents-rein/internal/adapters/messagesapi"
 	"github.com/Danidani23/agents-rein/internal/adapters/release"
 	"github.com/Danidani23/agents-rein/internal/app/0_gateway/cli"
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/ports"
 	"github.com/Danidani23/agents-rein/internal/version"
 )
@@ -46,6 +48,8 @@ func wire() (orchestration.Orchestrator, error) {
 	}
 	executable, _ := os.Executable()
 	services := orchestration.NewServices(home, host, git.Repository{}, store, []ports.Agent{claudecode.Agent{}}, claudecode.Judge{}, store, tokens, release.NewClient(valueOr("REIN_GITHUB_API", gitHubAPI)), version.String(), executable)
+	// an organisation that declares its distiller is asked through the Messages API (D42)
+	services.Judge.Provider = func(provider declaration.Provider) ports.Judge { return messagesapi.Judge{Provider: provider} }
 	return orchestration.New(services), nil
 }
 

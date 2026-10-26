@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Danidani23/agents-rein/internal/adapters/fake"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
@@ -48,6 +49,18 @@ func TestJudgeCandidates(t *testing.T) {
 		}
 		if (Service{Judge: backend}).Describe("") != "fake-judge with your default model" || (Service{Judge: backend}).Describe("sonnet") != "fake-judge with sonnet" {
 			t.Fatalf("describe %q", (Service{Judge: backend}).Describe(""))
+		}
+	})
+	t.Run("an organisation's provider replaces the backend, its model the default (D42)", func(t *testing.T) {
+		provided := &fake.Judge{}
+		var declared declaration.Provider
+		service := Service{Judge: &fake.Judge{}, Provider: func(provider declaration.Provider) ports.Judge {
+			declared = provider
+			return provided
+		}}
+		switched := service.WithProvider(declaration.Provider{Model: "deepseek-v4-pro"})
+		if switched.Judge != provided || declared.Model != "deepseek-v4-pro" || switched.Describe("") != "fake-judge with deepseek-v4-pro" || switched.Describe("other") != "fake-judge with other" {
+			t.Fatalf("switched %+v describe %q", switched, switched.Describe(""))
 		}
 	})
 	t.Run("a backend error and an unavailable backend", func(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/judge"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/proposal"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/proposalfiles"
@@ -68,6 +69,10 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 		return DistillResult{}, refusal.New("no snapshot to distill: init a project, or connect an organisation, so rein snapshots the harness first")
 	}
 	_, orgClonePath, err := services.Organizations.Lookup(organization.Slug)
+	if err != nil {
+		return DistillResult{}, err
+	}
+	distiller, err := distillerOf(services, orgClonePath, request)
 	if err != nil {
 		return DistillResult{}, err
 	}
@@ -157,7 +162,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 		},
 	}
 	if judging && !request.DryRun {
-		judgeStep := "asking the distiller, " + services.Judge.Describe(request.Model)
+		judgeStep := "asking the distiller, " + distiller.Describe(request.Model)
 		report := func(kind ProgressKind, note string) {
 			if services.Progress != nil {
 				services.Progress(ProgressEvent{Kind: kind, Step: judgeStep, Note: note})
@@ -170,9 +175,9 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 					return nil
 				}
 				// a distiller that is not there is said, never skipped in silence (Q42)
-				reason, available := services.Judge.Available()
+				reason, available := distiller.Available()
 				if !available {
-					return refusal.New(fmt.Sprintf("the distiller %s is not available: %s; install or log in to it, or take rein's own cut alone with --distiller none", services.Judge.Name(), reason))
+					return refusal.New(fmt.Sprintf("the distiller %s is not available: %s; mend that, or take rein's own cut alone with --distiller none", distiller.Name(), reason))
 				}
 				// what the distiller does, said once, then how far it has come (P2.54)
 				judged := "candidates"
@@ -180,7 +185,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 					judged = "candidate"
 				}
 				report(ProgressDetail, fmt.Sprintf("the distiller judges %d %s against %d of the organisation's declarations, cuts the mixed ones into units of one concern and reviews the labels; usually 5 to 10 minutes", len(candidates), judged, len(corpus.Passages)))
-				document.Judge, candidates = services.Judge.JudgeCandidates(level, candidates, corpus, request.Model, func(note string) { report(ProgressNote, note) })
+				document.Judge, candidates = distiller.JudgeCandidates(level, candidates, corpus, request.Model, func(note string) { report(ProgressNote, note) })
 				// a failed distiller leaves nothing behind, so the next distill starts fresh
 				if document.Judge.Status == distill.JudgeFailed {
 					return refusal.New(fmt.Sprintf("the distiller %s failed, so nothing was written: %s; distill again, name a faster model with --model, or take rein's own cut alone with --distiller none", document.Judge.Backend, strings.Join(document.Judge.Problems, "; ")))
@@ -196,7 +201,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 			Name: "writing the proposal",
 			Do: func() error {
 				if document.Judge.Backend == "" {
-					document.Judge = distill.JudgeRun{Backend: services.Judge.Name(), Status: distill.JudgeSkipped, Problems: []string{"not asked"}}
+					document.Judge = distill.JudgeRun{Backend: distiller.Name(), Status: distill.JudgeSkipped, Problems: []string{"not asked"}}
 				}
 				document.Judge.Problems = orEmptyList(document.Judge.Problems)
 				document.Judge.Dropped = orEmptyList(document.Judge.Dropped)
@@ -216,7 +221,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 					return refusal.New(err.Error())
 				}
 				result.Proposal = document
-				result.Conversation = services.Judge.ResumeCommand(document.Judge.Session)
+				result.Conversation = distiller.ResumeCommand(document.Judge.Session)
 				tree, err := services.Records.Tree(orgClonePath)
 				if err == nil {
 					result.Reaches = reachesOf(tree, document)
@@ -321,6 +326,25 @@ func projectLabelsOf(services Services, orgClonePath string, level string) []str
 		return nil
 	}
 	return append([]string{}, project.Labels...)
+}
+
+// distillerOf is the judge a distillation asks: the organisation's provider
+// when it declares one, which wins over the developer's agent CLI so that
+// verdicts compare and the brief goes where the organisation decided (D23,
+// D42); else the agent CLI.
+func distillerOf(services Services, orgClonePath string, request DistillRequest) (judge.Service, error) {
+	if request.Judge == "none" || services.Judge.Provider == nil {
+		return services.Judge, nil
+	}
+	tree, err := services.Records.Tree(orgClonePath)
+	if err != nil || tree.Providers.Distiller == nil {
+		return services.Judge, nil
+	}
+	provider := *tree.Providers.Distiller
+	if request.Judge == "agent-cli" {
+		return judge.Service{}, refusal.New(fmt.Sprintf("the organisation declares its distiller, %s at %s, in %s, so distill asks it and not your agent's CLI; leave out --distiller, or skip the model with --distiller none", provider.Model, provider.URL, declaration.ProvidersFile))
+	}
+	return services.Judge.WithProvider(provider), nil
 }
 
 // projectsOf lists the organisation's projects with their teams and

@@ -141,10 +141,14 @@ func TestProposalCheckAndFiles(t *testing.T) {
 	broken.Candidates = append(broken.Candidates, broken.Candidates[0])
 	broken.MarkProposed("rein/x", "https://github.com/acme/pr/1", time.Date(2026, 10, 23, 0, 0, 0, 0, time.UTC))
 	joined := strings.Join(broken.Check(registry), "\n")
-	for _, expected := range []string{"proposed on 2026-10-23 as https://github.com/acme/pr/1", `level "organizations.acme.rules.x" is not one`, "appears twice", `label "nope" is not category:value`, `label "stack:aws" names no category`, `label "language:rust" is not in the registry; language has go`, "applyIf data takes one value; given public, internal", `enforcement "maybe"`, "skills/go-style: no files"} {
+	for _, expected := range []string{"proposed on 2026-10-23 as https://github.com/acme/pr/1", `level "organizations.acme.rules.x" is not one`, "appears twice", `label "nope" is not category:value`, `label "stack:aws" names no category`, `label "language:rust" is not in the registry; language has go`, `enforcement "maybe"`, "skills/go-style: no files"} {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("missing %q in %s", expected, joined)
 		}
+	}
+	// applyIf means any of its labels, so two values of a category of one value are either (P2.4, Q52)
+	if strings.Contains(joined, "takes one value") {
+		t.Fatalf("an applyIf of either value refused: %s", joined)
 	}
 }
 
