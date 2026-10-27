@@ -356,6 +356,17 @@ committed instead of gitignored (D4).
   JetBrains' 2026 survey ([findings](../harness-management.md#which-agents-developers-use)).
   Google's agents and OpenCode follow them. Each is designed on its item and approved before
   it is built.
+- ✅ **D45 — `rein ui`: a third gateway in the binary, served to the browser.** Decided
+  2026-10-27 by the user (Q6, Q8, Q9 B1). Members with rein see one organisation at a time,
+  switch between the connected ones, and run commands from the page, resolving a
+  distillation's conflicts among them; reviewers stay on GitHub (D3). The page calls the one
+  `Orchestrator` as `cli` and `mcp` do. It is not a daemon (D2), and it does not run the CLI
+  in the background, which would mean parsing text written for a person, with no way to
+  answer a command's questions. It opens in the browser rather than a native window, which
+  would need a C toolchain and a frontend build on every operating system. Standard library
+  only. A Mermaid diagram of a change's reach in each pull request was offered and declined;
+  the bulk sync asked for in the same conversation is `rein sync --all`, which exists. The
+  [ADR](../decisions/2026-10-27_rein-ui-a-gateway-served-to-the-browser.md). P4.
 - ✅ **D44 — A provider's key lives in the developer's keychain.** Decided 2026-10-26 by the
   user (Q59 KS1). `providers.yaml` names the variable, never the key (D22, D42); the key itself
   goes into the operating system's keychain with `rein key set`, through standard input, beside
@@ -965,6 +976,7 @@ flowchart TD
   D4[D4 decided, generated output gitignored] --> P1[P1 design]
   P1 --> P2[P2 build the CLI]
   P2 --> P3[P3 pilot]
+  P2 --> P4[P4 rein ui in the browser]
 ```
 
 ## How the tool works
@@ -1932,6 +1944,42 @@ from that project's snapshot.
   migration, `sync --report` shows no drift, and the rollback leaves no trace. Blocked by P2.2
   to P2.5, P2.7 and P2.9.
 
+## P4 — `rein ui`
+
+D45 and its [ADR](../decisions/2026-10-27_rein-ui-a-gateway-served-to-the-browser.md). Gate per
+item: `task rein:check` green, and the item's pages checked by you in the browser before its
+commit.
+
+- 🟢 **P4.1 — `rein ui` serves the machine's page in the browser, guarded.** [PENDING] A new
+  gateway `internal/app/0_gateway/web`, started by the CLI's `ui` command; the gateway table
+  of [architecture.md](../architecture.md) and the architecture test's `allowed` map gain its
+  row. It listens on 127.0.0.1 on a free port, prints the URL and opens it with the operating
+  system's command through `adapters/execute`. The token exchanged for a cookie, and the
+  `Host` and `Origin` checks, follow the ADR; Ctrl+C stops it. One page: the machine, from
+  `Status`. Templates, script and stylesheet are embedded; no module is added. Tests with
+  `httptest` over the fakes, the guards among them.
+- 🟢 **P4.2 — The organisation in the page.** [PENDING] Reads only, without the lock and
+  behind the login gate where the command has one:
+  - the connected organisations, one shown at a time and chosen by its slug in the URL, the
+    active one first, the machine's active organisation unchanged;
+  - its teams and projects (`DescribeOrganization`);
+  - its declarations by level (`ListDeclarations`, `DescribeDeclaration`);
+  - what one project resolves and from which level (`ResolveProject`);
+  - the reach of one declaration: the organisation's tree drawn as SVG by the gateway, with
+    the projects it reaches lit (`resolve.Reaches`);
+  - the pending proposals (`PendingProposals`).
+- 🟢 **P4.3 — Sync, resolve and propose from the page.** [PENDING]
+  - Sync of one project clone or of all, as `sync --all` does (`SyncClone`).
+  - A distillation's candidates, with their include, level and conflict. A new operation
+    writes them into the candidate files, then `ProposeDeclarations` runs as today and
+    refuses an unresolved conflict as today.
+  - Each action passes the login gate and takes the machine lock for itself alone, with the
+    CLI's wait.
+  - Progress reaches the page as server-sent events built from `ProgressEvent`.
+- 🟢 **P4.4 — Distill from the page.** [PENDING] `DistillHarness`, with the distiller's
+  progress shown on the page over its 5 to 10 minutes. The lock is held for the run, as the
+  CLI holds it.
+
 ## Open points
 
 - O1 — Answered 2026-10-12 for `-p` runs: a file written by the startup hook is read only from
@@ -2498,3 +2546,6 @@ writes is read from the next session on, not in the same one.
   words, the conflict note without the resolution. The adapter's arguments ran once by hand
   with Haiku: no tool server, no tool, about 6,900 input tokens. Gate: `task rein:check`
   green. Left for you: the commits.
+- (2026-10-27) `rein ui` planned with the user (Q6 to Q10): D45, its
+  [ADR](../decisions/2026-10-27_rein-ui-a-gateway-served-to-the-browser.md), and P4.1 to P4.4
+  approved. Nothing built yet. Left for you: the commit.
