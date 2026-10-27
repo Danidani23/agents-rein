@@ -1389,6 +1389,19 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- ✅ **P2.60 — A candidate's file says what the distiller's suggestion is.** [EXECUTED]
+  Approved 2026-10-27 (Q3), after `suggestion: keep` beside a conflict read as a resolution
+  that does not exist. The header of every candidate file says that `distiller:` is advice
+  already applied to `include` and `level`, and what `keep`, `drop` and `lift` do; the note
+  of a candidate in conflict names the resolution its suggestion amounts to, `keep` being
+  `override` and `drop` being `drop`, a lift none. Gate: `task rein:check` green.
+- ✅ **P2.59 — The distiller runs without the developer's tool servers.** [EXECUTED]
+  Approved 2026-10-27 (Q2). `--tools ""` turns the tools off but leaves the tool servers'
+  definitions in the prompt: each distiller call of `housing-app-website` carried about
+  323,000 input tokens for a brief of about 95,000 characters, and a model with a context of
+  200,000 tokens refused even a tiny prompt. `claude -p` now runs with `--strict-mcp-config`,
+  so no tool server starts for it; the developer's own sessions keep theirs. Gate: `task
+  rein:check` green.
 - ✅ **P2.58 — `distill` sends a rejected answer back into its conversation, and says it
   did.** [EXECUTED] Approved 2026-10-27, after a distillation of `housing-app-website` lost
   three minutes to one field: the distiller gave a document unit the shape `always`, which
@@ -2480,3 +2493,8 @@ writes is read from the next session on, not in the same one.
   Haiku's context; each distiller call of that distillation carried about 323,000 input
   tokens for a brief of about 95,000 characters. Gate: `task rein:check` green. Left for
   you: the commit, and a real `rein distill` whose first answer is sent back.
+- (2026-10-27) P2.59 and P2.60 built, tests first, each failing on the old code for its
+  reason: the arguments without `--strict-mcp-config`, the header without the distiller's
+  words, the conflict note without the resolution. The adapter's arguments ran once by hand
+  with Haiku: no tool server, no tool, about 6,900 input tokens. Gate: `task rein:check`
+  green. Left for you: the commits.
