@@ -46,6 +46,13 @@ func TestProposalRoundTrip(t *testing.T) {
 	if strings.Contains(text, "candidates:") || strings.Contains(text, "proposed_at") {
 		t.Fatalf("the index holds candidates or a time that has not happened: %s", text)
 	}
+	// the header says what the distiller's advice is, beside what is the developer's to change (P2.60)
+	header := strings.ReplaceAll(CandidateHeader, "\n# ", " ")
+	for _, expected := range []string{"distiller: is the distiller's advice, already applied to include and level", "keep leaves it at the level it was distilled from", "drop leaves it out, as an existing declaration covers it", "lift moves it to the higher level it names"} {
+		if !strings.Contains(header, expected) {
+			t.Fatalf("the header lacks %q: %s", expected, CandidateHeader)
+		}
+	}
 	skill, _ := os.ReadFile(filepath.Join(folder, "skill_go-style.yaml"))
 	rule, _ := os.ReadFile(filepath.Join(folder, "rule_docs.yaml"))
 	for _, expected := range []string{CandidateHeader, "kind: skills\n", "id: go-style\n", "include: true\n", "level: organizations.acme\n", "applyIf:\n    - language:go\n", "files:\n", "SKILL.md: |", "references/errors.md: |"} {

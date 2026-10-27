@@ -10,6 +10,7 @@ import (
 
 	"github.com/Danidani23/agents-rein/internal/adapters/fake"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/proposal"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
@@ -1177,6 +1178,16 @@ func TestDistillWithTheJudge(t *testing.T) {
 			t.Fatalf("a failed distillation left %d proposals", len(pending))
 		}
 	})
+	t.Run("a conflict's note names the resolution a drop amounts to, and none for a lift (P2.60)", func(t *testing.T) {
+		organization := machine.OrganizationRef{Slug: "acme"}
+		for suggestion, ending := range map[string]string{"drop": "drop, override or amend; the distiller's drop amounts to drop", "lift": "drop, override or amend"} {
+			candidate := distill.Candidate{Kind: "rules", ID: "loose", Files: map[string]string{"loose.md": "Errors inline."}, Judgement: &distill.Judgement{Verdict: "contradicts", Related: []string{"organizations.acme.rules.go"}, Suggestion: suggestion, Level: "organization", Reason: "the project wants it otherwise"}}
+			placed := placeJudged(Services{}, "", organization, "organizations.acme.projects.shop", candidate)
+			if !strings.HasSuffix(strings.Join(placed.Notes, "\n"), ending) {
+				t.Fatalf("%s: notes %q", suggestion, placed.Notes)
+			}
+		}
+	})
 	t.Run("an answer sent back once leaves its problems in the proposal (P2.58)", func(t *testing.T) {
 		fixture, _ := prepare(t)
 		fixture.judge = &fake.Judge{Answers: []string{"nonsense", answer}}
@@ -1205,7 +1216,8 @@ func TestDistillWithTheJudge(t *testing.T) {
 		if unit.Include || unit.Conflict == nil || strings.Join(unit.Conflict.With, ",") != "organizations.acme.rules.go" || unit.Conflict.Resolution != "" {
 			t.Fatalf("unit %+v conflict %+v", unit, unit.Conflict)
 		}
-		if !strings.Contains(strings.Join(unit.Notes, "\n"), "in conflict with organizations.acme.rules.go; set conflict.resolution in rule_loose-errors.yaml: drop, override or amend") {
+		// the note names the resolution the distiller's suggestion amounts to (P2.60)
+		if !strings.Contains(strings.Join(unit.Notes, "\n"), "in conflict with organizations.acme.rules.go; set conflict.resolution in rule_loose-errors.yaml: drop, override or amend; the distiller's keep amounts to override") {
 			t.Fatalf("notes %q", unit.Notes)
 		}
 		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: distilled.File})

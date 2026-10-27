@@ -356,7 +356,15 @@ func placeJudged(services Services, orgClonePath string, organization machine.Or
 	if judgement.Verdict == "contradicts" {
 		placed.Include = false
 		placed.Conflict = &proposal.Conflict{With: orEmptyList(judgement.Related), Resolution: ""}
-		placed.Notes = append(placed.Notes, "in conflict with "+strings.Join(judgement.Related, ", ")+"; set conflict.resolution in "+proposal.CandidateFileName(placed)+": drop, override or amend")
+		conflictNote := "in conflict with " + strings.Join(judgement.Related, ", ") + "; set conflict.resolution in " + proposal.CandidateFileName(placed) + ": drop, override or amend"
+		// the distiller's suggestion is not a resolution; the note says which one it amounts to (P2.60)
+		switch judgement.Suggestion {
+		case "keep":
+			conflictNote += "; the distiller's keep amounts to " + proposal.ResolutionOverride
+		case "drop":
+			conflictNote += "; the distiller's drop amounts to " + proposal.ResolutionDrop
+		}
+		placed.Notes = append(placed.Notes, conflictNote)
 	}
 	return placed
 }

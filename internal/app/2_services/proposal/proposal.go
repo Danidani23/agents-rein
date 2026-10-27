@@ -58,10 +58,13 @@ const Header = `# Written by rein distill. Each candidate is a file beside this 
 
 // CandidateHeader is the comment at the top of every candidate's file.
 const CandidateHeader = `# A candidate of rein distill. include: false keeps it out; level, applyIf,
-# doNotApplyIf, enforcement and the text under files are yours to change. A candidate
-# in conflict waits for its resolution: drop, the existing declaration holds; override,
-# this one replaces it where the two disagree, refused against a required one; amend,
-# the existing one is wrong and changes in a proposal of its own.
+# doNotApplyIf, enforcement and the text under files are yours to change.
+# distiller: is the distiller's advice, already applied to include and level: its
+# suggestion keep leaves it at the level it was distilled from; drop leaves it out, as
+# an existing declaration covers it; lift moves it to the higher level it names.
+# A candidate in conflict waits for its resolution: drop, the existing declaration
+# holds; override, this one replaces it where the two disagree, refused against a
+# required one; amend, the existing one is wrong and changes in a proposal of its own.
 `
 
 // The resolutions of a conflict.
