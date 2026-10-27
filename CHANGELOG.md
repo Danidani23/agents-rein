@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0] - 2026-10-27
+
+### Features
+
+- **rein:** distill hands over candidates that pass the lint (492b880)
+
 ## [1.1.0] - 2026-10-26
 
 ### Features
