@@ -104,32 +104,50 @@ const judgeTimeout = 15 * time.Minute
 // colour the verdict; model names the model, "" for the developer's
 // default. Never --bare: it skips the login with the hooks.
 func (Judge) Ask(brief string, model string, progress func(ports.JudgeProgress)) (string, string, error) {
+	session := newSessionID()
+	answer, err := converse(brief, judgeArguments(model, session, false), progress)
+	return answer, session, err
+}
+
+// Reply goes on in the conversation the brief started, from another empty
+// folder, which claude finds by its id; the conversation keeps its id, so
+// one conversation holds the brief, the answers and the message (P2.58).
+func (Judge) Reply(conversation ports.JudgeConversation, message string, model string, progress func(ports.JudgeProgress)) (string, string, error) {
+	if conversation.Session == "" {
+		return "", "", errors.New("claude has no conversation to reply in")
+	}
+	answer, err := converse(message, judgeArguments(model, conversation.Session, true), progress)
+	return answer, conversation.Session, err
+}
+
+// converse runs claude -p once with input on its standard input, in an
+// empty folder, and returns the result text.
+func converse(input string, arguments []string, progress func(ports.JudgeProgress)) (string, error) {
 	scratch, err := os.MkdirTemp("", "rein-judge-*")
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	defer os.RemoveAll(scratch)
-	session := newSessionID()
 	stream := &judgeStream{progress: progress}
-	result, err := execute.RunWith(execute.Options{Directory: scratch, Input: brief, Timeout: judgeTimeout, Lines: stream.line}, "claude", judgeArguments(model, session)...)
+	result, err := execute.RunWith(execute.Options{Directory: scratch, Input: input, Timeout: judgeTimeout, Lines: stream.line}, "claude", arguments...)
 	err = explainFailure(err)
 	output, parsed := resultOf(result.Stdout)
 	if err != nil {
 		if parsed && strings.TrimSpace(output.Result) != "" {
-			return "", session, fmt.Errorf("claude reported: %s (%s)", strings.TrimSpace(output.Result), output.Subtype)
+			return "", fmt.Errorf("claude reported: %s (%s)", strings.TrimSpace(output.Result), output.Subtype)
 		}
 		if tail := lastLines(result.Stdout, 3); tail != "" {
-			return "", session, fmt.Errorf("%w; it printed: %s", err, tail)
+			return "", fmt.Errorf("%w; it printed: %s", err, tail)
 		}
-		return "", session, err
+		return "", err
 	}
 	if !parsed {
-		return "", session, fmt.Errorf("claude's stream ended without its result: %s", lastLines(result.Stdout, 3))
+		return "", fmt.Errorf("claude's stream ended without its result: %s", lastLines(result.Stdout, 3))
 	}
 	if output.IsError {
-		return "", session, fmt.Errorf("claude reported an error: %s", strings.TrimSpace(output.Result))
+		return "", fmt.Errorf("claude reported an error: %s", strings.TrimSpace(output.Result))
 	}
-	return output.Result, session, nil
+	return output.Result, nil
 }
 
 // ResumeCommand opens the conversation from any folder: claude keeps a
@@ -138,11 +156,16 @@ func (Judge) ResumeCommand(session string) string {
 	return "claude --resume " + session
 }
 
-// judgeArguments are claude's arguments for one brief: one turn, no tools,
-// the answer streamed as it is written (P2.54), the session's id, and the
-// model when one is named.
-func judgeArguments(model string, session string) []string {
-	arguments := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--max-turns", "1", "--tools", "", "--session-id", session}
+// judgeArguments are claude's arguments for one message: one turn, no
+// tools, the answer streamed as it is written (P2.54), the session started
+// under its id, or resumed for a reply (P2.58), and the model when one is
+// named.
+func judgeArguments(model string, session string, resume bool) []string {
+	sessionFlag := "--session-id"
+	if resume {
+		sessionFlag = "--resume"
+	}
+	arguments := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--max-turns", "1", "--tools", "", sessionFlag, session}
 	if model != "" {
 		arguments = append(arguments, "--model", model)
 	}

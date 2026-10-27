@@ -1177,6 +1177,18 @@ func TestDistillWithTheJudge(t *testing.T) {
 			t.Fatalf("a failed distillation left %d proposals", len(pending))
 		}
 	})
+	t.Run("an answer sent back once leaves its problems in the proposal (P2.58)", func(t *testing.T) {
+		fixture, _ := prepare(t)
+		fixture.judge = &fake.Judge{Answers: []string{"nonsense", answer}}
+		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Project: "shop"})
+		if err != nil || result.Proposal.Judge.Status != "answered" || strings.Join(result.Proposal.Judge.Rejected, ";") != "the answer holds no JSON object" {
+			t.Fatalf("judge %+v err %v", result.Proposal.Judge, err)
+		}
+		content, _ := os.ReadFile(filepath.Join(result.File, "proposal.yaml"))
+		if !strings.Contains(string(content), "    problems: []\n    rejected:\n        - the answer holds no JSON object\n") {
+			t.Fatalf("proposal %q", content)
+		}
+	})
 	t.Run("a conflict blocks propose until it is resolved, and an override names what it replaces", func(t *testing.T) {
 		fixture, created := prepare(t)
 		fixture.judge = &fake.Judge{Answers: []string{conflicting}}
@@ -1269,7 +1281,7 @@ func TestDistillWithTheJudge(t *testing.T) {
 			t.Fatalf("judged %+v", judged)
 		}
 		content, _ := os.ReadFile(filepath.Join(result.File, "proposal.yaml"))
-		if !strings.Contains(string(content), "status: answered") || !strings.Contains(string(content), "session: fake-session") {
+		if !strings.Contains(string(content), "status: answered") || !strings.Contains(string(content), "session: fake-session") || !strings.Contains(string(content), "rejected: []") {
 			t.Fatalf("proposal %q", content)
 		}
 		proposed, err := fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: result.File})

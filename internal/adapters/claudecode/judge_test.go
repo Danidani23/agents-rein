@@ -36,14 +36,23 @@ func TestJudgeStream(t *testing.T) {
 
 func TestJudgeArgumentsAndTimeout(t *testing.T) {
 	// the answer streams, so the distiller's progress can be shown (P2.54)
-	if !strings.Contains(strings.Join(judgeArguments("", "session"), " "), "--output-format stream-json --verbose --include-partial-messages") {
-		t.Fatalf("arguments %v", judgeArguments("", "session"))
+	if !strings.Contains(strings.Join(judgeArguments("", "session", false), " "), "--output-format stream-json --verbose --include-partial-messages") {
+		t.Fatalf("arguments %v", judgeArguments("", "session", false))
 	}
-	if strings.Contains(strings.Join(judgeArguments("", "session"), " "), "--model") {
-		t.Fatalf("a model with none asked for: %v", judgeArguments("", "session"))
+	if strings.Contains(strings.Join(judgeArguments("", "session", false), " "), "--model") {
+		t.Fatalf("a model with none asked for: %v", judgeArguments("", "session", false))
 	}
-	if !strings.HasSuffix(strings.Join(judgeArguments("sonnet", "session"), " "), "--session-id session --model sonnet") {
-		t.Fatalf("arguments %v", judgeArguments("sonnet", "session"))
+	if !strings.HasSuffix(strings.Join(judgeArguments("sonnet", "session", false), " "), "--session-id session --model sonnet") {
+		t.Fatalf("arguments %v", judgeArguments("sonnet", "session", false))
+	}
+	// a reply goes on in the conversation the brief started, one turn, no tools (P2.58)
+	replying := strings.Join(judgeArguments("sonnet", "session", true), " ")
+	if !strings.HasSuffix(replying, "--resume session --model sonnet") || strings.Contains(replying, "--session-id") || !strings.Contains(replying, "--max-turns 1 --tools ") {
+		t.Fatalf("reply arguments %v", replying)
+	}
+	_, _, err := Judge{}.Reply(ports.JudgeConversation{Brief: "brief", Answer: "answer"}, "mend it", "", nil)
+	if err == nil || !strings.Contains(err.Error(), "no conversation to reply in") {
+		t.Fatalf("a reply without a session: %v", err)
 	}
 	// running out of time is said as it is, with what to do about it
 	timedOut := explainFailure(&execute.Failure{Command: "claude -p", Cause: execute.ErrTimedOut})

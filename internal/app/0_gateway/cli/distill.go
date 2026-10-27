@@ -107,6 +107,10 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 		}
 	}
 	line := fmt.Sprintf("distiller: %s %s", document.Judge.Backend, document.Judge.Status)
+	// an answer sent back is said after the fact, not only by the spinner (P2.58)
+	if len(document.Judge.Rejected) > 0 {
+		line += ", after its first answer was sent back for: " + strings.Join(document.Judge.Rejected, "; ")
+	}
 	if len(document.Judge.Problems) > 0 {
 		line += ": " + strings.Join(document.Judge.Problems, "; ")
 	}

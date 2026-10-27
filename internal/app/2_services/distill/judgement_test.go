@@ -185,7 +185,8 @@ func TestDocuments(t *testing.T) {
 	corpus := exampleCorpus()
 	corpus.Documents = []string{"README.md", "docs/decisions/2026-09-01_progress.md"}
 	brief := Brief("organizations.acme.projects.shop", architecture, corpus)
-	for _, expected := range []string{"`document`", "- docs/decisions/2026-09-01_progress.md"} {
+	// the brief names the shape a document takes, which the answer is validated against (P2.58)
+	for _, expected := range []string{"of kind `documents` and shape `document`", "- docs/decisions/2026-09-01_progress.md"} {
 		if !strings.Contains(brief, expected) {
 			t.Fatalf("brief lacks %q:\n%s", expected, brief)
 		}

@@ -82,6 +82,21 @@ func TestJudge(t *testing.T) {
 			t.Fatalf("name %q", judge.Name())
 		}
 	})
+	t.Run("a reply sends the brief, the answer and the message as one conversation (P2.58)", func(t *testing.T) {
+		server, seen := serve(t, http.StatusOK, event("content_block_delta", `{"type":"content_block_delta","delta":{"type":"text_delta","text":"mended"}}`), event("message_stop", `{"type":"message_stop"}`))
+		judge := Judge{Provider: declaration.Provider{Protocol: "anthropic", URL: server.URL, Model: "deepseek-v4-pro", KeyVariable: "TEST_KEY"}, Lookup: lookup}
+		answer, session, err := judge.Reply(ports.JudgeConversation{Brief: "the brief", Answer: "the first answer"}, "mend it", "", nil)
+		if err != nil || answer != "mended" || session != "" {
+			t.Fatalf("answer %q session %q err %v", answer, session, err)
+		}
+		var turns []string
+		for _, sent := range seen.Request.Messages {
+			turns = append(turns, sent.Role+": "+sent.Content)
+		}
+		if strings.Join(turns, " | ") != "user: the brief | assistant: the first answer | user: mend it" || seen.Request.Model != "deepseek-v4-pro" {
+			t.Fatalf("turns %q request %+v", turns, seen.Request)
+		}
+	})
 	t.Run("a bearer token, a named model and max_tokens", func(t *testing.T) {
 		server, seen := serve(t, http.StatusOK, event("content_block_delta", `{"type":"content_block_delta","delta":{"type":"text_delta","text":"ok"}}`), event("message_stop", `{"type":"message_stop"}`))
 		judge := Judge{Provider: declaration.Provider{Protocol: "anthropic", URL: server.URL, Model: "kimi-k2", Auth: declaration.AuthBearer, KeyVariable: "TEST_KEY", MaxTokens: 64000}, Lookup: lookup}

@@ -810,6 +810,12 @@ func TestDistillJudgeFlags(t *testing.T) {
 	if !strings.HasSuffix(out, "\nthe distiller's conversation, to read or go on with it: fake-judge --resume fake-session\n") {
 		t.Fatalf("no command for the conversation: out %q", out)
 	}
+	// an answer sent back once is said with its problems, after the distiller mended it (P2.58)
+	fixture.judge = &fake.Judge{Answers: []string{"nonsense", `{"version":2,"candidates":[{"candidate":"rules/instructions","verdict":"new","suggestion":"keep","reason":"the project's own"}]}`}}
+	code, out, _ = fixture.run("distill", "--project", "shop", "--force")
+	if code != ExitWorked || !strings.Contains(out, "distiller: fake-judge answered, after its first answer was sent back for: the answer holds no JSON object\n") {
+		t.Fatalf("code %d out %q", code, out)
+	}
 	code, out, _ = fixture.run("distill", "--project", "shop", "--distiller", "none", "--force")
 	if code != ExitWorked || !strings.Contains(out, "distiller: fake-judge skipped: not asked") || strings.Contains(out, "asking the distiller") {
 		t.Fatalf("code %d out %q", code, out)

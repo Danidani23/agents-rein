@@ -217,8 +217,10 @@ type Agent interface {
 }
 
 // Judge is the model that reads prose for rein: one brief in, one answer
-// out, no memory between calls (D23). The organisation's provider decides
-// which backend stands here; the agent's own CLI is the local fallback.
+// out, and a reply into that conversation when the answer needs mending;
+// rein keeps nothing between calls, a reply is handed the conversation it
+// goes into (D23, P2.58). The organisation's provider decides which backend
+// stands here; the agent's own CLI is the local fallback.
 type Judge interface {
 	// Name says which backend answers, for the report.
 	Name() string
@@ -229,9 +231,22 @@ type Judge interface {
 	// person can open it again. progress, which may be nil, hears how far
 	// the answer has come while it is written.
 	Ask(brief string, model string, progress func(JudgeProgress)) (answer string, session string, err error)
+	// Reply sends a message into a conversation, after its answer, and
+	// returns the answer to it with the conversation's id: a backend that
+	// keeps conversations goes on in the one it kept, one that keeps none
+	// sends the brief and the answer again before the message.
+	Reply(conversation JudgeConversation, message string, model string, progress func(JudgeProgress)) (answer string, session string, err error)
 	// ResumeCommand is the command a person runs to open a conversation
 	// again, "" when the backend keeps none.
 	ResumeCommand(session string) string
+}
+
+// JudgeConversation is a brief, the answer it got, and the id of the
+// conversation the backend kept, "" when it keeps none.
+type JudgeConversation struct {
+	Brief   string
+	Answer  string
+	Session string
 }
 
 // JudgeProgress is how far an answer has come: the model still thinking,

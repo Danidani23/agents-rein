@@ -1,7 +1,8 @@
 // Package messagesapi is the api backend of the judge port (D23): an
 // endpoint speaking Anthropic's Messages API, Anthropic's own or one that
 // serves the same API, such as DeepSeek's or Moonshot's for Kimi (D42). The
-// brief goes as one message, no tools, and the answer streams back
+// brief goes as one message, a reply after the conversation so far, no
+// tools, and the answer streams back
 // ([docs](https://platform.claude.com/docs/en/build-with-claude/streaming)).
 package messagesapi
 
@@ -107,6 +108,17 @@ type streamed struct {
 // has come. A refusal, an error in the stream, an answer cut at its cap and
 // a stream that ends early are each an error that says so.
 func (judge Judge) Ask(brief string, model string, progress func(ports.JudgeProgress)) (string, string, error) {
+	return judge.send([]message{{Role: "user", Content: brief}}, model, progress)
+}
+
+// Reply sends the brief, the answer it got and the message as one
+// conversation, since the API keeps none (P2.58).
+func (judge Judge) Reply(conversation ports.JudgeConversation, reply string, model string, progress func(ports.JudgeProgress)) (string, string, error) {
+	return judge.send([]message{{Role: "user", Content: conversation.Brief}, {Role: "assistant", Content: conversation.Answer}, {Role: "user", Content: reply}}, model, progress)
+}
+
+// send sends the messages and reads the answer as Ask says.
+func (judge Judge) send(messages []message, model string, progress func(ports.JudgeProgress)) (string, string, error) {
 	key, found := judge.key()
 	if !found {
 		reason, _ := judge.Available()
@@ -119,7 +131,7 @@ func (judge Judge) Ask(brief string, model string, progress func(ports.JudgeProg
 	if maxTokens == 0 {
 		maxTokens = defaultMaxTokens
 	}
-	body, err := json.Marshal(request{Model: model, MaxTokens: maxTokens, Stream: true, Messages: []message{{Role: "user", Content: brief}}})
+	body, err := json.Marshal(request{Model: model, MaxTokens: maxTokens, Stream: true, Messages: messages})
 	if err != nil {
 		return "", "", err
 	}

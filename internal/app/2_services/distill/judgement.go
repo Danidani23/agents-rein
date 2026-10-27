@@ -107,6 +107,9 @@ type JudgeRun struct {
 	// Session is the conversation the backend kept, for a person to open.
 	Session  string   `yaml:"session"`
 	Problems []string `yaml:"problems"`
+	// Rejected are the problems the first answer was sent back for, none
+	// when it was believed (P2.58).
+	Rejected []string `yaml:"rejected"`
 	Dropped  []string `yaml:"dropped"`
 }
 
@@ -140,7 +143,7 @@ func Brief(level string, candidates []Candidate, corpus Corpus) string {
 	fmt.Fprintf(&brief, "A candidate that holds one concern is judged whole, as an entry of `candidates`. A rule or a skill that mixes concerns, such as a repeat of an existing declaration beside something new, a project fact inside general advice, or two procedures in one skill, is cut into `units` instead. A unit takes lines of one or more candidates by their numbers, `\"lines\": \"3-7, 9\"`, and a skill's other file whole by naming it in `file`. Lines are taken whole and verbatim, never written or reworded: the only text you add is a unit's `id`, a skill's `description`, an optional `heading` line, and `paths`. Every numbered line of a cut candidate that is not blank goes into exactly one unit, a repeat into a unit judged `duplicate` and `drop`. A candidate is judged whole or cut, never both; permission sets, hooks and tool servers are always judged whole.\n\n")
 	fmt.Fprintf(&brief, "A unit's `shape`: `always` for a rule the agent reads in every session; `paths` for a rule it reads when working on files matching the `paths` globs; `skill` for a procedure it loads when a task needs it, the `description` saying when. A rule's `kind` is `rules`, a skill's `skills`.\n\n")
 	if corpus.Documents != nil {
-		fmt.Fprintf(&brief, "A unit may be a `document` instead, of kind `documents`: knowledge a human contributor needs too, such as the architecture, an invariant of the code, a style guide or a deploy flow, which belongs in the project's repository, versioned with the code, and not in the agent's settings. Give its `path`, a new Markdown file that fits beside the repository's documents listed at the end, and a `pointer`: one line the agent reads, naming that path and saying when to read it; `paths` makes the pointer apply only to matching files. A short invariant the agent must never miss stays a rule, the reasoning behind it a document.\n\n")
+		fmt.Fprintf(&brief, "A unit may be a document instead, of kind `documents` and shape `document`: knowledge a human contributor needs too, such as the architecture, an invariant of the code, a style guide or a deploy flow, which belongs in the project's repository, versioned with the code, and not in the agent's settings. Give its `path`, a new Markdown file that fits beside the repository's documents listed at the end, and a `pointer`: one line the agent reads, naming that path and saying when to read it; `paths` makes the pointer apply only to matching files, and the shape stays `document`. A short invariant the agent must never miss stays a rule, the reasoning behind it a document.\n\n")
 	}
 	if corpus.ProjectLabels != nil {
 		carried := "no labels yet"

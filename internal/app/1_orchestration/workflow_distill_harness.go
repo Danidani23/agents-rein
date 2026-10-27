@@ -207,6 +207,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 					document.Judge = distill.JudgeRun{Backend: distiller.Name(), Status: distill.JudgeSkipped, Problems: []string{"not asked"}}
 				}
 				document.Judge.Problems = orEmptyList(document.Judge.Problems)
+				document.Judge.Rejected = orEmptyList(document.Judge.Rejected)
 				document.Judge.Dropped = orEmptyList(document.Judge.Dropped)
 				document.DistilledAt = services.Clock()
 				for _, candidate := range candidates {

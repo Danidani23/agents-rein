@@ -606,16 +606,24 @@ func (state *State) Save(updated machine.State) error {
 	return nil
 }
 
-// Judge answers from a script: each Ask takes the next answer; an empty
-// list means the backend is not available.
+// Judge answers from a script: each Ask and each Reply takes the next
+// answer; an empty list means the backend is not available.
 type Judge struct {
 	Answers     []string
 	Unavailable string
 	Briefs      []string
-	// Models are the models asked for, one per brief.
+	// Replies are the replies sent, each with the conversation it went into.
+	Replies []JudgeReply
+	// Models are the models asked for, one per brief and per reply.
 	Models []string
-	// Progress is what each Ask reports before it answers.
+	// Progress is what each Ask and each Reply reports before it answers.
 	Progress []ports.JudgeProgress
+}
+
+// JudgeReply is a message sent into a conversation.
+type JudgeReply struct {
+	Conversation ports.JudgeConversation
+	Message      string
 }
 
 // Name is the fake's name.
@@ -639,6 +647,18 @@ func (*Judge) ResumeCommand(session string) string {
 // Ask records the brief and returns the next scripted answer.
 func (judge *Judge) Ask(brief string, model string, progress func(ports.JudgeProgress)) (string, string, error) {
 	judge.Briefs = append(judge.Briefs, brief)
+	return judge.answer(model, progress)
+}
+
+// Reply records the message and its conversation and returns the next
+// scripted answer.
+func (judge *Judge) Reply(conversation ports.JudgeConversation, message string, model string, progress func(ports.JudgeProgress)) (string, string, error) {
+	judge.Replies = append(judge.Replies, JudgeReply{Conversation: conversation, Message: message})
+	return judge.answer(model, progress)
+}
+
+// answer reports the scripted progress and takes the next answer.
+func (judge *Judge) answer(model string, progress func(ports.JudgeProgress)) (string, string, error) {
 	judge.Models = append(judge.Models, model)
 	for _, update := range judge.Progress {
 		if progress != nil {
