@@ -1389,6 +1389,17 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- ✅ **P2.57 — `distill` hands over candidates that pass the lint, and `propose` names the
+  file to mend.** [EXECUTED] Approved 2026-10-27, after `rein propose` on
+  `housing-app-business` was refused for Claude Code's `argument-hint` in a distilled skill and
+  named a path only its scratch tree had. `distill` removes from a skill's `SKILL.md` every
+  frontmatter field the Agent Skills specification lacks, the rest as written, with a note
+  naming the field and its value (you chose this over a note alone); then it lints the
+  candidates at their levels as `propose` will, notes each error on its candidate and lists
+  them after the conflicts, each with the candidate file's full path. `propose` names the file
+  to mend by its full path, `…/skill_<id>.yaml  in SKILL.md`, or the file itself in a level
+  folder. The distiller line names a declaration it quotes twice once. Gate: `task rein:check`
+  green.
 - ✅ **P2.56 — The keychain on Linux and Windows (D25, D44).** [EXECUTED] Approved
   2026-10-26. Linux keeps a secret in the desktop's keyring through `secret-tool`, the secret
   on standard input; Windows in Credential Manager through `CredWriteW`, `CredReadW` and
@@ -2443,3 +2454,9 @@ writes is read from the next session on, not in the same one.
 - (2026-10-26) P2.56's gate passed: CI run 40367173967 on e90090b round-tripped a token and a
   key through GNOME Keyring on Ubuntu, Credential Manager on Windows and the login keychain on
   macOS, each step `ok` with the test run, not skipped (`REIN_KEYCHAIN_REQUIRED`).
+- (2026-10-27) P2.57 built, tests first, each failing on the old code for the reported reason:
+  `RemoveFieldsOutsideSpecification` in `declaration`, used by the Claude Code conversion;
+  `lintErrorsOf`, shared by `distill`'s `noteLintErrors` and `propose`'s refusal, which maps
+  each file back to the place it is mended; `DistillResult.LintErrors` for the summary. Left
+  for you: the commit, and deleting line 31 of `housing-app-business`'s
+  `skill_write-plan.yaml`, distilled before the fix, before its `rein propose`.
