@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.0] - 2026-10-27
+
+### Features
+
+- **rein:** a candidate's file says what the distiller's suggestion is (b4c7796)
+- **rein:** distill sends a rejected answer back into its conversation (cdac2a8)
+
+### Bug Fixes
+
+- **rein:** the distiller runs without the developer's tool servers (367cd00)
+
 ## [1.2.0] - 2026-10-27
 
 ### Features
