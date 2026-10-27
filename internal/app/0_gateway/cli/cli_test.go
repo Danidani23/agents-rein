@@ -12,7 +12,9 @@ import (
 
 	"github.com/Danidani23/agents-rein/internal/adapters/fake"
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/proposal"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
@@ -694,6 +696,27 @@ func TestDistill(t *testing.T) {
 	code, _, errOut = fixture.run("distill", "--path", t.TempDir())
 	if code != ExitRefused || !strings.Contains(errOut, "--project") {
 		t.Fatalf("code %d err %q", code, errOut)
+	}
+	// a candidate the lint refuses closes the output with its file's full path
+	_ = os.MkdirAll(filepath.Join(home, ".claude", "skills", "review"), 0o755)
+	_ = os.WriteFile(filepath.Join(home, ".claude", "skills", "review", "SKILL.md"), []byte("---\nname: review\n---\nbody\n"), 0o644)
+	_, _, err = orchestrator.Snapshots.Take("claude-code", "organizations.acme.projects.shop", home, []string{"CLAUDE.md", ".claude"})
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	code, out, errOut = fixture.run("distill", "--project", "shop", "--force", "--distiller", "none")
+	for _, expected := range []string{"note: fails the lint: description is required", "1 failing the lint, which rein propose refuses: mend the text under files in each", filepath.FromSlash("/skill_review.yaml") + "  description is required", "next: mend the files that fail the lint, review the rest, then rein propose"} {
+		if code != ExitWorked || !strings.Contains(out, expected) {
+			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
+		}
+	}
+}
+
+func TestDescribeJudgementLine(t *testing.T) {
+	candidate := proposal.Candidate{Level: "organizations.acme.projects.shop", Judge: &proposal.Judgement{Verdict: "contradicts", Suggestion: "keep", Reason: "the project's own", Quotes: []distill.Quote{{Address: "organizations.acme.skills.adr", Text: "one"}, {Address: "organizations.acme.skills.adr", Text: "two"}, {Address: "organizations.acme.rules.global", Text: "three"}}}}
+	line := describeJudgementLine(candidate)
+	if line != "contradicts with organizations.acme.skills.adr with organizations.acme.rules.global; keep at organizations.acme.projects.shop: the project's own" {
+		t.Fatalf("line %q", line)
 	}
 }
 

@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
 )
@@ -58,6 +61,56 @@ func ParseSkill(path string, directory string, content []byte) (skill Skill, pro
 	skill.AllowedTools, problems = stringField(mapping, "allowed-tools", problems)
 	skill.Metadata, problems = metadataField(mapping, problems)
 	return skill, problems, true
+}
+
+// RemoveFieldsOutsideSpecification removes from a SKILL.md's frontmatter
+// every field the Agent Skills specification does not have, with all the
+// lines its value spans; the rest stays as written. removed holds each
+// field as it was written, on one line. Frontmatter that cannot be read is
+// left as it is, for the lint to report.
+func RemoveFieldsOutsideSpecification(content string) (kept string, removed []string) {
+	frontmatter, body, found, err := SplitFrontmatter(content)
+	if err != nil || !found {
+		return content, nil
+	}
+	var document yaml.Node
+	err = yaml.Unmarshal([]byte(frontmatter), &document)
+	if err != nil || len(document.Content) == 0 || document.Content[0].Kind != yaml.MappingNode || document.Content[0].Style&yaml.FlowStyle != 0 {
+		return content, nil
+	}
+	fields := document.Content[0].Content
+	lines := strings.Split(frontmatter, "\n")
+	dropped := map[int]bool{}
+	for index := 0; index < len(fields); index += 2 {
+		if slices.Contains(skillFields, fields[index].Value) {
+			continue
+		}
+		first := fields[index].Line - 1
+		end := len(lines)
+		if index+2 < len(fields) {
+			end = fields[index+2].Line - 1
+		}
+		// blank lines and comments before the next field stay with it
+		for end > first+1 && (strings.TrimSpace(lines[end-1]) == "" || strings.HasPrefix(lines[end-1], "#")) {
+			end--
+		}
+		var text []string
+		for line := first; line < end; line++ {
+			dropped[line] = true
+			text = append(text, strings.TrimSpace(lines[line]))
+		}
+		removed = append(removed, strings.Join(text, " "))
+	}
+	if len(removed) == 0 {
+		return content, nil
+	}
+	var keptLines []string
+	for index, line := range lines {
+		if !dropped[index] {
+			keptLines = append(keptLines, line)
+		}
+	}
+	return "---\n" + strings.Join(keptLines, "\n") + "\n---\n" + body, removed
 }
 
 // metadataField reads the optional metadata mapping of string to string.

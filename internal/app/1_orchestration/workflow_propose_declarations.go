@@ -256,6 +256,8 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 	if isFile {
 		prepared.File = request.Source
 	}
+	// where each file the lint may refuse is mended, by its path in the tree
+	origins := map[string]string{}
 	levels, byLevel := document.Included()
 	for _, level := range levels {
 		var declared []proposal.Candidate
@@ -297,6 +299,7 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 			}
 			for relative, content := range compared.Files {
 				prepared.filesByLevel[level][relative] = content
+				origins[path.Join("declarations", levelPathOf(level), relative)] = originOf(request.Source, isFile, declared[index], relative)
 			}
 		}
 	}
@@ -322,7 +325,7 @@ func prepareProposal(services Services, request ProposeRequest) (preparedProposa
 	for level, files := range prepared.filesByLevel {
 		byPath[levelPathOf(level)] = files
 	}
-	err = lintCandidates(byPath)
+	err = lintCandidates(byPath, origins)
 	if err != nil {
 		return preparedProposal{}, err
 	}
@@ -577,12 +580,13 @@ func groupCandidates(files map[string]string) []distill.Candidate {
 	return grouped
 }
 
-// lintCandidates writes the files under a scratch declarations tree, each
-// level at its path, and refuses on any error the lint finds.
-func lintCandidates(filesByLevel map[string]map[string]string) error {
-	scratch, err := os.MkdirTemp("", "rein-propose-*")
+// lintErrorsOf writes the files under a scratch declarations tree, each
+// level at its path, and returns the lint's errors by the file's path in
+// that tree, declarations/<level path>/<file>.
+func lintErrorsOf(filesByLevel map[string]map[string]string) (map[string][]string, error) {
+	scratch, err := os.MkdirTemp("", "rein-lint-*")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer os.RemoveAll(scratch)
 	for levelPath, files := range filesByLevel {
@@ -590,31 +594,69 @@ func lintCandidates(filesByLevel map[string]map[string]string) error {
 			target := filepath.Join(scratch, "declarations", filepath.FromSlash(levelPath), filepath.FromSlash(relative))
 			err = os.MkdirAll(filepath.Dir(target), 0o755)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			err = os.WriteFile(target, []byte(content), 0o644)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
 	report, err := lint.Run(scratch)
 	if err != nil {
+		return nil, err
+	}
+	errorsByPath := map[string][]string{}
+	for _, finding := range report.Findings {
+		if finding.Severity == "error" {
+			key := filepath.ToSlash(strings.TrimPrefix(finding.Path, scratch+string(filepath.Separator)))
+			errorsByPath[key] = append(errorsByPath[key], finding.Message)
+		}
+	}
+	return errorsByPath, nil
+}
+
+// lintCandidates refuses on any error the lint finds, each named by the
+// place the developer mends it, which origins holds by the file's path in
+// the tree.
+func lintCandidates(filesByLevel map[string]map[string]string, origins map[string]string) error {
+	errorsByPath, err := lintErrorsOf(filesByLevel)
+	if err != nil {
 		return err
 	}
-	if report.Errors() == 0 {
+	if len(errorsByPath) == 0 {
 		return nil
 	}
 	var messages []string
-	for _, finding := range report.Findings {
-		if finding.Severity == "error" {
-			messages = append(messages, strings.TrimPrefix(finding.Path, scratch+string(filepath.Separator))+": "+finding.Message)
+	for _, key := range sortedKeys(errorsByPath) {
+		origin, found := origins[key]
+		if !found {
+			origin = key
+		}
+		for _, message := range errorsByPath[key] {
+			messages = append(messages, origin+": "+message)
 		}
 	}
 	if len(messages) > 10 {
 		messages = append(messages[:10], fmt.Sprintf("and %d more", len(messages)-10))
 	}
 	return refusal.New("the candidates do not pass the lint:\n  " + strings.Join(messages, "\n  "))
+}
+
+// originOf is where the developer mends a file the lint refuses: the
+// candidate's file in a proposal folder, the file itself in a folder of
+// declarations, else the proposal file or the zip with the file's path.
+func originOf(source string, isProposal bool, candidate proposal.Candidate, relative string) string {
+	info, err := os.Stat(source)
+	isFolder := err == nil && info.IsDir()
+	switch {
+	case isProposal && isFolder:
+		return filepath.Join(source, proposal.CandidateFileName(candidate)) + "  in " + proposal.FileKeyOf(candidate.Kind, candidate.ID, relative)
+	case isFolder:
+		return filepath.Join(source, filepath.FromSlash(relative))
+	default:
+		return source + "  in " + relative
+	}
 }
 
 // userRecordIfMissing adds the user's record to the proposal when the org

@@ -3,6 +3,7 @@ package orchestration
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -51,6 +52,8 @@ type DistillResult struct {
 	Brief        string
 	Conversation string
 	Reaches      map[string][]string
+	// LintErrors are the lint's errors by kind/id, which rein propose refuses.
+	LintErrors map[string][]string
 }
 
 // DistillHarness turns the harness a snapshot holds into candidate
@@ -209,13 +212,18 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 				for _, candidate := range candidates {
 					document.Candidates = append(document.Candidates, placeJudged(services, orgClonePath, organization, level, candidate))
 				}
+				// what rein propose would refuse is said now, on the candidate (P2.57)
+				var err error
+				result.LintErrors, err = noteLintErrors(document.Candidates)
+				if err != nil {
+					return err
+				}
 				if stored[0].Project != "" && folderExists(stored[0].Folder) {
 					_, err := services.WorkingCopy.WriteIgnoreBlock(stored[0].Folder, ignoreEntries(services))
 					if err != nil {
 						return err
 					}
 				}
-				var err error
 				result.File, err = services.ProposalFiles.WritePending(folder, document, request.Force)
 				if err != nil {
 					return refusal.New(err.Error())
@@ -241,6 +249,48 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 		result.Proposal = document
 	}
 	return result, nil
+}
+
+// noteLintErrors lints the included candidates, each at its level, as rein
+// propose will, notes on each the errors it would be refused for, and
+// returns them by kind/id.
+func noteLintErrors(candidates []proposal.Candidate) (map[string][]string, error) {
+	filesByLevel := map[string]map[string]string{}
+	owners := map[string]int{}
+	for index, candidate := range candidates {
+		if !candidate.Include || candidate.Kind == distill.KindDocuments || candidate.Kind == distill.KindLabels {
+			continue
+		}
+		files, err := proposal.FilesOf(candidate)
+		if err != nil {
+			return nil, err
+		}
+		levelPath := levelPathOf(candidate.Level)
+		if filesByLevel[levelPath] == nil {
+			filesByLevel[levelPath] = map[string]string{}
+		}
+		for relative, content := range files {
+			filesByLevel[levelPath][relative] = content
+			owners[path.Join("declarations", levelPath, relative)] = index
+		}
+	}
+	errorsByPath, err := lintErrorsOf(filesByLevel)
+	if err != nil {
+		return nil, err
+	}
+	lintErrors := map[string][]string{}
+	for _, key := range sortedKeys(errorsByPath) {
+		index, found := owners[key]
+		if !found {
+			continue
+		}
+		candidate := &candidates[index]
+		for _, message := range errorsByPath[key] {
+			candidate.Notes = append(candidate.Notes, "fails the lint: "+message)
+			lintErrors[candidate.Kind+"/"+candidate.ID] = append(lintErrors[candidate.Kind+"/"+candidate.ID], message)
+		}
+	}
+	return lintErrors, nil
 }
 
 // placeJudged turns a distilled candidate into the proposal's form, where

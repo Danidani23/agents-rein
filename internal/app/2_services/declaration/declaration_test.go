@@ -65,6 +65,27 @@ func TestParseSkill(t *testing.T) {
 	})
 }
 
+func TestRemoveFieldsOutsideSpecification(t *testing.T) {
+	t.Run("a field outside the specification goes with all its lines, the rest stays as written", func(t *testing.T) {
+		content := "---\nname: adr\ndescription: Write an ADR.\nargument-hint: \"<short-description>\"\nhooks:\n  PreToolUse:\n    - matcher: Bash\n\n# the license\nlicense: MIT\n---\n# ADR\n"
+		kept, removed := RemoveFieldsOutsideSpecification(content)
+		if kept != "---\nname: adr\ndescription: Write an ADR.\n\n# the license\nlicense: MIT\n---\n# ADR\n" {
+			t.Fatalf("kept %q", kept)
+		}
+		if len(removed) != 2 || removed[0] != `argument-hint: "<short-description>"` || removed[1] != "hooks: PreToolUse: - matcher: Bash" {
+			t.Fatalf("removed %q", removed)
+		}
+	})
+	t.Run("the specification's fields alone, no frontmatter, or frontmatter that cannot be read stay as they are", func(t *testing.T) {
+		for _, content := range []string{"---\nname: commit\ndescription: Draft commits.\n---\nbody\n", "# Just a body\n", "---\nname: [commit\n---\n", "---\n{name: commit, argument-hint: x}\n---\n"} {
+			kept, removed := RemoveFieldsOutsideSpecification(content)
+			if kept != content || len(removed) != 0 {
+				t.Fatalf("content %q kept %q removed %q", content, kept, removed)
+			}
+		}
+	})
+}
+
 func TestSkillValidate(t *testing.T) {
 	cases := []struct {
 		name     string

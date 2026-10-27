@@ -14,7 +14,7 @@ var harness = map[string]string{
 	"CLAUDE.md":                      "# Shop\n\nBe brief.\n",
 	"CLAUDE.local.md":                "Mine.\n",
 	".claude/rules/Go Style.md":      "---\npaths:\n  - \"**/*.go\"\n---\nTwo-line errors.\n",
-	".claude/skills/commit/SKILL.md": "---\nname: commit\ndescription: Draft commits.\n---\n",
+	".claude/skills/commit/SKILL.md": "---\nname: commit\ndescription: Draft commits.\nargument-hint: \"[message]\"\n---\n",
 	".claude/skills/commit/extra.md": "more\n",
 	".claude/settings.json":          `{"permissions":{"allow":["Bash(go test*)"],"deny":["Bash(git push --force*)"]},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"echo hi","timeout":10}]}]}}`,
 	".mcp.json":                      `{"mcpServers":{"GitHub":{"command":"npx","args":["-y","@modelcontextprotocol/server-github"],"env":{"GITHUB_PERSONAL_ACCESS_TOKEN":"ghp_abcdefghijklmnopqrstuvwxyz0123456789","LOG":"debug"}},"docs":{"type":"http","url":"https://docs.example/mcp"}}}`,
@@ -44,6 +44,10 @@ func TestConvertClaudeCode(t *testing.T) {
 	}
 	if len(indexed["skills/commit"].Files) != 2 || indexed["rules/go-style"].Files["rules/go-style.md"] != harness[".claude/rules/Go Style.md"] {
 		t.Fatalf("skill %+v rule %+v", indexed["skills/commit"], indexed["rules/go-style"])
+	}
+	commit := indexed["skills/commit"]
+	if commit.Files["skills/commit/SKILL.md"] != "---\nname: commit\ndescription: Draft commits.\n---\n" || len(commit.Notes) != 1 || commit.Notes[0] != `removed argument-hint: "[message]" from SKILL.md; the Agent Skills specification has no such field` {
+		t.Fatalf("skill %q notes %q", commit.Files["skills/commit/SKILL.md"], commit.Notes)
 	}
 	hook := indexed["hooks/pretooluse-1"]
 	if hook.Files["hooks/pretooluse-1/run.sh"] != "#!/bin/sh\necho hi\n" || !strings.Contains(hook.Files["hooks/pretooluse-1/hook.yaml"], "event: PreToolUse") || !strings.Contains(hook.Files["hooks/pretooluse-1/hook.yaml"], "timeout_seconds: 10") {

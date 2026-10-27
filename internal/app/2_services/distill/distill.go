@@ -184,6 +184,13 @@ func ConvertClaudeCode(files map[string]string) (candidates []Candidate, skipped
 	for _, name := range names {
 		candidate := Candidate{Kind: address.Skills, ID: slugOf(name), Files: map[string]string{}}
 		for rest, content := range skills[name] {
+			if rest == "SKILL.md" {
+				var removed []string
+				content, removed = declaration.RemoveFieldsOutsideSpecification(content)
+				for _, field := range removed {
+					candidate.Notes = append(candidate.Notes, fmt.Sprintf("removed %s from SKILL.md; the Agent Skills specification has no such field", field))
+				}
+			}
 			candidate.Files[path.Join("skills", slugOf(name), rest)] = content
 			candidate.Sources = append(candidate.Sources, path.Join(".claude/skills", name, rest))
 		}

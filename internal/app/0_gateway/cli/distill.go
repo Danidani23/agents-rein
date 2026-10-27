@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -116,20 +117,39 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 	fmt.Fprintf(environment.out, "%d new, %d identical to an existing declaration, %d sharing an id with another level\n", counts[distill.VerdictNew], counts[distill.VerdictIdentical], counts[distill.VerdictSameID])
 	style := environment.style()
 	var conflicts []proposal.Candidate
+	var failing []proposal.Candidate
 	for _, candidate := range document.Candidates {
 		if candidate.Conflict != nil {
 			conflicts = append(conflicts, candidate)
 		}
+		if len(result.LintErrors[candidate.Kind+"/"+candidate.ID]) > 0 {
+			failing = append(failing, candidate)
+		}
 	}
 	fmt.Fprintf(environment.out, "\nwritten to %s\n", style.Bold(style.Green(result.File)))
-	// the files in conflict close the output, each a full path the terminal opens
+	// the files in conflict or failing the lint close the output, each a full path the terminal opens
 	if len(conflicts) > 0 {
 		fmt.Fprintf(environment.out, "\n%s\n", style.Yellow(fmt.Sprintf("%d in conflict, which rein propose waits for: drop, override or amend each", len(conflicts))))
 		for _, candidate := range conflicts {
 			fmt.Fprintf(environment.out, "  %s  with %s\n", filepath.Join(result.File, proposal.CandidateFileName(candidate)), strings.Join(candidate.Conflict.With, ", "))
 		}
+	}
+	if len(failing) > 0 {
+		fmt.Fprintf(environment.out, "\n%s\n", style.Yellow(fmt.Sprintf("%d failing the lint, which rein propose refuses: mend the text under files in each", len(failing))))
+		for _, candidate := range failing {
+			for _, message := range result.LintErrors[candidate.Kind+"/"+candidate.ID] {
+				fmt.Fprintf(environment.out, "  %s  %s\n", filepath.Join(result.File, proposal.CandidateFileName(candidate)), message)
+			}
+		}
+	}
+	switch {
+	case len(conflicts) > 0 && len(failing) > 0:
+		printNext(environment, "set conflict.resolution in each file in conflict, mend the files that fail the lint, review the rest, then rein propose opens the pull request")
+	case len(conflicts) > 0:
 		printNext(environment, "set conflict.resolution in each file in conflict, review the rest, then rein propose opens the pull request")
-	} else {
+	case len(failing) > 0:
+		printNext(environment, "mend the files that fail the lint, review the rest, then rein propose opens the pull request")
+	default:
 		printNext(environment, "review and edit it, then rein propose opens the pull request")
 	}
 	// the last line opens the distiller's conversation, which claude keeps out of its picker (Q49)
@@ -144,7 +164,13 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 func describeJudgementLine(candidate proposal.Candidate) string {
 	judgement := candidate.Judge
 	line := judgement.Verdict
+	// the distiller may quote one declaration twice; it is named once
+	var named []string
 	for _, quote := range judgement.Quotes {
+		if slices.Contains(named, quote.Address) {
+			continue
+		}
+		named = append(named, quote.Address)
 		line += " with " + quote.Address
 	}
 	switch judgement.Suggestion {

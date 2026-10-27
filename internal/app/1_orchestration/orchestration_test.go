@@ -827,6 +827,41 @@ func TestDistillHarness(t *testing.T) {
 			t.Fatalf("status pending %+v clones %+v err %v", report.Pending, report.Clones, err)
 		}
 	})
+	t.Run("a field outside the specification is removed with a note, and a candidate the lint still refuses carries its error", func(t *testing.T) {
+		fixture, _ := withTeam(t)
+		_, _ = fixture.orchestrator().CreateProject(CreateProjectRequest{Name: "Shop", Teams: []string{"web"}})
+		folder := projectClone(t)
+		_, err := fixture.orchestrator().InitializeProject(InitializeProjectRequest{Directory: folder, Project: "shop"})
+		if err != nil {
+			t.Fatalf("init: %v", err)
+		}
+		for relative, content := range map[string]string{".claude/skills/write-plan/SKILL.md": "---\nname: write-plan\ndescription: Write the plan.\nargument-hint: \"<section>\"\n---\nbody\n", ".claude/skills/review/SKILL.md": "---\nname: review\n---\nbody\n"} {
+			target := filepath.Join(folder, filepath.FromSlash(relative))
+			_ = os.MkdirAll(filepath.Dir(target), 0o755)
+			_ = os.WriteFile(target, []byte(content), 0o644)
+		}
+		claudeCodeSnapshot(t, fixture, "organizations.acme.projects.shop", folder)
+		result, err := fixture.orchestrator().DistillHarness(DistillRequest{Judge: "none", Directory: folder})
+		if err != nil {
+			t.Fatalf("distill: %v", err)
+		}
+		candidates := map[string]proposal.Candidate{}
+		for _, candidate := range result.Proposal.Candidates {
+			candidates[candidate.Kind+"/"+candidate.ID] = candidate
+		}
+		writePlan := candidates["skills/write-plan"]
+		if strings.Contains(writePlan.Files["SKILL.md"], "argument-hint") || len(writePlan.Notes) != 1 || !strings.Contains(writePlan.Notes[0], `removed argument-hint: "<section>"`) {
+			t.Fatalf("write-plan %q notes %q", writePlan.Files["SKILL.md"], writePlan.Notes)
+		}
+		review := candidates["skills/review"]
+		if len(review.Notes) != 1 || review.Notes[0] != "fails the lint: description is required" || len(result.LintErrors) != 1 || len(result.LintErrors["skills/review"]) != 1 {
+			t.Fatalf("review notes %q lint errors %v", review.Notes, result.LintErrors)
+		}
+		written, _ := os.ReadFile(filepath.Join(result.File, "skill_review.yaml"))
+		if !strings.Contains(string(written), "fails the lint: description is required") {
+			t.Fatalf("written %q", written)
+		}
+	})
 	t.Run("the home becomes the user's level under the home's pending folder, a named snapshot its own, and the refusals", func(t *testing.T) {
 		fixture, _ := withTeam(t)
 		snapshotPath := claudeCodeSnapshot(t, fixture, "", "")
@@ -1051,8 +1086,16 @@ func TestProposeDeclarations(t *testing.T) {
 		_ = os.MkdirAll(filepath.Join(bad, "mcpservers"), 0o755)
 		_ = os.WriteFile(filepath.Join(bad, "mcpservers", "x.yaml"), []byte("transport: carrier-pigeon\n"), 0o644)
 		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: bad, Level: "organizations.acme"})
-		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "do not pass the lint") || !strings.Contains(err.Error(), "carrier-pigeon") {
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "do not pass the lint") || !strings.Contains(err.Error(), filepath.Join(bad, "mcpservers", "x.yaml")+": ") || !strings.Contains(err.Error(), "carrier-pigeon") {
 			t.Fatalf("err %v", err)
+		}
+		// a proposal's refusal names the candidate's file, which the developer edits
+		failing := proposal.Proposal{Version: proposal.Version, Status: proposal.StatusPending, Organization: "acme", DistilledFrom: "organizations.acme", Candidates: []proposal.Candidate{{Kind: "skills", ID: "write-plan", Include: true, Level: "organizations.acme", Files: map[string]string{"SKILL.md": "---\nname: write-plan\n---\nbody\n"}}}}
+		failingPath := filepath.Join(t.TempDir(), "proposal-def")
+		_ = failing.WriteFolder(failingPath)
+		_, err = fixture.orchestrator().ProposeDeclarations(ProposeRequest{Source: failingPath})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), filepath.Join(failingPath, "skill_write-plan.yaml")+"  in SKILL.md: description is required") {
+			t.Fatalf("proposal: %v", err)
 		}
 		existing := filepath.Join(created.Connected.OrgClonePath, "declarations", "rules", "brief.md")
 		_ = os.MkdirAll(filepath.Dir(existing), 0o755)
