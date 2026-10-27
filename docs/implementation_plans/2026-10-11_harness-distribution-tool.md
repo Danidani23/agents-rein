@@ -1389,6 +1389,17 @@ from that project's snapshot.
   on. Tests on the fakes, whose repository now fakes a project clone through marker files,
   and end to end with real git: a clone with tracked and untracked agent files, the move-out
   committed, the tree clean, the binding pushed. Gate: `task rein:check` green.
+- ✅ **P2.58 — `distill` sends a rejected answer back into its conversation, and says it
+  did.** [EXECUTED] Approved 2026-10-27, after a distillation of `housing-app-website` lost
+  three minutes to one field: the distiller gave a document unit the shape `always`, which
+  the brief never ruled out, and the retry judged everything anew in a fresh conversation,
+  11 of its 26 entries different and a lift to the organisation gone. The brief names the
+  pairing, a unit of kind `documents` and shape `document`. The judge port gains `Reply`: the
+  problems go into the conversation the brief started, through `claude -p --resume <id>`,
+  which keeps the id, or with the brief and the first answer sent again for the Messages
+  API, and the distiller is asked to change only what they need. `proposal.yaml` keeps them
+  under `distiller.rejected`, and the distiller line says "answered, after its first answer
+  was sent back for: …". Gate: `task rein:check` green.
 - ✅ **P2.57 — `distill` hands over candidates that pass the lint, and `propose` names the
   file to mend.** [EXECUTED] Approved 2026-10-27, after `rein propose` on
   `housing-app-business` was refused for Claude Code's `argument-hint` in a distilled skill and
@@ -2460,3 +2471,12 @@ writes is read from the next session on, not in the same one.
   each file back to the place it is mended; `DistillResult.LintErrors` for the summary. Left
   for you: the commit, and deleting line 31 of `housing-app-business`'s
   `skill_write-plan.yaml`, distilled before the fix, before its `rein propose`.
+- (2026-10-27) P2.58 built, tests first: the brief test failed on the old brief for the
+  missing pairing; the tests of the reply, of the run's `rejected` and of the distiller line
+  needed the new port method and field, so on the old code they failed to compile.
+  `claude -p --resume <id>` was checked by hand with Haiku: from another empty folder it found
+  the conversation, kept its id and wrote into the same file. The check needed
+  `--strict-mcp-config`, since without it the developer's tool servers alone overflowed
+  Haiku's context; each distiller call of that distillation carried about 323,000 input
+  tokens for a brief of about 95,000 characters. Gate: `task rein:check` green. Left for
+  you: the commit, and a real `rein distill` whose first answer is sent back.
