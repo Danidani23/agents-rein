@@ -50,6 +50,12 @@ func TestJudgeArgumentsAndTimeout(t *testing.T) {
 	if !strings.HasSuffix(replying, "--resume session --model sonnet") || strings.Contains(replying, "--session-id") || !strings.Contains(replying, "--max-turns 1 --tools ") {
 		t.Fatalf("reply arguments %v", replying)
 	}
+	// no tool server starts for the distiller, whose prompt they would fill (P2.59)
+	for _, resume := range []bool{false, true} {
+		if !strings.Contains(strings.Join(judgeArguments("", "session", resume), " "), "--tools  --strict-mcp-config") {
+			t.Fatalf("tool servers load: %v", judgeArguments("", "session", resume))
+		}
+	}
 	_, _, err := Judge{}.Reply(ports.JudgeConversation{Brief: "brief", Answer: "answer"}, "mend it", "", nil)
 	if err == nil || !strings.Contains(err.Error(), "no conversation to reply in") {
 		t.Fatalf("a reply without a session: %v", err)

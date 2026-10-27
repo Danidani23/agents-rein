@@ -157,15 +157,16 @@ func (Judge) ResumeCommand(session string) string {
 }
 
 // judgeArguments are claude's arguments for one message: one turn, no
-// tools, the answer streamed as it is written (P2.54), the session started
-// under its id, or resumed for a reply (P2.58), and the model when one is
-// named.
+// tools and none of the developer's tool servers, whose definitions --tools
+// leaves in and which filled most of a distiller's prompt (P2.59), the
+// answer streamed as it is written (P2.54), the session started under its
+// id, or resumed for a reply (P2.58), and the model when one is named.
 func judgeArguments(model string, session string, resume bool) []string {
 	sessionFlag := "--session-id"
 	if resume {
 		sessionFlag = "--resume"
 	}
-	arguments := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--max-turns", "1", "--tools", "", sessionFlag, session}
+	arguments := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--max-turns", "1", "--tools", "", "--strict-mcp-config", sessionFlag, session}
 	if model != "" {
 		arguments = append(arguments, "--model", model)
 	}
