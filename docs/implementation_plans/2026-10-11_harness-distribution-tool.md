@@ -71,6 +71,9 @@ committed instead of gitignored (D4).
   half new. A daemon also writes into every working tree and must be installed, kept alive,
   updated and secured. Every vendor pulls: managed settings at startup and hourly, marketplaces
   on update, Goose's allowlist on restart ([Q1](../harness-management.md#q1--how-dev-teams-receive-the-harness)).
+  Amended 2026-10-28 by D47 and then D50: an app that stays resident owns the machine's state
+  and, between sessions, pulls for the projects the developer chose; nothing pushes into a
+  session.
 - ✅ **D3 — A change to a level is reviewed as a pull request.** Decided 2026-10-11 (ADR, N3).
   The org repository is git; the approval is a pull request routed by CODEOWNERS, which the tool
   opens from `rein propose`. Review, history and blame come free; a tool-native workflow
@@ -272,6 +275,8 @@ committed instead of gitignored (D4).
   never inline. An embedded database is the fallback if concurrent writers appear, such as
   sync hooks from several agent sessions, or the ledger outgrows one file; that is a
   dependency decision against the cobra-and-yaml.v3 rule and gets its own ADR then.
+  Superseded 2026-10-28 by D51: the state, the ledger and the snapshots move into an encrypted
+  store that only the owner of D50 opens.
 - ✅ **D20 — Every record rein writes carries the time it was written.** Decided 2026-10-19 by
   the user: a clean record is kept whether or not anything reads it yet, because a timestamp
   not stored when the work is done is history lost. First case: `connected_at` on the
@@ -367,14 +372,60 @@ committed instead of gitignored (D4).
   it on, for every project or chosen ones, from the CLI or the page. Nothing calls the run,
   so it is not the daemon D2 turned down; it amends D2. The
   [ADR](../decisions/2026-10-28_a-scheduled-check-between-sessions.md). P5.
+  Superseded 2026-10-28 by D50: the check runs inside the app, every minute while it runs, and
+  tells its findings as the app's notifications; the system's scheduler is not used.
 - ✅ **D48 — The automatic-sync setting is kept in the machine's state, per project clone.**
   Decided 2026-10-28 by the user (Q22 a). It concerns this machine's clones, and a change
   applies at once. Turned down: the developer's user level in the organisation's repository,
   which would follow them to every machine but make each change a pull request, at a level
-  that holds the agent's settings, not rein's. P5.2.
+  that holds the agent's settings, not rein's. P5.2. Amended 2026-10-28 by D51: kept in the
+  encrypted store with the rest of the machine's state.
 - ✅ **D49 — The check is turned on and off by a command the developer runs.** Decided
   2026-10-28 by the user (Q23 a). rein writes nothing into the system's scheduler unasked.
-  Turned down: turning it on at `rein login` or the first `rein init`. P5.3.
+  Turned down: turning it on at `rein login` or the first `rein init`. P5.3. Superseded
+  2026-10-28 by D50: the check runs while the app runs, and the app starts at login when the
+  developer turns that on.
+- ✅ **D50 — An always-running app owns the machine; the CLI, the hook and the tool server ask
+  it.** Decided 2026-10-28 by the user (Q26, Q29 a), who holds that the best experience is
+  worth an app: an icon in the menu bar or tray, notifications with buttons, a window of its
+  own, a start at login. Wails v3.0.0, released 2026-10-26, makes the pages of `rein ui` that
+  window without a frontend build. One owner per machine opens the store and holds its key,
+  and serves the `Orchestrator` on a Unix socket in rein's home. Clients send HTTP with JSON,
+  progress comes back as server-sent events, the questions stay in the CLI, and every request
+  carries the protocol's version. The check of D47 runs inside the app. The app is built and
+  signed on each operating system; `rein` stays one build without cgo. Turned down: each
+  program opening the store itself, since the CLI would then need a key an agent can fetch the
+  same way; a native app per operating system; a system service under an account of its own.
+  Supersedes D47 and D49, amends D2 and D45. The
+  [ADR](../decisions/2026-10-28_an-always-running-app-owns-the-machine.md). P6.
+- ✅ **D51 — The machine's state lives in an encrypted bbolt store that only the owner opens.**
+  Decided 2026-10-28 by the user (Q28 c, Q33 a, Q34 b), to keep agents and people from writing
+  into it. An embedded database has no users of its own, so the key is the protection: every
+  value is encrypted with AES-GCM from the standard library. On macOS the key lives in the
+  app's own keychain section, readable by the signed app alone; elsewhere it lives where rein
+  keeps secrets today, which stops accidents, not a program set on reading it. The state, the
+  ledger and the snapshots move in; the organisations' clones, the proposals and the files sync
+  writes stay files. On macOS the GitHub tokens and the providers' keys move into the app's
+  keychain section too, since today any program that asks `security` for the token gets it.
+  Supersedes D19. The [ADR](../decisions/2026-10-28_the-machine-state-in-an-encrypted-store.md).
+  P6.2, P6.6.
+- ✅ **D52 — Without the app, `rein` itself is the owner, without a window.** Decided
+  2026-10-28 by the user (Q30 a, Q32 a). Over SSH, in a dev container or in a cloud session
+  the app cannot run, since on Linux it needs GTK and WebKit. There the CLI starts `rein` in an
+  owner mode at its first request, and it exits when idle. It runs no check, so on those
+  machines the session-start sync stays the trigger. Turned down: a third program for those
+  machines. Same ADR as D50. P6.1.
+- ✅ **D53 — What removes or overwrites, asked from the command line, is confirmed in the
+  app.** Decided 2026-10-28 by the user (Q31 a): a reset of a project or of the machine, and a
+  sync with `--force`. An agent can type the command but cannot confirm it. Without the app,
+  the terminal question asks as today. Whether Touch ID or Windows Hello can stand behind the
+  confirmation is checked when it is built. Turned down: confirming every change, or none.
+  Same ADR as D50. P6.4.
+- ✅ **D54 — The owner, the store and the app come before the rest of P4.** Decided 2026-10-28
+  by the user (Q35 a). P4.3 and P4.9 first, then P6.1 to P6.4, then P4.4 to P4.8 as the app's
+  pages, so the pages move to the owner once, not twice. Placed by the agent with it: P5's
+  remaining items go with the app, whose check they are, and the release (P6.5, P6.6) follows
+  once the app works.
 - ✅ **D46 — The page offers every command a person runs, through one pattern.** Decided
   2026-10-27 by the user (Q14 R1, Q15, Q16 G2). Each command becomes a form asking what the
   CLI asks, a preview of what will change, a confirmation, its steps as they run with a
@@ -394,7 +445,9 @@ committed instead of gitignored (D4).
   would need a C toolchain and a frontend build on every operating system. Standard library
   only. A Mermaid diagram of a change's reach in each pull request was offered and declined;
   the bulk sync asked for in the same conversation is `rein sync --all`, which exists. The
-  [ADR](../decisions/2026-10-27_rein-ui-a-gateway-served-to-the-browser.md). P4.
+  [ADR](../decisions/2026-10-27_rein-ui-a-gateway-served-to-the-browser.md). P4. Amended
+  2026-10-28 by D50: the pages become the window of the app, which is the resident process
+  this decision turned down; the gateway stays for the browser.
 - ✅ **D44 — A provider's key lives in the developer's keychain.** Decided 2026-10-26 by the
   user (Q59 KS1). `providers.yaml` names the variable, never the key (D22, D42); the key itself
   goes into the operating system's keychain with `rein key set`, through standard input, beside
@@ -911,7 +964,8 @@ One file under `~/.rein/`, the folder overridable with `REIN_HOME` (D10):
 
 ### State storage
 
-Decided as D19. What comparable tools do with their config and state, read 2026-10-18:
+Decided as D19, superseded on 2026-10-28 by D51. What comparable tools do with their config and
+state, read 2026-10-18:
 
 | Tool | File | Format | Hand-edited? | Source |
 |---|---|---|---|---|
@@ -1005,7 +1059,8 @@ flowchart TD
   P1 --> P2[P2 build the CLI]
   P2 --> P3[P3 pilot]
   P2 --> P4[P4 rein ui in the browser]
-  P4 --> P5[P5 the scheduled check]
+  P4 --> P6[P6 the app that owns the machine]
+  P6 --> P5[P5 the check, inside the app]
 ```
 
 ## How the tool works
@@ -1979,7 +2034,7 @@ D45 and its [ADR](../decisions/2026-10-27_rein-ui-a-gateway-served-to-the-browse
 the commands the page offers. Gate per item: `task rein:check` green, and the item's pages
 checked by you in the browser before its commit. Order of work, by the user (Q15): P4.1, P4.2,
 P4.3, P4.6, P4.4, P4.5, P4.7, P4.8; the items below stand in that order. The phase P5 comes
-between P4.3 and P4.6 (Q21 a).
+between P4.3 and P4.6 (Q21 a). P4.9, split from P4.3, follows P4.3 directly.
 
 - ✅ **P4.1 — `rein ui` serves the machine's page in the browser, guarded.** [EXECUTED] A new
   gateway `internal/app/0_gateway/web`, started by the CLI's `ui` command; the gateway table
@@ -2026,7 +2081,7 @@ between P4.3 and P4.6 (Q21 a).
   permission set or tool server its `description`; a file sync wrote from no declaration shows
   the ledger's `generated`. `ResolveProject` takes the login; `rein resolve` and the MCP tool
   pass none and keep the login that acts. The files come from a new query, `SyncedFiles`.
-- 🟢 **P4.3 — The way a command runs from the page; sync, reset and propose.** [PENDING]
+- ✅ **P4.3 — The way a command runs from the page; sync, reset and propose.** [EXECUTED]
   Extended 2026-10-27 (D46) with the pattern every later action follows and with `reset
   project`.
   - The pattern: a form asks what the CLI asks; a preview says what will change, the summary
@@ -2042,6 +2097,23 @@ between P4.3 and P4.6 (Q21 a).
     (`RestoreProject`); and, when a proposal waits, its candidates with their include, level
     and conflict, which a new operation writes into the candidate files before
     `ProposeDeclarations` runs as today and refuses an unresolved conflict as today.
+
+  Built 2026-10-28 without propose, which moved to P4.9 so the pattern lands checked on its
+  own; waiting for your check in the browser. Sync of a clone or of every clone and reset
+  project run from the Projects page. Deviations: the preview of sync names the files edited
+  by hand, and the page asks before syncing although the CLI does not, as the pattern does
+  for every action. Cancel stops the program the action waits for; between two programs
+  there is nothing to stop, and the page says so, where the CLI's Ctrl-C would quit and end
+  `rein ui` with it. The interrupt is handed to the page by the CLI's `ui` command, so the
+  web gateway imports no adapter. A failed action shows no next step; its message names the
+  way on. The menu leads to the running or last action. Done 2026-10-28 without the check in
+  the browser, which the user waived: the pages become the app's window (D50), where P6.3
+  checks them.
+- 🟢 **P4.9 — Propose from the page, the candidates reviewed there.** [PENDING] Split from
+  P4.3 on 2026-10-28. When a proposal waits in a clone, the Projects page shows its
+  candidates with their include, level and conflict; a new operation writes the choices into
+  the candidate files, then `ProposeDeclarations` runs through the pattern of P4.3 as it runs
+  today, refusing an unresolved conflict as today.
 - 🟢 **P4.6 — Init from the page.** [PENDING] Added 2026-10-27 (D46, Q15, Q16 G2), built
   before P4.4. "Add a folder…" at the end of the Projects dropdown opens a folder browser
   served by rein over the home folder: folder names only, never a file's content, the git
@@ -2079,7 +2151,9 @@ between P4.3 and P4.6 (Q21 a).
 D47 and its [ADR](../decisions/2026-10-28_a-scheduled-check-between-sessions.md). Built after
 P4.3, whose Sync the notifications lead to; the rest of P4 follows (Q21 a). Gate per item:
 `task rein:check` green; the scheduler and the notifications checked by you on your machine
-before the commit.
+before the commit. Amended 2026-10-28 by D50 and D54: the check runs inside the app instead of
+the system's scheduler, so P5 is built with the app, after P6.1 to P6.3, and the notifications
+are the app's.
 
 - 🟢 **P5.1 — One run of the check.** [PENDING] The command the scheduler starts, named when
   the item is designed. It compares the clones' rein folders and the agent's home with the
@@ -2087,16 +2161,85 @@ before the commit.
   minutes it asks whether each organisation's main branch moved; it syncs the projects set to
   automatic sync, under the machine lock as any sync; it records what it found in rein's home
   so each finding is told once, and prints it when run by hand. Tested over the fakes.
+  Amended 2026-10-28 (D50): the app runs it every minute while it runs, and the owner keeps
+  what it found; run by hand, it still prints.
 - 🟢 **P5.2 — The automatic-sync setting, from the CLI and the page.** [PENDING] Off, every
-  project, or chosen projects (Q20 M1), kept in the machine's state per project clone (D48).
-- 🟢 **P5.3 — Turning the check on and off.** [PENDING] By a command the developer runs (D49): a
+  project, or chosen projects (Q20 M1), kept in the machine's state per project clone (D48),
+  which is the encrypted store from P6.2 on (D51).
+- ⏸️ **P5.3 — Turning the check on and off.** [DEFERRED] By a command the developer runs (D49): a
   launchd agent with `StartInterval` on macOS, a systemd user timer on Linux, a Task Scheduler
-  task on Windows, written and removed by rein; `rein reset machine` removes it too.
-- 🟢 **P5.4 — The notifications.** [PENDING] `display notification` on macOS; the Linux and
+  task on Windows, written and removed by rein; `rein reset machine` removes it too. Dropped
+  2026-10-28 by D50: the check runs while the app runs, and the app starts at login when the
+  developer turns that on (P6.3).
+- ⏸️ **P5.4 — The notifications.** [DEFERRED] `display notification` on macOS; the Linux and
   Windows mechanisms chosen, with their sources, when the item is designed. Each says what
   synced and that `/clear` loads the rest in an open session, or what changed in which folder.
+  Dropped 2026-10-28 by D50: the app's native notifications say the same, with a button that
+  opens the page concerned (P6.3).
 - 🟢 **P5.5 — The findings in the page.** [PENDING] This machine and the Projects page show
   what the check found and since when, and the setting of P5.2.
+- 🟢 **P5.6 — The findings in Claude Code's status line.** [PENDING] Added 2026-10-28 by the
+  user (Q24 a, Q25 both). A command prints one line of what the check found, such as the
+  organisation having changed and `/clear` loading it, for Claude Code's status line, which
+  runs a command and shows its output at the foot of the session
+  ([docs](https://code.claude.com/docs/en/statusline)). Two ways in: rein writes the status
+  line into a clone's settings when the developer opts in, since it would replace one of
+  their own; or the developer's own status line script calls the command.
+- ⏸️ **P5.7 — Notifications from the open page.** [DEFERRED] Added 2026-10-28 by the user
+  (Q24 a). While a tab of `rein ui` is open, it shows the check's new findings through the
+  browser's notifications, which a page on 127.0.0.1 may ask for, being a secure context
+  ([MDN](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts)). Dropped
+  2026-10-28 by D50: the app's native notifications replace them, and a page without the app
+  still shows the findings (P5.5).
+
+## P6 — The app that owns the machine
+
+D50 to D54, the [app ADR](../decisions/2026-10-28_an-always-running-app-owns-the-machine.md) and
+the [store ADR](../decisions/2026-10-28_the-machine-state-in-an-encrypted-store.md). Built after
+P4.3 and P4.9, before P5 and the rest of P4 (D54). Each item is designed and approved before it
+is built. Gate per item: `task rein:check` green; the existing tests of every command pass
+through the owner; [architecture.md](../architecture.md) and the architecture test change with
+the code; what a test cannot reach, such as the window, the tray, the notifications, the
+keychain and the signing, is checked by you on your machine before the commit.
+
+- 🟢 **P6.1 — The owner and its clients.** [PENDING] `rein` gains an owner mode without a
+  window (D52): it opens the machine's state, runs the `Orchestrator`, serves it on a Unix
+  socket in rein's home that only the developer's account can open, and exits when idle. The
+  CLI, the session-start hook and the tool server send each request as HTTP with JSON and start
+  the owner when none answers. Progress comes back as server-sent events, Ctrl-C sends a
+  cancel, the questions are asked by the CLI and sent with the request, and every request
+  carries the protocol's version. A command that needs no machine state, such as `rein lint`,
+  runs in the CLI's process. The owner first works on today's `state.yaml`, so P6.2 changes
+  one adapter. Tested over the fakes and over a real socket in a temporary folder.
+- 🟢 **P6.2 — The encrypted store.** [PENDING] bbolt, every value encrypted with AES-GCM, the
+  key made at the owner's first start and kept in the system's keychain (D51). The state, the
+  ledger and the snapshots move in at the first start and are read back before the files are
+  removed; the organisations' clones and the proposals stay files. A command shows the store's
+  content through the owner; `rein reset machine` empties it and removes the key; a store that
+  is gone or does not match its key is named, never replaced by an empty one.
+- 🟢 **P6.3 — The app.** [PENDING] A Wails v3 program in this module, built with cgo on each
+  operating system, that is the owner plus a window showing the pages of `rein ui` through
+  their handler, an icon in the menu bar or tray, native notifications whose button opens the
+  page concerned, one instance at a time, and a start at login the developer turns on. Where
+  it is installed, the CLI starts it when no owner answers. Checked by you on macOS; Linux and
+  Windows when a machine of each is at hand.
+- 🟢 **P6.4 — Confirmation in the app.** [PENDING] A reset of a project or of the machine, or a
+  sync with `--force`, asked from the command line waits for a confirmation in the app's
+  window, and the CLI says where it waits (D53). Touch ID and Windows Hello are looked into
+  here, with their sources. Without the app, the terminal question asks as today.
+- 🟢 **P6.5 — The app's release.** [PENDING] Built on GitHub's macOS, Windows and Linux
+  runners; signed and notarised on macOS, signed through Artifact Signing on Windows, packaged
+  as `.deb`, `.rpm` and AppImage on Linux; released together with `rein`. Needs from you
+  (you): enrolling in the Apple Developer Program, 99 USD a year, and an Azure subscription
+  with identity validation for Artifact Signing, 9.99 USD a month for the Basic tier, as an
+  organisation unless you are in the United States or Canada. You are in Switzerland
+  (2026-10-28), where Artifact Signing's public certificates go to organisations only
+  ([quickstart](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart)): a
+  company of yours signs, and without one this item starts by researching other sellers of
+  code-signing certificates.
+- 🟢 **P6.6 — The app's own keychain section on macOS.** [PENDING] The store's key, the GitHub
+  tokens and the providers' keys move from the login keychain into the signed app's keychain
+  section, which only the app reads (D51). Needs the signed build of P6.5.
 
 ## Open points
 
@@ -2700,3 +2843,21 @@ writes is read from the next session on, not in the same one.
   Projects page checked in the browser, then the commits.
 - (2026-10-28) P4.2 checked by the user in the browser and done; their detailed feedback
   follows as its own change. Left for you: the commits.
+- (2026-10-28) P4.3 built without propose, which became P4.9: sync and reset project run from
+  the Projects page through the pattern of D46, preview, confirmation, steps streamed as
+  server-sent events, Cancel, outcome. Tests first; their first run came after the code, so
+  they were run once more with the action routes taken out, and four failed. Rendered over
+  the test fixture in headless Chrome, not against this machine, so no clone of yours was
+  synced: the refusal page showed an empty Steps heading and the next step of a success,
+  each caught by a test first and fixed. Gate: `task rein:check` green, the web tests also
+  under the race detector. Left for you: Sync on a project of yours in `rein ui`, which
+  writes its clone as the session-start hook does, then the commits.
+- (2026-10-28) P5.6 and P5.7 added (Q24 a, Q25 both): the check's findings in Claude Code's
+  status line and as notifications from the open page.
+- (2026-10-28) D50 to D54 decided by the user (Q26, Q28 c, Q29 a to Q35 a): an app that stays
+  resident owns the machine, the CLI, the session-start hook and the tool server ask it, and
+  the state lives in an encrypted bbolt store. Two ADRs written; the scheduled-check ADR
+  superseded, the compiler and `rein ui` ADRs amended; D19, D47 and D49 superseded, D2, D45
+  and D48 amended; P5.3, P5.4 and P5.7 dropped; the phase P6 added. No code changed. Left for
+  you: reading both ADRs, the diagram in the app ADR checked in a Markdown preview, and the
+  commits.

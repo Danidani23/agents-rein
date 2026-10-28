@@ -91,6 +91,10 @@ CLI's `ui` command, serving the page to the developer's browser until Ctrl+C.
   reviewer still reviews on GitHub.
 - No window and no icon, only a tab. A later wrapper could put the same pages in a window
   without changing the gateway.
+- Amended 2026-10-28 by [an always-running app owns the machine](2026-10-28_an-always-running-app-owns-the-machine.md):
+  the pages become the window of an app built on Wails v3, which needs no frontend build, and
+  candidate 1, a resident process the page calls, is what that app now is. The gateway, its
+  token and its `Host` and `Origin` checks stay for the browser.
 - The page needs rein installed. A hosted, read-only view for people without rein would be a
   separate decision, and none has been taken.
 - The gateway is tested with `httptest` over the fakes, including the token, `Host` and

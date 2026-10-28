@@ -1,7 +1,7 @@
 # A check the operating system schedules tells what changed between sessions
 
 **Date:** 2026-10-28
-**Status:** Accepted
+**Status:** Superseded by [an always-running app owns the machine](2026-10-28_an-always-running-app-owns-the-machine.md)
 
 ## Context
 
