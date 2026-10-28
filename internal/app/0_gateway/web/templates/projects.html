@@ -89,7 +89,14 @@
 {{range .Clones}}
 <section>
   <h2>Files sync wrote</h2>
-  <p class="muted"><code>{{.Folder}}</code>{{if .LastSync}} · last sync {{.LastSync}}{{end}}</p>
+  <div class="clone-head">
+    <p class="muted"><code>{{.Folder}}</code>{{if .LastSync}} · last sync {{.LastSync}}{{end}}</p>
+    <div class="buttons">
+      <a class="button" href="{{.SyncLink}}">Sync</a>
+      <a class="button secondary" href="/actions/sync?all=on">Sync every clone</a>
+      <a class="button secondary" href="{{.ResetLink}}">Reset project</a>
+    </div>
+  </div>
   {{if .Files}}
   <div class="table-scroll">
     <table>

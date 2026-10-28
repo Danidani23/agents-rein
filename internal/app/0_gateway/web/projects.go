@@ -3,6 +3,7 @@ package web
 import (
 	"html/template"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -18,14 +19,14 @@ import (
 // sync wrote into its clones here. The user level is the chosen login's.
 // It reads the organisation's clone as it is, behind the login gate as
 // rein resolve is.
-func projectsPage(orchestrator orchestration.Orchestrator, version string, page *template.Template) http.Handler {
+func projectsPage(orchestrator orchestration.Orchestrator, version string, actions *runner, page *template.Template) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		report, err := orchestrator.Status()
 		if err != nil {
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		view := projectsView{frame: frameOf(request, report, version, "Projects", "projects"), LoggedIn: len(report.Logins) > 0}
+		view := projectsView{frame: frameOf(request, report, version, "Projects", "projects", actions), LoggedIn: len(report.Logins) > 0}
 		if !view.LoggedIn || view.Problem != "" || view.ChosenOrganization == "" {
 			render(writer, page, view, statusOf(view.frame))
 			return
@@ -163,12 +164,14 @@ type skippedRow struct {
 	Exception string
 }
 
-// cloneFiles is one clone of the project on this machine and the files
-// sync wrote into it.
+// cloneFiles is one clone of the project on this machine, the files sync
+// wrote into it, and the links to the actions on it.
 type cloneFiles struct {
-	Folder   string
-	LastSync string
-	Files    []fileRow
+	Folder    string
+	LastSync  string
+	Files     []fileRow
+	SyncLink  string
+	ResetLink string
 }
 
 // fileRow is one file sync wrote; Changed marks one edited by hand or
@@ -301,7 +304,7 @@ func levelNameOf(level string) string {
 // cloneFilesOf is one clone's files as the page lists them, the
 // declaration each came from named within the organisation.
 func cloneFilesOf(clone orchestration.CloneStatus, files []orchestration.SyncedFile, organizationSlug string) cloneFiles {
-	listed := cloneFiles{Folder: shortPath(clone.ClonePath), LastSync: localTimeOf(clone.LastSync)}
+	listed := cloneFiles{Folder: shortPath(clone.ClonePath), LastSync: localTimeOf(clone.LastSync), SyncLink: "/actions/sync?folder=" + url.QueryEscape(clone.ClonePath), ResetLink: "/actions/reset-project?folder=" + url.QueryEscape(clone.ClonePath)}
 	for _, file := range files {
 		listed.Files = append(listed.Files, fileRow{Path: file.Path, From: strings.TrimPrefix(file.Address, address.Organizations+"."+organizationSlug+"."), Written: file.WrittenAt.Local().Format(timeLayout), State: file.State, Changed: file.State != orchestration.SyncedAsWritten})
 	}

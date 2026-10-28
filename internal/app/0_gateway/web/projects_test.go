@@ -82,7 +82,7 @@ func serveProjects(t *testing.T, logins ...string) (*Page, orchestration.Orchest
 	}
 	_ = os.WriteFile(filepath.Join(folder, ".claude", "rules", "go.md"), []byte("edited"), 0o644)
 	state.Current.Logins = logins
-	page, err := Open(orchestrator, "v0.1.0")
+	page, err := Open(orchestrator, "v0.1.0", Interrupt{})
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

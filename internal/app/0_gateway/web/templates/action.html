@@ -1,0 +1,29 @@
+{{define "content"}}
+{{if not .Problem}}
+<section>
+  {{range .Summary}}<p class="lead">{{.}}</p>
+  {{end}}
+  {{if .Items}}
+  <h2>{{.ItemsHeading}}</h2>
+  <ul class="items">
+    {{range .Items}}<li><code>{{.}}</code></li>
+    {{end}}
+  </ul>
+  {{end}}
+  {{if .Busy}}
+  <p class="notice">{{.Busy}} is running; one action runs at a time. <a href="/run">Follow it</a>.</p>
+  {{else}}
+  <form method="post" action="{{.Action}}" class="confirm">
+    {{range .Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+    {{end}}
+    {{range .Options}}<label class="option"><input type="checkbox" name="{{.Name}}"> {{.Label}}</label>
+    {{end}}
+    <div class="buttons">
+      <button type="submit">{{.Confirm}}</button>
+      <a class="button secondary" href="{{.Back}}">Back</a>
+    </div>
+  </form>
+  {{end}}
+</section>
+{{end}}
+{{end}}

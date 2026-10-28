@@ -1,0 +1,29 @@
+{{define "content"}}
+{{if .Started}}
+<section class="run" data-running="{{if .Finished}}false{{else}}true{{end}}" data-from="{{.From}}">
+  {{if or .Steps (not .Finished)}}<h2>Steps</h2>{{end}}
+  <ul class="steps">
+    {{range .Steps}}<li class="{{.Kind}}" data-key="{{.Key}}"><span class="text">{{.Text}}</span><span class="note muted">{{.Note}}</span>{{range .Details}}<div class="detail muted">{{.}}</div>{{end}}</li>
+    {{end}}
+  </ul>
+  {{if .Finished}}
+  <p class="headline{{if .Outcome.Failed}} warning{{end}}">{{.Outcome.Headline}}</p>
+  {{if .Outcome.Lines}}
+  <ul class="outcome">
+    {{range .Outcome.Lines}}<li{{if .Warning}} class="warning"{{end}}>{{.Text}}</li>
+    {{end}}
+  </ul>
+  {{end}}
+  {{if .Outcome.Next}}<p class="next">Next: {{.Outcome.Next}}</p>{{end}}
+  {{else}}
+  <form method="post" action="/run/cancel" class="confirm">
+    <div class="buttons"><button type="submit" class="secondary">Cancel</button></div>
+  </form>
+  <p class="muted">Cancel does what Ctrl-C does in a terminal: it stops the program the action waits for, and the steps already done are undone.</p>
+  {{end}}
+  {{if .CancelMessage}}<p class="muted">Cancel: {{.CancelMessage}}.</p>{{end}}
+</section>
+{{else}}
+<p class="empty">No action has run since rein ui started.</p>
+{{end}}
+{{end}}

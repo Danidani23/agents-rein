@@ -5,9 +5,9 @@
 // run: once in the address the browser opened, which trades it for a
 // cookie, then as that cookie. A request that changes something must also
 // come from the page's own origin. So no other page in the browser and no
-// other machine reaches it. This version reads: it takes no machine lock
-// and changes nothing. The decision is
-// docs/decisions/2026-10-27_rein-ui-a-gateway-served-to-the-browser.md.
+// other machine reaches it. Its pages read without the machine lock; each
+// action it runs takes the lock for itself, one action at a time. The
+// decision is docs/decisions/2026-10-27_rein-ui-a-gateway-served-to-the-browser.md.
 package web
 
 import (
@@ -31,21 +31,31 @@ import (
 var assets embed.FS
 
 // Page is rein ui for one run: the port it listens on, the token the
-// opened address carries, and the routes behind the guard.
+// opened address carries, the routes behind the guard, and the actions it
+// runs.
 type Page struct {
 	listener net.Listener
 	token    string
 	handler  http.Handler
+	actions  *runner
 }
 
 // Open listens on a free port of 127.0.0.1 and makes the token of this run.
-// version is what rein version prints.
-func Open(orchestrator orchestration.Orchestrator, version string) (*Page, error) {
+// version is what rein version prints; interrupt is what Cancel does.
+func Open(orchestrator orchestration.Orchestrator, version string, interrupt Interrupt) (*Page, error) {
 	machineTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/machine.html")
 	if err != nil {
 		return nil, err
 	}
 	projectsTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/projects.html")
+	if err != nil {
+		return nil, err
+	}
+	actionTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/action.html")
+	if err != nil {
+		return nil, err
+	}
+	runTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/run.html")
 	if err != nil {
 		return nil, err
 	}
@@ -56,9 +66,17 @@ func Open(orchestrator orchestration.Orchestrator, version string) (*Page, error
 	token := rand.Text()
 	routes := http.NewServeMux()
 	routes.Handle("GET /static/", http.FileServerFS(assets))
-	routes.Handle("GET /{$}", machinePage(orchestrator, version, machineTemplate))
-	routes.Handle("GET /projects", projectsPage(orchestrator, version, projectsTemplate))
-	return &Page{listener: listener, token: token, handler: guard(routes, listener.Addr().String(), token)}, nil
+	actions := &runner{interrupt: interrupt}
+	routes.Handle("GET /{$}", machinePage(orchestrator, version, actions, machineTemplate))
+	routes.Handle("GET /projects", projectsPage(orchestrator, version, actions, projectsTemplate))
+	routes.Handle("GET /actions/sync", syncPreview(orchestrator, version, actions, actionTemplate))
+	routes.Handle("POST /actions/sync", syncAction(orchestrator, version, actions, actionTemplate))
+	routes.Handle("GET /actions/reset-project", resetPreview(orchestrator, version, actions, actionTemplate))
+	routes.Handle("POST /actions/reset-project", resetAction(orchestrator, version, actions, actionTemplate))
+	routes.Handle("GET /run", runPage(orchestrator, version, actions, runTemplate))
+	routes.Handle("GET /run/events", runEvents(actions))
+	routes.Handle("POST /run/cancel", cancelRun(actions))
+	return &Page{listener: listener, token: token, handler: guard(routes, listener.Addr().String(), token), actions: actions}, nil
 }
 
 // Address is what the browser opens: the page's root with the token, which

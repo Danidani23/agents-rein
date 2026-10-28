@@ -17,14 +17,14 @@ import (
 // agents, what rein placed in the agent's home, the connected
 // organisations, the project clones and the proposals waiting. It runs
 // without a login, as status does.
-func machinePage(orchestrator orchestration.Orchestrator, version string, page *template.Template) http.Handler {
+func machinePage(orchestrator orchestration.Orchestrator, version string, actions *runner, page *template.Template) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		report, err := orchestrator.Status()
 		if err != nil {
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		render(writer, page, machineViewOf(report, frameOf(request, report, version, "This machine", "machine")), http.StatusOK)
+		render(writer, page, machineViewOf(report, frameOf(request, report, version, "This machine", "machine", actions)), http.StatusOK)
 	})
 }
 

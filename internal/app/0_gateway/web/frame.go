@@ -30,6 +30,10 @@ type frame struct {
 	// Problem says why the address asks for something this machine does
 	// not have.
 	Problem string
+	// RunName is the action running now or run last, RunActive whether it
+	// still runs; the menu leads to it.
+	RunName   string
+	RunActive bool
 	// organization is the chosen organisation, userLogin the chosen login,
 	// query the address's own.
 	organization machine.OrganizationRef
@@ -72,9 +76,13 @@ var templateFunctions = template.FuncMap{
 // frameOf reads the choice from the request: the organisation named, or
 // the active one; the login named, or the one that acts on the
 // organisation.
-func frameOf(request *http.Request, report orchestration.StatusReport, version string, title string, current string) frame {
+func frameOf(request *http.Request, report orchestration.StatusReport, version string, title string, current string, actions *runner) frame {
 	query := request.URL.Query()
 	shown := frame{Title: title, Current: current, Version: version, query: query}
+	latest := actions.latest()
+	if latest != nil {
+		shown.RunName, shown.RunActive = latest.Name, !latest.isFinished()
+	}
 	carried := carry(query, "org", "user")
 	shown.MachineLink = link("/", carried)
 	shown.ProjectsLink = link("/projects", carried)

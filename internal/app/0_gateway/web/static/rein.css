@@ -11,6 +11,8 @@
   --warning: #9a5b00;
   --warning-soft: #fff4d5;
   --code-background: #f0f0f3;
+  --done: #18794e;
+  --failed: #ce2c31;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -25,6 +27,8 @@
     --warning: #ffca16;
     --warning-soft: #302008;
     --code-background: #212225;
+    --done: #3dd68c;
+    --failed: #ff9592;
   }
 }
 
@@ -393,6 +397,143 @@ a:hover {
 .problems {
   margin: 0;
   padding-left: 18px;
+}
+
+/* Actions: the preview with its form, the buttons, and the run with its
+   steps. */
+
+.lead {
+  margin: 0 0 12px;
+}
+
+.items {
+  margin: 0 0 16px;
+  padding-left: 18px;
+}
+
+.confirm {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.option {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+button,
+.button {
+  display: inline-block;
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--surface);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+button.secondary,
+.button.secondary {
+  background: var(--surface);
+  color: var(--accent);
+  border-color: var(--border);
+}
+
+.button:hover {
+  text-decoration: none;
+}
+
+.clone-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+}
+
+.clone-head p {
+  margin: 0;
+}
+
+.steps,
+.outcome {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps li {
+  padding: 3px 0;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.steps .note {
+  margin-left: 8px;
+}
+
+.steps .detail {
+  padding-left: 20px;
+}
+
+.steps .running {
+  color: var(--muted);
+}
+
+.steps .done {
+  color: var(--done);
+}
+
+.steps .failed {
+  color: var(--failed);
+}
+
+.steps .undone {
+  color: var(--warning);
+}
+
+.headline {
+  margin: 16px 0 8px;
+  font-weight: 600;
+}
+
+.outcome li {
+  padding: 2px 0;
+}
+
+.next {
+  margin: 12px 0 0;
+  font-weight: 600;
+}
+
+.run-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
 }
 
 .warning {

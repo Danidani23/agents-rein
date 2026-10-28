@@ -16,11 +16,12 @@ func newUICommand(environment *commandEnvironment) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "ui",
 		Short: "Show what rein knows on a page in your browser, served from this machine",
-		Long: "ui serves a page from this machine and opens it in your browser: what rein status shows of\n" +
-			"the machine, the logins, the agents, the connected organisations, the project clones and\n" +
-			"the proposals waiting. It listens on 127.0.0.1 only, on a free port. The address it prints\n" +
-			"carries a token made for this run, which the first visit trades for a cookie; a request\n" +
-			"without it, or naming another host, is refused. It changes nothing and runs until Ctrl-C.",
+		Long: "ui serves pages from this machine and opens them in your browser: what rein status shows of\n" +
+			"the machine, and each project with what it resolves and why, the files sync wrote, and Sync\n" +
+			"and Reset project, which run as the commands do, one at a time. It listens on 127.0.0.1 only,\n" +
+			"on a free port. The address it prints carries a token made for this run, which the first\n" +
+			"visit trades for a cookie; a request without it, or naming another host, is refused. It runs\n" +
+			"until Ctrl-C.",
 		Example: "  rein ui\n  rein ui --no-browser",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
@@ -28,7 +29,7 @@ func newUICommand(environment *commandEnvironment) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			page, err := web.Open(orchestrator, version.String())
+			page, err := web.Open(orchestrator, version.String(), web.Interrupt{Stop: execute.Interrupt, Running: execute.Running})
 			if err != nil {
 				return err
 			}

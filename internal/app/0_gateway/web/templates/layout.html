@@ -7,6 +7,7 @@
 <title>{{.Title}} · Agents Rein</title>
 <link rel="icon" type="image/svg+xml" href="/static/rein-mark.svg">
 <link rel="stylesheet" href="/static/rein.css">
+<script src="/static/rein.js" defer></script>
 </head>
 <body>
 <header class="bar">
@@ -26,6 +27,7 @@
   <nav class="menu" aria-label="Pages">
     <a href="{{.MachineLink}}"{{if eq .Current "machine"}} aria-current="page"{{end}}>This machine</a>
     <a href="{{.ProjectsLink}}"{{if eq .Current "projects"}} aria-current="page"{{end}}>Projects</a>
+    {{if .RunName}}<a href="/run" class="run-link"{{if eq .Current "run"}} aria-current="page"{{end}}>{{if .RunActive}}<span class="dot" aria-label="running"></span>{{end}}{{.RunName}}</a>{{end}}
     <span class="version">{{.Version}}</span>
   </nav>
   <main>
