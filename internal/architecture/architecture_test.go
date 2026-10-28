@@ -32,7 +32,7 @@ var allowed = map[string][]string{
 	"ports":           libraries,
 	"1_orchestration": {"2_services", "ports"},
 	"adapters":        append([]string{"ports", "adapters/execute"}, libraries...),
-	"0_gateway":       append([]string{"ports", "1_orchestration", "0_gateway/mcp", "adapters/terminal", "adapters/execute", "version"}, libraries...),
+	"0_gateway":       append([]string{"ports", "1_orchestration", "0_gateway/mcp", "0_gateway/web", "adapters/terminal", "adapters/execute", "version"}, libraries...),
 	"version":         {},
 }
 

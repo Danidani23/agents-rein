@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -506,5 +507,39 @@ func TestMCPOverStandardStreams(t *testing.T) {
 	_ = stdinWriter.Close()
 	if code := <-done; code != cli.ExitWorked {
 		t.Fatalf("mcp ended with %d", code)
+	}
+}
+
+// TestUIServesTheMachinePage starts rein ui the way a developer does, minus
+// the browser, follows the address it prints with a client that keeps
+// cookies, and reads the machine's page. The server runs until the test
+// binary ends, as it runs until Ctrl-C.
+func TestUIServesTheMachinePage(t *testing.T) {
+	isolate(t, "Danidani23")
+	stdoutReader, stdoutWriter := io.Pipe()
+	go func() {
+		var errOut bytes.Buffer
+		code := cli.Run([]string{"ui", "--no-browser"}, strings.NewReader(""), stdoutWriter, &errOut, wire)
+		_ = stdoutWriter.CloseWithError(fmt.Errorf("rein ui ended with %d: %s", code, errOut.String()))
+	}()
+	scanner := bufio.NewScanner(stdoutReader)
+	if !scanner.Scan() {
+		t.Fatalf("rein ui printed nothing: %v", scanner.Err())
+	}
+	printed := scanner.Text()
+	go func() { _, _ = io.Copy(io.Discard, stdoutReader) }()
+	address := printed[strings.Index(printed, "http://"):]
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("jar: %v", err)
+	}
+	response, err := (&http.Client{Jar: jar}).Get(address)
+	if err != nil {
+		t.Fatalf("get %s: %v", address, err)
+	}
+	defer response.Body.Close()
+	body, _ := io.ReadAll(response.Body)
+	if response.StatusCode != http.StatusOK || !strings.Contains(string(body), "Danidani23") || strings.Contains(response.Request.URL.String(), "token=") {
+		t.Fatalf("printed %q, page at %s: status %d body %q", printed, response.Request.URL, response.StatusCode, body)
 	}
 }

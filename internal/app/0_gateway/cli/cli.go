@@ -342,6 +342,6 @@ func newRootCommand(environment *commandEnvironment) *cobra.Command {
 	root.SetOut(environment.out)
 	root.SetErr(environment.errOut)
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newStatusCommand(environment), newLoginCommand(environment), newLogoutCommand(environment), newGitCredentialCommand(environment), newOrgCommand(environment), newTeamCommand(environment), newProjectCommand(environment), newLabelCommand(environment), newDeclarationCommand(environment), newUpdateCommand(environment), newInitCommand(environment), newSyncCommand(environment), newDistillCommand(environment), newProposeCommand(environment), newResolveCommand(environment), newKeyCommand(environment), newLintCommand(environment), newMCPCommand(environment), newResetCommand(environment), newVersionCommand(environment))
+	root.AddCommand(newStatusCommand(environment), newLoginCommand(environment), newLogoutCommand(environment), newGitCredentialCommand(environment), newOrgCommand(environment), newTeamCommand(environment), newProjectCommand(environment), newLabelCommand(environment), newDeclarationCommand(environment), newUpdateCommand(environment), newInitCommand(environment), newSyncCommand(environment), newDistillCommand(environment), newProposeCommand(environment), newResolveCommand(environment), newKeyCommand(environment), newLintCommand(environment), newMCPCommand(environment), newUICommand(environment), newResetCommand(environment), newVersionCommand(environment))
 	return root
 }

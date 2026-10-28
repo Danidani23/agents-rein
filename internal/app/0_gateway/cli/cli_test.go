@@ -1232,3 +1232,21 @@ func TestTeamAndProjectListAndTeamEdit(t *testing.T) {
 		t.Fatalf("no change: code %d err %q", code, errOut)
 	}
 }
+
+func TestTheBrowserOpensWithTheSystemsOwnCommand(t *testing.T) {
+	for _, system := range []struct {
+		operatingSystem string
+		expected        string
+	}{
+		{"darwin", "open http://127.0.0.1:4000/?token=secret"},
+		{"windows", "rundll32 url.dll,FileProtocolHandler http://127.0.0.1:4000/?token=secret"},
+		{"linux", "xdg-open http://127.0.0.1:4000/?token=secret"},
+		{"freebsd", "xdg-open http://127.0.0.1:4000/?token=secret"},
+	} {
+		program, arguments := browserCommand(system.operatingSystem, "http://127.0.0.1:4000/?token=secret")
+		line := strings.Join(append([]string{program}, arguments...), " ")
+		if line != system.expected {
+			t.Errorf("%s: %q, expected %q", system.operatingSystem, line, system.expected)
+		}
+	}
+}

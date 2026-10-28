@@ -1,0 +1,109 @@
+{{define "content"}}
+{{if not .Logins}}
+<p class="notice">Not logged in. Run <code>rein login</code> in a terminal; it opens the GitHub device flow.</p>
+{{end}}
+
+<section>
+  <h2>Logins and agents</h2>
+  <dl class="facts">
+    <dt>Logins</dt>
+    <dd>{{range $index, $login := .Logins}}{{if $index}}, {{end}}{{$login}}{{else}}<span class="muted">none</span>{{end}}</dd>
+    <dt>Agents</dt>
+    <dd>{{range $index, $agent := .Agents}}{{if $index}}, {{end}}{{$agent}}{{else}}<span class="muted">none found; this build writes for claude-code</span>{{end}}</dd>
+    <dt>rein's home</dt>
+    <dd><code>{{.Home}}</code></dd>
+    <dt>In your agent's home</dt>
+    <dd>{{.PlacedFiles}} {{if eq .PlacedFiles 1}}file{{else}}files{{end}} placed by rein</dd>
+  </dl>
+  {{if .MissingPlacements}}
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Missing</th><th>Pointed at</th></tr></thead>
+      <tbody>
+      {{range .MissingPlacements}}<tr><td><code>{{.Path}}</code></td><td><code>{{.Target}}</code></td></tr>{{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted"><code>rein reset machine</code> removes the dangling links.</p>
+  {{end}}
+</section>
+
+<section>
+  <h2>Organisations</h2>
+  {{if .Organizations}}
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Organisation</th><th>Repository</th><th>Acts as</th></tr></thead>
+      <tbody>
+      {{range .Organizations}}
+      <tr>
+        <td>{{.Slug}}{{if .Active}}<span class="pill">active</span>{{end}}</td>
+        <td>{{if .Link}}<a href="{{.Link}}" target="_blank" rel="noopener noreferrer">{{.Repository}}</a>{{else}}<code>{{.Repository}}</code>{{end}}</td>
+        <td>{{.Login}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">None connected. <code>rein org create</code> creates one, <code>rein org connect &lt;remote&gt;</code> connects one that exists.</p>
+  {{end}}
+</section>
+
+<section>
+  <h2>Projects</h2>
+  {{if .Projects}}
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Project</th><th>Organisation</th><th>Folder</th><th>Sync</th><th>Snapshot</th></tr></thead>
+      <tbody>
+      {{range .Projects}}
+      <tr>
+        <td>{{.Project}}</td>
+        <td>{{.Organization}}</td>
+        <td><code>{{.Folder}}</code></td>
+        <td>
+          {{if eq .SyncedFiles 0}}<span class="muted">never synced</span>{{else}}<span class="nowrap">{{.SyncedFiles}} {{if eq .SyncedFiles 1}}file{{else}}files{{end}}</span>{{if .LastSync}} <span class="muted nowrap">· {{.LastSync}}</span>{{end}}{{end}}
+          {{if .EditedByHand}}<div class="warning">{{.EditedByHand}} edited by hand</div>{{end}}
+          {{if .Missing}}<div class="warning">{{.Missing}} missing</div>{{end}}
+        </td>
+        <td>{{if .PullRequest}}{{.Snapshot}} <a class="nowrap" href="{{.PullRequest}}" target="_blank" rel="noopener noreferrer">{{.PullRequestLabel}}</a>{{else if .Snapshot}}{{.Snapshot}}{{else}}<span class="muted">none</span>{{end}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">No project clone initialised on this machine. <code>rein init</code> in a clone puts it under rein.</p>
+  {{end}}
+</section>
+
+{{if .Pending}}
+<section>
+  <h2>Proposals waiting</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Level</th><th>Candidates</th><th>Distilled</th><th>Folder</th></tr></thead>
+      <tbody>
+      {{range .Pending}}<tr><td>{{.Level}}</td><td>{{.Candidates}}</td><td>{{.DistilledAt}}</td><td><code>{{.Folder}}</code></td></tr>{{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted"><code>rein propose</code> sends one, after you have reviewed its candidates.</p>
+</section>
+{{end}}
+
+{{if .Imports}}
+<section>
+  <h2>Imports</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Hash</th><th>Origin</th><th>Path</th></tr></thead>
+      <tbody>
+      {{range .Imports}}<tr><td><code>{{.Hash}}</code></td><td>{{.Origin}}</td><td><code>{{.Path}}</code></td></tr>{{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{end}}
+{{end}}

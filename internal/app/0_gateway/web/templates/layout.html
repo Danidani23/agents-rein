@@ -1,0 +1,34 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{.Title}} · Agents Rein</title>
+<link rel="icon" type="image/svg+xml" href="/static/rein-mark.svg">
+<link rel="stylesheet" href="/static/rein.css">
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="/static/rein-mark-dark.svg">
+      <img src="/static/rein-mark.svg" alt="" width="28" height="28">
+    </picture>
+    <span>Agents Rein</span>
+  </a>
+</header>
+<div class="shell">
+  <nav class="menu" aria-label="Pages">
+    <a href="/"{{if eq .Current "machine"}} aria-current="page"{{end}}>This machine</a>
+    <span class="version">{{.Version}}</span>
+  </nav>
+  <main>
+    <h1>{{.Title}}</h1>
+{{template "content" .}}
+    <p class="page-note">Served from this machine at 127.0.0.1 by <code>rein ui</code>; Ctrl-C in its terminal stops it.</p>
+  </main>
+</div>
+</body>
+</html>
+{{end}}

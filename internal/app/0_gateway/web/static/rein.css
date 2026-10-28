@@ -1,0 +1,314 @@
+/* The one stylesheet of rein ui: light and dark from the system's setting. */
+
+:root {
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1c2024;
+  --muted: #60646c;
+  --border: #e0e1e6;
+  --accent: #3358d4;
+  --accent-soft: #e6edfe;
+  --warning: #9a5b00;
+  --warning-soft: #fff4d5;
+  --code-background: #f0f0f3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #111113;
+    --surface: #18191b;
+    --text: #edeef0;
+    --muted: #b0b4ba;
+    --border: #2e3135;
+    --accent: #9eb1ff;
+    --accent-soft: #1d2e62;
+    --warning: #ffca16;
+    --warning-soft: #302008;
+    --code-background: #212225;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* The top bar: the logo and the name on the left. */
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-weight: 650;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.brand:hover {
+  text-decoration: none;
+}
+
+.brand img {
+  display: block;
+}
+
+/* The menu on the left and the page beside it. */
+
+.shell {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: calc(100vh - 49px);
+}
+
+.menu {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: calc(100vh - 49px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 20px 12px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.menu a {
+  padding: 7px 12px;
+  border-radius: 7px;
+  color: var(--text);
+}
+
+.menu a:hover {
+  background: var(--code-background);
+  text-decoration: none;
+}
+
+.menu a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.menu .version {
+  margin-top: auto;
+  padding: 12px 12px 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+main {
+  width: 100%;
+  max-width: 1120px;
+  padding: 24px 32px 32px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-content: start;
+}
+
+h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  min-width: 0;
+}
+
+h2 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 24px;
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--muted);
+  padding: 6px 16px 6px 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+td {
+  padding: 8px 16px 8px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+code {
+  font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--code-background);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+td code {
+  background: none;
+  padding: 0;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.pill {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.warning {
+  color: var(--warning);
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.notice {
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--warning-soft);
+}
+
+.empty,
+.muted {
+  color: var(--muted);
+}
+
+.empty {
+  margin: 0;
+}
+
+section > p.muted {
+  margin: 12px 0 0;
+}
+
+.page-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* On a narrow screen the menu becomes a row under the top bar. */
+
+@media (max-width: 760px) {
+  .bar {
+    padding: 10px 16px;
+  }
+
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .menu {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    padding: 8px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .menu a {
+    white-space: nowrap;
+  }
+
+  .menu .version {
+    margin: 0 0 0 auto;
+    padding: 0 4px;
+    white-space: nowrap;
+  }
+
+  main {
+    padding: 16px;
+  }
+
+  section {
+    padding: 14px 16px;
+  }
+
+  .facts {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .facts dd {
+    margin-bottom: 8px;
+  }
+}
