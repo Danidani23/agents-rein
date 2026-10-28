@@ -356,6 +356,25 @@ committed instead of gitignored (D4).
   JetBrains' 2026 survey ([findings](../harness-management.md#which-agents-developers-use)).
   Google's agents and OpenCode follow them. Each is designed on its item and approved before
   it is built.
+- ✅ **D47 — A check the operating system schedules tells what changed between sessions.**
+  Decided 2026-10-28 by the user (Q19 S1, Q20 M1, Q21 a), after three gaps they named: a long
+  session receives a change only at `/clear`, the session-start sync tells nobody, and rein's
+  checks wait for a session. Every minute the system's scheduler (launchd, a systemd user
+  timer, Task Scheduler) starts a short `rein` run. It compares the clones' rein folders and
+  the agent's home with the ledger, asks every few minutes whether each organisation's main
+  branch moved, syncs only the projects the developer chose, and tells each new finding once
+  as a notification of the operating system. Automatic sync is off until the developer turns
+  it on, for every project or chosen ones, from the CLI or the page. Nothing calls the run,
+  so it is not the daemon D2 turned down; it amends D2. The
+  [ADR](../decisions/2026-10-28_a-scheduled-check-between-sessions.md). P5.
+- ✅ **D48 — The automatic-sync setting is kept in the machine's state, per project clone.**
+  Decided 2026-10-28 by the user (Q22 a). It concerns this machine's clones, and a change
+  applies at once. Turned down: the developer's user level in the organisation's repository,
+  which would follow them to every machine but make each change a pull request, at a level
+  that holds the agent's settings, not rein's. P5.2.
+- ✅ **D49 — The check is turned on and off by a command the developer runs.** Decided
+  2026-10-28 by the user (Q23 a). rein writes nothing into the system's scheduler unasked.
+  Turned down: turning it on at `rein login` or the first `rein init`. P5.3.
 - ✅ **D46 — The page offers every command a person runs, through one pattern.** Decided
   2026-10-27 by the user (Q14 R1, Q15, Q16 G2). Each command becomes a form asking what the
   CLI asks, a preview of what will change, a confirmation, its steps as they run with a
@@ -986,6 +1005,7 @@ flowchart TD
   P1 --> P2[P2 build the CLI]
   P2 --> P3[P3 pilot]
   P2 --> P4[P4 rein ui in the browser]
+  P4 --> P5[P5 the scheduled check]
 ```
 
 ## How the tool works
@@ -1958,7 +1978,8 @@ from that project's snapshot.
 D45 and its [ADR](../decisions/2026-10-27_rein-ui-a-gateway-served-to-the-browser.md); D46 for
 the commands the page offers. Gate per item: `task rein:check` green, and the item's pages
 checked by you in the browser before its commit. Order of work, by the user (Q15): P4.1, P4.2,
-P4.3, P4.6, P4.4, P4.5, P4.7, P4.8; the items below stand in that order.
+P4.3, P4.6, P4.4, P4.5, P4.7, P4.8; the items below stand in that order. The phase P5 comes
+between P4.3 and P4.6 (Q21 a).
 
 - ✅ **P4.1 — `rein ui` serves the machine's page in the browser, guarded.** [EXECUTED] A new
   gateway `internal/app/0_gateway/web`, started by the CLI's `ui` command; the gateway table
@@ -1978,9 +1999,9 @@ P4.3, P4.6, P4.4, P4.5, P4.7, P4.8; the items below stand in that order.
   the logo and the full name, Agents Rein, top left, a menu on the left with This machine,
   and the version at the foot of the menu. The two dropdowns of the top bar arrive with
   P4.2, which gives them something to switch.
-- 🟢 **P4.2 — The organisation and user dropdowns, and the Projects page.** [PENDING] Rewritten
-  2026-10-27 by the user (Q11 C1, Q12 E2, Q13); the views it held before are P4.5; Explore
-  project renamed Projects (D46). Reads only, without the lock, behind the login gate:
+- ✅ **P4.2 — The organisation and user dropdowns, and the Projects page.** [EXECUTED]
+  Rewritten 2026-10-27 by the user (Q11 C1, Q12 E2, Q13); the views it held before are P4.5;
+  Explore project renamed Projects (D46). Reads only, without the lock, behind the login gate:
   - in the top bar, the connected organisations and the logins on this machine, each a menu
     of links. The choice is carried in the URL and changes only what is shown, never the
     active organisation or the login that acts;
@@ -1995,6 +2016,16 @@ P4.3, P4.6, P4.4, P4.5, P4.7, P4.8; the items below stand in that order.
     always the login that connected the organisation;
   - for a project cloned here, the files `sync` wrote, each as written, edited by hand or
     missing.
+
+  Built 2026-10-28 and checked by the user in the browser, detailed feedback to follow.
+  Deviations: a menu with one entry
+  shows as plain text; an address naming an organisation, a login or a project this machine
+  does not have answers 404 with a notice; the page opens on the first project cloned here,
+  else the first project; the projects on This machine lead to their page. A rule carries no
+  description, so a rule shows its id, a skill the description of its `SKILL.md`, and a hook,
+  permission set or tool server its `description`; a file sync wrote from no declaration shows
+  the ledger's `generated`. `ResolveProject` takes the login; `rein resolve` and the MCP tool
+  pass none and keep the login that acts. The files come from a new query, `SyncedFiles`.
 - 🟢 **P4.3 — The way a command runs from the page; sync, reset and propose.** [PENDING]
   Extended 2026-10-27 (D46) with the pattern every later action follows and with `reset
   project`.
@@ -2042,6 +2073,30 @@ P4.3, P4.6, P4.4, P4.5, P4.7, P4.8; the items below stand in that order.
   asks for `rein ui` to be restarted, since it replaces the program serving the page;
   `reset machine`; `key remove`. `key set` stays in the terminal: the key goes from standard
   input to the keychain and never into a page.
+
+## P5 — The scheduled check
+
+D47 and its [ADR](../decisions/2026-10-28_a-scheduled-check-between-sessions.md). Built after
+P4.3, whose Sync the notifications lead to; the rest of P4 follows (Q21 a). Gate per item:
+`task rein:check` green; the scheduler and the notifications checked by you on your machine
+before the commit.
+
+- 🟢 **P5.1 — One run of the check.** [PENDING] The command the scheduler starts, named when
+  the item is designed. It compares the clones' rein folders and the agent's home with the
+  ledger and the placements, time and size first and a hash only for what changed; every few
+  minutes it asks whether each organisation's main branch moved; it syncs the projects set to
+  automatic sync, under the machine lock as any sync; it records what it found in rein's home
+  so each finding is told once, and prints it when run by hand. Tested over the fakes.
+- 🟢 **P5.2 — The automatic-sync setting, from the CLI and the page.** [PENDING] Off, every
+  project, or chosen projects (Q20 M1), kept in the machine's state per project clone (D48).
+- 🟢 **P5.3 — Turning the check on and off.** [PENDING] By a command the developer runs (D49): a
+  launchd agent with `StartInterval` on macOS, a systemd user timer on Linux, a Task Scheduler
+  task on Windows, written and removed by rein; `rein reset machine` removes it too.
+- 🟢 **P5.4 — The notifications.** [PENDING] `display notification` on macOS; the Linux and
+  Windows mechanisms chosen, with their sources, when the item is designed. Each says what
+  synced and that `/clear` loads the rest in an open session, or what changed in which folder.
+- 🟢 **P5.5 — The findings in the page.** [PENDING] This machine and the Projects page show
+  what the check found and since when, and the setting of P5.2.
 
 ## Open points
 
@@ -2632,3 +2687,16 @@ writes is read from the next session on, not in the same one.
   through a folder browser (Q16 G2). P4.2 renamed to the Projects page, P4.3 extended with
   the action pattern and `reset project`, P4.5 with `declaration edit`, `remove` and `lint`;
   P4.6 to P4.8 added. Left for you: the two commits.
+- (2026-10-28) P4.2 built, tests first: the orchestration tests failed to build without the
+  login parameter and `SyncedFiles`; the page tests' first run stopped on the fixture, so they
+  were run once more with the route taken out, and all five failed. Two faults found on the
+  way: the machine view's own `Organizations` hid the frame's menu, and the fixture lacked the
+  team rule its "replaces" line expects. Checked against this machine's state through the
+  built binary in headless Chrome: agents-rein's tree and its 17 files, the project menu open,
+  wide and at 500 pixels, and a 404 for an unknown project. Gate: `task rein:check` green.
+  The scheduled check discussed (K1 to K4, Q18 to Q21): D47 and its
+  [ADR](../decisions/2026-10-28_a-scheduled-check-between-sessions.md), the phase P5; D48 and
+  D49 decided by the user (Q22 a, Q23 a), which makes P5.2 and P5.3 ready. Left for you: the
+  Projects page checked in the browser, then the commits.
+- (2026-10-28) P4.2 checked by the user in the browser and done; their detailed feedback
+  follows as its own change. Left for you: the commits.
