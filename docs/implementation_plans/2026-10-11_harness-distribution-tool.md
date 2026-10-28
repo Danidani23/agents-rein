@@ -356,6 +356,15 @@ committed instead of gitignored (D4).
   JetBrains' 2026 survey ([findings](../harness-management.md#which-agents-developers-use)).
   Google's agents and OpenCode follow them. Each is designed on its item and approved before
   it is built.
+- ✅ **D46 — The page offers every command a person runs, through one pattern.** Decided
+  2026-10-27 by the user (Q14 R1, Q15, Q16 G2). Each command becomes a form asking what the
+  CLI asks, a preview of what will change, a confirmation, its steps as they run with a
+  Cancel that undoes, and the result. Left out are the commands no person runs: `mcp`, `ui`,
+  `git-credential` and `sync --hook`. `key set` stays in the terminal, so a key never enters
+  a page. The commands are grouped by page: This machine, Projects, Organisation,
+  Declarations, Proposals. Init finds its folder through a folder browser rein serves, since
+  a browser does not tell a page where a chosen folder lives. The verb for undoing `init` is
+  `reset project` (D36). P4.2 to P4.8.
 - ✅ **D45 — `rein ui`: a third gateway in the binary, served to the browser.** Decided
   2026-10-27 by the user (Q6, Q8, Q9 B1). Members with rein see one organisation at a time,
   switch between the connected ones, and run commands from the page, resolving a
@@ -1946,11 +1955,12 @@ from that project's snapshot.
 
 ## P4 — `rein ui`
 
-D45 and its [ADR](../decisions/2026-10-27_rein-ui-a-gateway-served-to-the-browser.md). Gate per
-item: `task rein:check` green, and the item's pages checked by you in the browser before its
-commit.
+D45 and its [ADR](../decisions/2026-10-27_rein-ui-a-gateway-served-to-the-browser.md); D46 for
+the commands the page offers. Gate per item: `task rein:check` green, and the item's pages
+checked by you in the browser before its commit. Order of work, by the user (Q15): P4.1, P4.2,
+P4.3, P4.6, P4.4, P4.5, P4.7, P4.8; the items below stand in that order.
 
-- 🟢 **P4.1 — `rein ui` serves the machine's page in the browser, guarded.** [PENDING] A new
+- ✅ **P4.1 — `rein ui` serves the machine's page in the browser, guarded.** [EXECUTED] A new
   gateway `internal/app/0_gateway/web`, started by the CLI's `ui` command; the gateway table
   of [architecture.md](../architecture.md) and the architecture test's `allowed` map gain its
   row. It listens on 127.0.0.1 on a free port, prints the URL and opens it with the operating
@@ -1958,27 +1968,80 @@ commit.
   `Host` and `Origin` checks, follow the ADR; Ctrl+C stops it. One page: the machine, from
   `Status`. Templates, script and stylesheet are embedded; no module is added. Tests with
   `httptest` over the fakes, the guards among them.
-- 🟢 **P4.2 — The organisation in the page.** [PENDING] Reads only, without the lock and
-  behind the login gate where the command has one:
-  - the connected organisations, one shown at a time and chosen by its slug in the URL, the
-    active one first, the machine's active organisation unchanged;
-  - its teams and projects (`DescribeOrganization`);
-  - its declarations by level (`ListDeclarations`, `DescribeDeclaration`);
-  - what one project resolves and from which level (`ResolveProject`);
-  - the reach of one declaration: the organisation's tree drawn as SVG by the gateway, with
-    the projects it reaches lit (`resolve.Reaches`);
-  - the pending proposals (`PendingProposals`).
-- 🟢 **P4.3 — Sync, resolve and propose from the page.** [PENDING]
-  - Sync of one project clone or of all, as `sync --all` does (`SyncClone`).
-  - A distillation's candidates, with their include, level and conflict. A new operation
-    writes them into the candidate files, then `ProposeDeclarations` runs as today and
-    refuses an unresolved conflict as today.
+  Built 2026-10-27 and checked by the user in the browser (Q17). Deviations: `--no-browser` prints
+  the address without opening it, for a machine without a browser, and lets the end-to-end
+  test run without one; no script yet, since nothing on the
+  page needs one before P4.3; the token is 128 bits from `crypto/rand.Text`, the cookie named
+  after the port so two runs keep apart; Ctrl-C ends the run with exit code 130, as it ends
+  every command that is not running a program.
+  Amended 2026-10-27 by the user (Q13) after the first look: every page gets a frame, with
+  the logo and the full name, Agents Rein, top left, a menu on the left with This machine,
+  and the version at the foot of the menu. The two dropdowns of the top bar arrive with
+  P4.2, which gives them something to switch.
+- 🟢 **P4.2 — The organisation and user dropdowns, and the Projects page.** [PENDING] Rewritten
+  2026-10-27 by the user (Q11 C1, Q12 E2, Q13); the views it held before are P4.5; Explore
+  project renamed Projects (D46). Reads only, without the lock, behind the login gate:
+  - in the top bar, the connected organisations and the logins on this machine, each a menu
+    of links. The choice is carried in the URL and changes only what is shown, never the
+    active organisation or the login that acts;
+  - Projects in the left menu, one project at a time, chosen from a dropdown of every project
+    of the chosen organisation's repository, those cloned here marked; its teams and labels;
+    how many settings each level gives, how many a skip list took out, and the problems that
+    would make `sync` refuse;
+  - the resolution as a tree, level, then kind, then setting, each saying why it applies:
+    its level's tie to the project, the labels that selected it, required or default, and
+    what it replaced; then the skipped settings, each with its skip list and exception;
+  - the user level is the chosen login's: `ResolveProject` takes the user, which today is
+    always the login that connected the organisation;
+  - for a project cloned here, the files `sync` wrote, each as written, edited by hand or
+    missing.
+- 🟢 **P4.3 — The way a command runs from the page; sync, reset and propose.** [PENDING]
+  Extended 2026-10-27 (D46) with the pattern every later action follows and with `reset
+  project`.
+  - The pattern: a form asks what the CLI asks; a preview says what will change, the summary
+    the CLI prints before its confirmation; a confirmation; the steps as they run, with a
+    Cancel that does what Ctrl-C does, so the workflow undoes what it did; the result, with
+    the next step named. One action at a time, as the machine lock allows one writer.
   - Each action passes the login gate and takes the machine lock for itself alone, with the
     CLI's wait.
-  - Progress reaches the page as server-sent events built from `ProgressEvent`.
-- 🟢 **P4.4 — Distill from the page.** [PENDING] `DistillHarness`, with the distiller's
-  progress shown on the page over its 5 to 10 minutes. The lock is held for the run, as the
-  CLI holds it.
+  - Progress reaches the page as server-sent events built from `ProgressEvent`, through the
+    page's one hand-written script, which also drives Cancel and the dropdowns.
+  - On the Projects page, for a project cloned here: sync of it, or of every clone as
+    `sync --all` does (`SyncClone`); reset of it, as `rein reset project` does
+    (`RestoreProject`); and, when a proposal waits, its candidates with their include, level
+    and conflict, which a new operation writes into the candidate files before
+    `ProposeDeclarations` runs as today and refuses an unresolved conflict as today.
+- 🟢 **P4.6 — Init from the page.** [PENDING] Added 2026-10-27 (D46, Q15, Q16 G2), built
+  before P4.4. "Add a folder…" at the end of the Projects dropdown opens a folder browser
+  served by rein over the home folder: folder names only, never a file's content, the git
+  repositories marked and those rein already manages set apart, since a browser never tells
+  a page where a chosen folder lives
+  ([MDN](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input/file)).
+  For the chosen repository, a form picks its project record or creates one, as `rein init`
+  asks; then `InitializeProject` moves the harness into a snapshot and commits the move-out
+  as it does from the terminal.
+- 🟢 **P4.4 — Distill from the page.** [PENDING] `DistillHarness`, offered on the Projects page
+  when the project's snapshot is not distilled yet, with the distiller's progress shown on
+  the page over its 5 to 10 minutes. The lock is held for the run, as the CLI holds it.
+- 🟢 **P4.5 — The organisation's declarations, their reach and its proposals in the page.**
+  [PENDING] Split from P4.2 on 2026-10-27; extended the same day (D46) with
+  `declaration edit` and `remove` and with `lint`. Reads behind the login gate where the
+  command has one; each change through the pattern of P4.3:
+  - its teams and projects (`DescribeOrganization`);
+  - its declarations by level (`ListDeclarations`, `DescribeDeclaration`), each editable or
+    removable as `rein declaration edit` and `remove` do, a pull request each;
+  - the reach of one declaration: the organisation's tree drawn as SVG by the gateway, with
+    the projects it reaches lit (`resolve.Reaches`);
+  - the pending proposals (`PendingProposals`);
+  - a declarations folder linted, as `rein lint` does.
+- 🟢 **P4.7 — The Organisation page.** [PENDING] Added 2026-10-27 (D46). Through the pattern of
+  P4.3: `org create`, `connect`, `use`, `disconnect` and `destroy`; `team create`, `list` and
+  `edit`; `project create`, `list` and `edit`; `label list`, `add`, `remove` and `set`.
+- 🟢 **P4.8 — The machine's actions on This machine.** [PENDING] Added 2026-10-27 (D46, Q14
+  R1). `login`, its device flow's code shown on the page, and `logout`; `update`, which then
+  asks for `rein ui` to be restarted, since it replaces the program serving the page;
+  `reset machine`; `key remove`. `key set` stays in the terminal: the key goes from standard
+  input to the keychain and never into a page.
 
 ## Open points
 
@@ -2549,3 +2612,23 @@ writes is read from the next session on, not in the same one.
 - (2026-10-27) `rein ui` planned with the user (Q6 to Q10): D45, its
   [ADR](../decisions/2026-10-27_rein-ui-a-gateway-served-to-the-browser.md), and P4.1 to P4.4
   approved. Nothing built yet. Left for you: the commit.
+- (2026-10-27) P4.1 built, tests first: the page's tests failed to build without the package,
+  the browser command's without the function, and the end-to-end test on the unknown command
+  `ui`. The page over this machine's own state, rendered in headless Chrome, named each
+  project's organisation by its id, which a clone's record holds; the test, seeded with a slug
+  where the state has an id, had missed it. Seeded as the state is, it failed, and the page
+  now names the organisation by its slug. The guards held against the built binary: no
+  token, another host, `localhost` and a write from another origin each answered 403. Gate:
+  `task rein:check` green. Left for you: `rein ui` from this build, the page checked in the
+  browser, then the commit.
+- (2026-10-27) After your first look (Q11 to Q13): P4.1 got its frame, test first, the test
+  failing on the missing logo, name and menu. The logo is a copy of `docs/images/rein-mark.svg`
+  and its dark twin, since `embed` reaches only the gateway's own folder. P4.2 is rewritten
+  for the dropdowns and Explore project, its other views moved to P4.5. Checked in headless
+  Chrome, light, dark and narrow. Gate: `task rein:check` green. Left for you: the page checked
+  in the browser, then the commit.
+- (2026-10-27) P4.1 checked by the user in the browser (Q17) and done. D46 recorded: the page
+  offers every command a person runs (Q14 R1), in the order of Q15, init finding its folder
+  through a folder browser (Q16 G2). P4.2 renamed to the Projects page, P4.3 extended with
+  the action pattern and `reset project`, P4.5 with `declaration edit`, `remove` and `lint`;
+  P4.6 to P4.8 added. Left for you: the two commits.
