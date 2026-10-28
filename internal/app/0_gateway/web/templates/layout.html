@@ -10,25 +10,42 @@
 </head>
 <body>
 <header class="bar">
-  <a class="brand" href="/">
+  <a class="brand" href="{{.MachineLink}}">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="/static/rein-mark-dark.svg">
       <img src="/static/rein-mark.svg" alt="" width="28" height="28">
     </picture>
     <span>Agents Rein</span>
   </a>
+  <div class="switches">
+    {{if .OrganizationChoices}}{{template "switch" (switchOf "Organisation" .ChosenOrganization .OrganizationChoices)}}{{end}}
+    {{if .UserChoices}}{{template "switch" (switchOf "User" .ChosenUser .UserChoices)}}{{end}}
+  </div>
 </header>
 <div class="shell">
   <nav class="menu" aria-label="Pages">
-    <a href="/"{{if eq .Current "machine"}} aria-current="page"{{end}}>This machine</a>
+    <a href="{{.MachineLink}}"{{if eq .Current "machine"}} aria-current="page"{{end}}>This machine</a>
+    <a href="{{.ProjectsLink}}"{{if eq .Current "projects"}} aria-current="page"{{end}}>Projects</a>
     <span class="version">{{.Version}}</span>
   </nav>
   <main>
     <h1>{{.Title}}</h1>
-{{template "content" .}}
+{{if .Problem}}    <p class="notice">{{.Problem}}.</p>
+{{end}}{{template "content" .}}
     <p class="page-note">Served from this machine at 127.0.0.1 by <code>rein ui</code>; Ctrl-C in its terminal stops it.</p>
   </main>
 </div>
 </body>
 </html>
 {{end}}
+
+{{define "switch"}}<div class="switch">
+  <span class="switch-label">{{.Label}}</span>
+  {{if gt (len .Choices) 1}}<details class="dropdown">
+    <summary>{{.Chosen}}</summary>
+    <ul>
+      {{range .Choices}}<li><a href="{{.Link}}"{{if .Chosen}} aria-current="true"{{end}}>{{.Label}}{{if .Note}} <span class="muted">· {{.Note}}</span>{{end}}</a></li>
+      {{end}}
+    </ul>
+  </details>{{else}}<span class="switch-value">{{.Chosen}}</span>{{end}}
+</div>{{end}}

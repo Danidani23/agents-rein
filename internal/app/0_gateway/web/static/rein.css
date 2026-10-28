@@ -39,7 +39,8 @@ body {
   font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-/* The top bar: the logo and the name on the left. */
+/* The top bar: the logo and the name on the left, the organisation and the
+   login the page is seen as on the right. */
 
 .bar {
   display: flex;
@@ -67,6 +68,102 @@ body {
 
 .brand img {
   display: block;
+}
+
+/* A menu of links that opens under its button: the organisation, the
+   login, the project. It works without script; a link reloads the page,
+   which closes it. */
+
+.switches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  margin-left: auto;
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.switch-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.switch-value {
+  font-weight: 500;
+}
+
+.dropdown {
+  position: relative;
+}
+
+.dropdown summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  font-weight: 500;
+}
+
+.dropdown summary::-webkit-details-marker {
+  display: none;
+}
+
+.dropdown summary::after {
+  content: "▾";
+  margin-left: 8px;
+  color: var(--muted);
+}
+
+.dropdown[open] summary {
+  border-color: var(--accent);
+}
+
+.dropdown ul {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 100%;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+}
+
+.picker .dropdown ul {
+  left: 0;
+  right: auto;
+}
+
+.dropdown li a {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 5px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.dropdown li a:hover {
+  background: var(--code-background);
+  text-decoration: none;
+}
+
+.dropdown li a[aria-current="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
 }
 
 /* The menu on the left and the page beside it. */
@@ -227,6 +324,77 @@ a:hover {
   color: var(--accent);
 }
 
+.pill.required {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.pill.default {
+  background: var(--code-background);
+  color: var(--muted);
+}
+
+/* The resolution of a project as a tree: level, kind, setting. */
+
+.summary {
+  margin: 0 0 12px;
+}
+
+.tree,
+.tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tree > li + li {
+  margin-top: 10px;
+}
+
+.tree ul {
+  margin: 6px 0 0 7px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+
+.tree summary {
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.tree .level {
+  font-weight: 600;
+}
+
+.tree .settings > li {
+  padding: 6px 0;
+}
+
+.setting-head .pill {
+  margin-left: 4px;
+}
+
+.why {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  font-size: 13px;
+}
+
+.why code {
+  font-size: 12px;
+}
+
+.nothing {
+  margin: 4px 0 0 16px;
+  font-size: 13px;
+}
+
+.problems {
+  margin: 0;
+  padding-left: 18px;
+}
+
 .warning {
   color: var(--warning);
 }
@@ -287,6 +455,10 @@ section > p.muted {
 
   .menu a {
     white-space: nowrap;
+  }
+
+  .switches {
+    margin-left: 0;
   }
 
   .menu .version {

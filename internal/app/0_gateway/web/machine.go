@@ -18,22 +18,19 @@ import (
 // organisations, the project clones and the proposals waiting. It runs
 // without a login, as status does.
 func machinePage(orchestrator orchestration.Orchestrator, version string, page *template.Template) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		report, err := orchestrator.Status()
 		if err != nil {
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		render(writer, page, machineViewOf(report, version))
+		render(writer, page, machineViewOf(report, frameOf(request, report, version, "This machine", "machine")), http.StatusOK)
 	})
 }
 
-// machineView is what the machine's page shows; Current names its entry in
-// the menu.
+// machineView is what the machine's page shows in its frame.
 type machineView struct {
-	Title             string
-	Current           string
-	Version           string
+	frame
 	Logins            []string
 	Agents            []string
 	Home              string
@@ -56,10 +53,11 @@ type organizationRow struct {
 }
 
 // projectRow is one project clone with the drift of what sync wrote and
-// what became of its latest snapshot; PullRequest is set once the snapshot
-// went as one.
+// what became of its latest snapshot; Link is its Projects page,
+// PullRequest is set once the snapshot went as one.
 type projectRow struct {
 	Project          string
+	Link             string
 	Organization     string
 	Folder           string
 	SyncedFiles      int
@@ -93,8 +91,8 @@ const timeLayout = "2006-01-02 15:04"
 // as a pull request, the request's address following it.
 const proposedPrefix = "snapshot distilled and proposed, "
 
-func machineViewOf(report orchestration.StatusReport, version string) machineView {
-	view := machineView{Title: "This machine", Current: "machine", Version: version, Logins: report.Logins, Agents: report.Agents, Home: shortPath(report.Home), PlacedFiles: len(report.Placements)}
+func machineViewOf(report orchestration.StatusReport, shown frame) machineView {
+	view := machineView{frame: shown, Logins: report.Logins, Agents: report.Agents, Home: shortPath(report.Home), PlacedFiles: len(report.Placements)}
 	for _, placed := range report.Placements {
 		if !placed.TargetExists {
 			view.MissingPlacements = append(view.MissingPlacements, placed.Placement)
@@ -116,11 +114,12 @@ func machineViewOf(report orchestration.StatusReport, version string) machineVie
 		if !connected {
 			organization = clone.Organization
 		}
-		row := projectRow{Project: clone.Address[strings.LastIndex(clone.Address, ".")+1:], Organization: organization, Folder: shortPath(clone.ClonePath), SyncedFiles: clone.Inserts, EditedByHand: clone.Modified, Missing: clone.Missing, Snapshot: clone.Snapshot}
-		synced, err := time.Parse(time.RFC3339, clone.LastSync)
-		if err == nil {
-			row.LastSync = synced.Local().Format(timeLayout)
-		}
+		project := clone.Address[strings.LastIndex(clone.Address, ".")+1:]
+		target := carry(shown.query, "user")
+		target.Set("org", organization)
+		target.Set("project", project)
+		row := projectRow{Project: project, Link: link("/projects", target), Organization: organization, Folder: shortPath(clone.ClonePath), SyncedFiles: clone.Inserts, EditedByHand: clone.Modified, Missing: clone.Missing, Snapshot: clone.Snapshot}
+		row.LastSync = localTimeOf(clone.LastSync)
 		pullRequest := strings.TrimPrefix(clone.Snapshot, proposedPrefix)
 		if strings.HasPrefix(clone.Snapshot, proposedPrefix) && strings.HasPrefix(pullRequest, "https://") {
 			row.Snapshot = "distilled and proposed as"
@@ -140,6 +139,16 @@ func machineViewOf(report orchestration.StatusReport, version string) machineVie
 		view.Imports = append(view.Imports, importRow{Hash: imported.Hash[:min(12, len(imported.Hash))], Origin: origin, Path: imported.Path})
 	}
 	return view
+}
+
+// localTimeOf writes a moment recorded in RFC 3339 in the machine's time
+// zone, "" for one that does not parse.
+func localTimeOf(moment string) string {
+	parsed, err := time.Parse(time.RFC3339, moment)
+	if err != nil {
+		return ""
+	}
+	return parsed.Local().Format(timeLayout)
 }
 
 // shortPath writes the home folder as ~.

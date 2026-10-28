@@ -203,6 +203,9 @@ func TestTheMachinePageShowsWhatStatusReports(t *testing.T) {
 	if strings.Contains(body, organizationID) || !strings.Contains(body, "<td>dani</td>") {
 		t.Errorf("a project's organisation is not shown by its slug: %q", body)
 	}
+	if !strings.Contains(body, `<a href="/projects?org=dani&amp;project=shop">shop</a>`) {
+		t.Errorf("a project does not lead to its page: %q", body)
+	}
 	response, stylesheet := get(t, client, root+"static/rein.css")
 	if response.StatusCode != http.StatusOK || !strings.HasPrefix(response.Header.Get("Content-Type"), "text/css") || stylesheet == "" {
 		t.Fatalf("stylesheet: status %d type %q", response.StatusCode, response.Header.Get("Content-Type"))
@@ -222,7 +225,7 @@ func TestThePageHasTheFrameWithTheLogoTheNameAndTheMenu(t *testing.T) {
 	page := servePage(t, true)
 	client, root := signIn(t, page)
 	_, body := get(t, client, root)
-	for _, expected := range []string{"Agents Rein", `src="/static/rein-mark.svg"`, `srcset="/static/rein-mark-dark.svg"`, `<nav class="menu"`, `href="/" aria-current="page"`, "This machine", "v0.1.0"} {
+	for _, expected := range []string{"Agents Rein", `src="/static/rein-mark.svg"`, `srcset="/static/rein-mark-dark.svg"`, `<nav class="menu"`, `href="/" aria-current="page"`, "This machine", `href="/projects"`, "Projects", "v0.1.0"} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("the frame lacks %q", expected)
 		}

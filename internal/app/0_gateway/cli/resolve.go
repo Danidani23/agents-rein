@@ -42,7 +42,7 @@ func runResolve(environment *commandEnvironment, organization string, project st
 	if err != nil {
 		return err
 	}
-	resolution, err := orchestrator.ResolveProject(organization, project)
+	resolution, err := orchestrator.ResolveProject(organization, project, "")
 	if err != nil {
 		return err
 	}

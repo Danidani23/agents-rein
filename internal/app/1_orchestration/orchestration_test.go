@@ -1355,7 +1355,8 @@ func TestResolveProject(t *testing.T) {
 	write("teams/web/rules/testing.md", "Web tests.\n")
 	write("projects/shop/rules/testing.md", "Shop tests.\n")
 	write("users/danidani23/rules/mine.md", "Mine.\n")
-	resolution, err := fixture.orchestrator().ResolveProject("", "shop")
+	write("users/other/rules/theirs.md", "Theirs.\n")
+	resolution, err := fixture.orchestrator().ResolveProject("", "shop", "")
 	if err != nil || resolution.Address != "organizations.acme.projects.shop" || resolution.User != "danidani23" || len(resolution.Result.Problems) != 0 {
 		t.Fatalf("resolution %+v err %v", resolution, err)
 	}
@@ -1365,10 +1366,51 @@ func TestResolveProject(t *testing.T) {
 	if strings.Join(resolution.Result.Chosen[1].Replaced, ",") != "organizations.acme.rules.testing,organizations.acme.teams.web.rules.testing" {
 		t.Fatalf("replaced %v", resolution.Result.Chosen[1].Replaced)
 	}
-	_, err = fixture.orchestrator().ResolveProject("", "nope")
+	// another login on this machine sees the project with its own user level
+	resolution, err = fixture.orchestrator().ResolveProject("", "shop", "Other")
+	if err != nil || resolution.User != "other" {
+		t.Fatalf("as Other: resolution %+v err %v", resolution, err)
+	}
+	if addresses := addressesOf(resolution.Result.Chosen); addresses != "organizations.acme.rules.style,organizations.acme.projects.shop.rules.testing,organizations.acme.users.other.rules.theirs" {
+		t.Fatalf("chosen as Other %s", addresses)
+	}
+	_, err = fixture.orchestrator().ResolveProject("", "nope", "")
 	if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "does not exist") {
 		t.Fatalf("err %v", err)
 	}
+}
+
+func TestSyncedFiles(t *testing.T) {
+	t.Run("lists what sync wrote into a clone, each as written, edited by hand or missing", func(t *testing.T) {
+		fixture, _, folder := withSyncableProject(t)
+		_, err := fixture.orchestrator().SyncClone(SyncRequest{Directory: folder, ReinExecutable: "/bin/rein"})
+		if err != nil {
+			t.Fatalf("sync: %v", err)
+		}
+		_ = os.WriteFile(filepath.Join(folder, ".claude", "rules", "go.md"), []byte("edited"), 0o644)
+		_ = os.Remove(filepath.Join(folder, ".mcp.json"))
+		files, err := fixture.orchestrator().SyncedFiles(folder)
+		if err != nil || len(files) != 7 {
+			t.Fatalf("files %+v err %v", files, err)
+		}
+		byPath := map[string]SyncedFile{}
+		for _, file := range files {
+			byPath[file.Path] = file
+		}
+		if byPath["CLAUDE.md"].State != SyncedAsWritten || byPath[".claude/rules/go.md"].State != SyncedEditedByHand || byPath[".mcp.json"].State != SyncedMissing {
+			t.Fatalf("states %+v", byPath)
+		}
+		if byPath[".claude/rules/go.md"].Address != "organizations.acme.rules.go" || byPath[".claude/rules/go.md"].WrittenAt.IsZero() {
+			t.Fatalf("go.md %+v", byPath[".claude/rules/go.md"])
+		}
+	})
+	t.Run("refuses a folder that is not a clone rein initialised", func(t *testing.T) {
+		fixture, _, _ := withSyncableProject(t)
+		_, err := fixture.orchestrator().SyncedFiles(t.TempDir())
+		if !errors.Is(err, refusal.ErrRefused) {
+			t.Fatalf("err %v", err)
+		}
+	})
 }
 
 func addressesOf(chosen []resolve.Chosen) string {

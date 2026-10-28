@@ -41,7 +41,11 @@ type Page struct {
 // Open listens on a free port of 127.0.0.1 and makes the token of this run.
 // version is what rein version prints.
 func Open(orchestrator orchestration.Orchestrator, version string) (*Page, error) {
-	machineTemplate, err := template.ParseFS(assets, "templates/layout.html", "templates/machine.html")
+	machineTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/machine.html")
+	if err != nil {
+		return nil, err
+	}
+	projectsTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/projects.html")
 	if err != nil {
 		return nil, err
 	}
@@ -53,6 +57,7 @@ func Open(orchestrator orchestration.Orchestrator, version string) (*Page, error
 	routes := http.NewServeMux()
 	routes.Handle("GET /static/", http.FileServerFS(assets))
 	routes.Handle("GET /{$}", machinePage(orchestrator, version, machineTemplate))
+	routes.Handle("GET /projects", projectsPage(orchestrator, version, projectsTemplate))
 	return &Page{listener: listener, token: token, handler: guard(routes, listener.Addr().String(), token)}, nil
 }
 
@@ -128,9 +133,9 @@ func sameToken(offered string, token string) bool {
 	return subtle.ConstantTimeCompare([]byte(offered), []byte(token)) == 1
 }
 
-// render writes the page whole or not at all: a template that fails halfway
-// is an error, not half a page.
-func render(writer http.ResponseWriter, page *template.Template, view any) {
+// render writes the page whole with status, or not at all: a template that
+// fails halfway is an error, not half a page.
+func render(writer http.ResponseWriter, page *template.Template, view any, status int) {
 	var rendered bytes.Buffer
 	err := page.ExecuteTemplate(&rendered, "layout", view)
 	if err != nil {
@@ -138,5 +143,6 @@ func render(writer http.ResponseWriter, page *template.Template, view any) {
 		return
 	}
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+	writer.WriteHeader(status)
 	_, _ = writer.Write(rendered.Bytes())
 }

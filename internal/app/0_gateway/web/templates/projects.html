@@ -1,0 +1,110 @@
+{{define "content"}}
+{{if not .LoggedIn}}
+<p class="notice">Not logged in. Run <code>rein login</code> in a terminal; it opens the GitHub device flow.</p>
+{{else if not .OrganizationChoices}}
+<p class="empty">No organisation connected. <code>rein org create</code> creates one, <code>rein org connect &lt;remote&gt;</code> connects one that exists.</p>
+{{else if and (not .Problem) (not .Projects)}}
+<p class="empty">No project in {{.ChosenOrganization}} yet. <code>rein project create</code> adds one.</p>
+{{else if .Projects}}
+<div class="picker">{{template "switch" (switchOf "Project" (chosenOf .Projects) .Projects)}}</div>
+{{with .Detail}}
+<section>
+  <h2>The project</h2>
+  <dl class="facts">
+    <dt>Name</dt>
+    <dd>{{.Name}}</dd>
+    <dt>Address</dt>
+    <dd><code>{{.Address}}</code></dd>
+    <dt>Teams</dt>
+    <dd>{{range $index, $team := .Teams}}{{if $index}}, {{end}}{{$team}}{{else}}<span class="muted">none</span>{{end}}</dd>
+    <dt>Labels</dt>
+    <dd>{{range $index, $label := .Labels}}{{if $index}}, {{end}}<code>{{$label}}</code>{{else}}<span class="muted">none</span>{{end}}</dd>
+    <dt>On this machine</dt>
+    <dd>{{range $index, $clone := .Clones}}{{if $index}}, {{end}}<code>{{$clone.Folder}}</code>{{else}}<span class="muted">not cloned on this machine</span>{{end}}</dd>
+  </dl>
+</section>
+
+<section>
+  <h2>What it resolves</h2>
+  <p class="summary">{{.Settings}} {{if eq .Settings 1}}setting{{else}}settings{{end}}{{if .Skips}}, {{.Skips}} taken out by a skip list{{end}}{{if .Problems}}; <span class="warning">{{len .Problems}} {{if eq (len .Problems) 1}}problem{{else}}problems{{end}}, so <code>rein sync</code> would refuse</span>{{end}}.</p>
+  <ul class="tree">
+    {{range .Levels}}
+    <li>
+      <details open>
+        <summary><span class="level">{{.Heading}}</span> <span class="muted">· {{.Tie}} · {{.Settings}} {{if eq .Settings 1}}setting{{else}}settings{{end}}{{if .Skipped}}, {{.Skipped}} skipped{{end}}</span></summary>
+        {{if .Kinds}}
+        <ul>
+          {{range .Kinds}}
+          <li>
+            <details open>
+              <summary>{{.Name}} <span class="muted">({{len .Settings}})</span></summary>
+              <ul class="settings">
+                {{range .Settings}}
+                <li>
+                  <div class="setting-head"><code>{{.ID}}</code> <span class="pill {{.Enforcement}}">{{.Enforcement}}</span></div>
+                  {{if .Description}}<div>{{.Description}}</div>{{end}}
+                  {{if or .SelectedBy .LeftOutBy .Replaces}}<div class="why muted">{{if .SelectedBy}}<span>selected by {{.SelectedBy}}</span>{{end}}{{if .LeftOutBy}}<span>left out where {{.LeftOutBy}}</span>{{end}}{{if .Replaces}}<span>replaces {{range $index, $replaced := .Replaces}}{{if $index}}, {{end}}<code>{{$replaced}}</code>{{end}}</span>{{end}}</div>{{end}}
+                </li>
+                {{end}}
+              </ul>
+            </details>
+          </li>
+          {{end}}
+        </ul>
+        {{else}}
+        <p class="muted nothing">Nothing from this level.</p>
+        {{end}}
+      </details>
+    </li>
+    {{end}}
+  </ul>
+  <p class="muted">Read from the organisation's clone on this machine as it is; <code>rein sync</code> pulls it first.</p>
+</section>
+
+{{if .Skipped}}
+<section>
+  <h2>Taken out by a skip list</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Setting</th><th>Kind</th><th>Taken out by</th></tr></thead>
+      <tbody>
+      {{range .Skipped}}<tr><td><code>{{.ID}}</code><div class="muted"><code>{{.Address}}</code></div></td><td>{{.Kind}}</td><td>the skip list of {{.By}}{{if .Exception}}<div class="muted">a required setting, through the exception <code>{{.Exception}}</code></div>{{end}}</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{end}}
+
+{{if .Problems}}
+<section>
+  <h2>Problems</h2>
+  <ul class="problems">
+    {{range .Problems}}<li><code>{{.Address}}</code>: <span class="warning">{{.Message}}</span></li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
+{{range .Clones}}
+<section>
+  <h2>Files sync wrote</h2>
+  <p class="muted"><code>{{.Folder}}</code>{{if .LastSync}} · last sync {{.LastSync}}{{end}}</p>
+  {{if .Files}}
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>File</th><th>From</th><th>Written</th><th>Now</th></tr></thead>
+      <tbody>
+      {{range .Files}}<tr><td><code>{{.Path}}</code></td><td>{{if .From}}<code>{{.From}}</code>{{else}}<span class="muted">rein</span>{{end}}</td><td class="nowrap">{{.Written}}</td><td class="nowrap{{if .Changed}} warning{{end}}">{{.State}}</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">Nothing yet: <code>rein sync</code> in the clone writes the harness.</p>
+  {{end}}
+</section>
+{{end}}
+{{end}}
+{{end}}
+{{end}}

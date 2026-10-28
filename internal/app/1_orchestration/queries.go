@@ -127,6 +127,69 @@ func cloneStatusOf(services Services, clone machine.ProjectClone, pending []prop
 	return status, nil
 }
 
+// SyncedFile is one file sync wrote into a clone: its path in the clone,
+// the declaration it came from, when it was written, and what became of it
+// since: one of SyncedAsWritten, SyncedEditedByHand, SyncedMissing.
+type SyncedFile struct {
+	Path      string
+	Address   string
+	WrittenAt time.Time
+	State     string
+}
+
+// What became of a file sync wrote.
+const (
+	SyncedAsWritten    = "as written"
+	SyncedEditedByHand = "edited by hand"
+	SyncedMissing      = "missing"
+)
+
+// SyncedFiles lists what sync wrote into the initialised clone at
+// clonePath, in path order, each checked against the hash it was written
+// with. It changes nothing.
+func (orchestrator Orchestrator) SyncedFiles(clonePath string) ([]SyncedFile, error) {
+	services := orchestrator.Services
+	clones, err := services.Organizations.ProjectClones()
+	if err != nil {
+		return nil, err
+	}
+	var clone machine.ProjectClone
+	found := false
+	for _, registered := range clones {
+		if registered.ClonePath == clonePath {
+			clone, found = registered, true
+		}
+	}
+	if !found {
+		return nil, refusal.New(clonePath + " is not a project clone rein initialised on this machine")
+	}
+	inserts, err := services.Ledger.InsertsOf(clone.Organization, clone.ClonePath)
+	if err != nil {
+		return nil, err
+	}
+	recorded := map[string]string{}
+	for _, insert := range inserts {
+		recorded[insert.Path] = insert.SHA256
+	}
+	verification := services.WorkingCopy.Verify(clone.ClonePath, recorded)
+	states := map[string]string{}
+	for _, relative := range verification.Modified {
+		states[relative] = SyncedEditedByHand
+	}
+	for _, relative := range verification.Missing {
+		states[relative] = SyncedMissing
+	}
+	var files []SyncedFile
+	for _, insert := range inserts {
+		state, changed := states[insert.Path]
+		if !changed {
+			state = SyncedAsWritten
+		}
+		files = append(files, SyncedFile{Path: insert.Path, Address: insert.Address, WrittenAt: insert.WrittenAt, State: state})
+	}
+	return files, nil
+}
+
 // skillListingCap is the most of a skill's description Claude Code lists
 // ([docs](https://code.claude.com/docs/en/skills#skill-descriptions-are-cut-short)).
 const skillListingCap = 1536
@@ -202,7 +265,7 @@ func (orchestrator Orchestrator) ProjectHere(directory string) (here ProjectHere
 		here.Problem = err.Error()
 		return here, true, nil
 	}
-	resolution, err := orchestrator.ResolveProject(parsed.OrganizationSlug(), parsed.ID())
+	resolution, err := orchestrator.ResolveProject(parsed.OrganizationSlug(), parsed.ID(), "")
 	if err != nil {
 		here.Problem = err.Error()
 		return here, true, nil
@@ -470,8 +533,9 @@ type Resolution struct {
 }
 
 // ResolveProject runs the resolution for a project of the named or active
-// organisation, with the user's level, and changes nothing.
-func (orchestrator Orchestrator) ResolveProject(organizationSlug string, projectSlug string) (Resolution, error) {
+// organisation, with the user level of userLogin, and changes nothing. An
+// empty userLogin is the login that acts on the organisation.
+func (orchestrator Orchestrator) ResolveProject(organizationSlug string, projectSlug string, userLogin string) (Resolution, error) {
 	services := orchestrator.Services
 	organization, orgClonePath, err := resolveOrganization(services, organizationSlug)
 	if err != nil {
@@ -482,6 +546,9 @@ func (orchestrator Orchestrator) ResolveProject(organizationSlug string, project
 		return Resolution{}, err
 	}
 	userSlug := userSlugOf(organization)
+	if userLogin != "" {
+		userSlug = strings.ToLower(userLogin)
+	}
 	context, found := resolve.ContextOf(tree, projectSlug, userSlug, services.Clock())
 	if !found {
 		return Resolution{}, refusal.New("project " + projectSlug + " does not exist in " + organization.Slug + "; projects are " + strings.Join(sortedKeys(tree.Projects), ", "))

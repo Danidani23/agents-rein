@@ -53,7 +53,7 @@ func addTools(server *mcp.Server, orchestrator orchestration.Orchestrator) {
 			if err != nil {
 				return nil, err
 			}
-			return result(orchestrator.ResolveProject(arguments.Organization, arguments.Project))
+			return result(orchestrator.ResolveProject(arguments.Organization, arguments.Project, ""))
 		}))
 	mcp.AddTool(server, &mcp.Tool{Name: "declaration_list", Title: "The declarations of an organisation", Annotations: readOnly,
 		Description: "Every declaration in the organisation's clone, with its address, level, kind, id, selectors and files, sorted by address; one level's when a level is given."},
