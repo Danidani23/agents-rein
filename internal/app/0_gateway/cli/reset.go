@@ -13,8 +13,9 @@ const resetExplanation = "reset machine is reset project for everything, then fo
 	"back as rein reset project does: the files init moved out return from their snapshots, the rein block\n" +
 	"leaves .gitignore, and the put-back is committed. Every link or copy rein made in an agent's\n" +
 	"home is removed, dangling ones included; one that points somewhere rein did not record is\n" +
-	"left alone and reported. Then the organisations are forgotten and their clones deleted, and\n" +
-	"the ledger, the snapshots and the distillations under ~/.rein are removed. The remotes on\n" +
+	"left alone and reported. Then the organisations are forgotten and their clones deleted, the\n" +
+	"proposals removed, and rein's store, with the ledger and the snapshots, is erased with its key;\n" +
+	"your logins stay, their tokens in the keychain. The remotes on\n" +
 	"GitHub are never touched. A project whose restore fails stops the reset before anything is\n" +
 	"wiped, so no snapshot is ever lost."
 
@@ -44,8 +45,9 @@ func newResetMachineCommand(environment *commandEnvironment) *cobra.Command {
 		Short: "Put every project back, remove everything rein placed, and forget this machine",
 		Long: "reset machine leaves the machine as before rein was first used: it puts back every initialised\n" +
 			"project, committing the put-back, removes every link and copy rein made in the agents'\n" +
-			"homes, forgets the connected organisations, deletes their clones, and removes the ledger,\n" +
-			"the snapshots and the proposals. The remotes are never touched. It shows the plan and\n" +
+			"homes, forgets the connected organisations, deletes their clones, removes the proposals,\n" +
+			"and erases rein's store, with the ledger and the snapshots, and its key; the logins stay.\n" +
+			"The remotes are never touched. It shows the plan and\n" +
 			"confirms before changing anything; --yes skips that.",
 		Example: "  rein reset machine\n  rein reset machine --yes",
 		Args:    cobra.NoArgs,
@@ -80,7 +82,7 @@ func runReset(environment *commandEnvironment, yes bool) error {
 		fmt.Fprintf(environment.out, "- remove %d imports under %s\n", len(plan.Imports), plan.ImportsFolder)
 	}
 	fmt.Fprintf(environment.out, "- forget %d organisations and delete their clones under %s; the remotes stay\n", len(plan.Organizations), plan.OrgClonesFolder)
-	fmt.Fprintf(environment.out, "- remove the ledger %s, the snapshots under %s and the proposals under %s\n", plan.RemovalsFile, plan.SnapshotsFolder, plan.ProposalsFolder)
+	fmt.Fprintf(environment.out, "- remove the proposals under %s, and erase rein's store %s, with the ledger and the snapshots, and its key; your logins stay\n", plan.ProposalsFolder, plan.Store)
 	if !yes {
 		prompter := environment.prompter()
 		if !prompter.CanAsk() {

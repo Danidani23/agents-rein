@@ -110,3 +110,11 @@ Candidate 3, chosen by the user (Q28 c, Q33 a, Q34 b).
   bullets say.
 - `rein reset machine` empties the store and removes its key.
 - The board records this as D51 and the item P6.2.
+- Amended 2026-10-29 when P6.2 was built, by the agent, as the board's item records:
+  - On a machine without a usable keychain, such as a Linux server or CI, the key is a file
+    beside the store, `store.key`, readable by the developer alone, so `rein sync` works there.
+  - `rein reset machine` erases the store and its key, then keeps the logins, whose tokens stay
+    in the keychain, and the placements it could not remove, in a new store with a new key, as
+    the reset kept them in `state.yaml` before.
+  - The documents' names, such as `snapshots/<project>-<agent>-<time>.json`, are bbolt's keys and
+    stay readable in the file; their content is encrypted.

@@ -30,7 +30,7 @@ func serveProjects(t *testing.T, logins ...string) (*Page, orchestration.Orchest
 	}
 	agent := &fake.Agent{Present: true, HomePath: t.TempDir(), HarnessFormat: "claude-code"}
 	repository := &fake.Repository{Record: "id: " + organizationID + "\nslug: dani\nname: Dani\nhost: github\n"}
-	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, repository, state, []ports.Agent{agent}, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, &fake.Keychain{Tokens: tokens}, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
+	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, repository, state, fake.NewDocuments(), []ports.Agent{agent}, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, &fake.Keychain{Tokens: tokens}, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
 	orchestrator := orchestration.New(services)
 	created, err := orchestrator.CreateOrganization(orchestration.CreateOrganizationRequest{Name: "Dani", Owner: "Danidani23", RepositoryName: "dani-agents", Private: true})
 	if err != nil {

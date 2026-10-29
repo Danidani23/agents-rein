@@ -2249,12 +2249,31 @@ keychain and the signing, is checked by you on your machine before the commit.
   twice, and a third Ctrl-C quits the relaying `rein` at once while the command finishes in the
   owner; `rein ui` opens the browser from the owner. Until P6.7 the second of two changes waits
   for the machine lock and names the owner's own process as the one holding it.
-- 🟢 **P6.2 — The encrypted store.** [PENDING] bbolt, every value encrypted with AES-GCM, the
+- ✅ **P6.2 — The encrypted store.** [EXECUTED] bbolt, every value encrypted with AES-GCM, the
   key made at the owner's first start and kept in the system's keychain (D51). The state, the
   ledger and the snapshots move in at the first start and are read back before the files are
   removed; the organisations' clones and the proposals stay files. A command shows the store's
   content through the owner; `rein reset machine` empties it and removes the key; a store that
   is gone or does not match its key is named, never replaced by an empty one.
+
+  Built 2026-10-29. The store is the `Documents` port and the `vault` adapter, `store.db` in
+  rein's home; each document keeps the name its file had, so the ledger's references to
+  snapshots by path need no migration, and a snapshot is found by its name alone, which the
+  messages now show and `rein distill --snapshot` takes. The view command is `rein store
+  [document]`. bbolt v1.5.0 joins the module and raises `golang.org/x/sys` to v0.45.0 and
+  `pflag` to v1.0.10, the versions it requires. Deviations: the store is opened for each
+  operation and closed after it, one operation of a process at a time, so a background process
+  of another build waits only for an operation and Windows can delete a test's home; the key
+  is read once per process; the store is made at the first write, or at the first operation
+  when there are files to move in, so a read on a new machine writes no key; without a usable
+  keychain the key is `store.key` beside the store, readable by the developer alone; each
+  value is bound to its document's name, so one moved under another name fails to open as one
+  changed does, while the names themselves stay readable in the file; `rein reset machine`
+  erases the store and its key, then keeps the logins and the placements it could not remove
+  in a new store with a new key, as the reset kept them in `state.yaml` before; the
+  `state.yaml.previous` copy lives on as a document; `Ledger.Delete`, `DeleteInserts` and
+  `Snapshots.RemoveAll` went, the erase doing their work. Recorded in the store ADR's
+  amendment.
 - 🟢 **P6.3 — The app.** [PENDING] A Wails v3 program in this module, built with cgo on each
   operating system, that is the owner plus a window showing the pages of `rein ui` through
   their handler, an icon in the menu bar or tray, native notifications whose button opens the
@@ -2943,3 +2962,15 @@ writes is read from the next session on, not in the same one.
   answers GitHub's device flow after 4 seconds: a second identical `rein login` said it waited
   for the first and ended with its error, a `rein logout` said what it waited for and then
   ran, and `status` took as long beside the login as alone. Left for you: the commit.
+- (2026-10-29) P6.2 built: rein's encrypted store, `store.db`, bbolt with AES-GCM, the key in
+  the keychain; the state, the ledger and the snapshots moved in; `rein store` shows it.
+  `task rein:check` green; the race detector clean on the store, localstate, the ledger, the
+  snapshots, the orchestration and `cmd/rein`. Each of three behaviours was broken once on
+  purpose and its test failed: a value bound to no name, a lost store accepted, a reset that
+  keeps the store. Checked by hand with the built binary on a scratch home, the key in a file
+  keychain, never this machine's keychain: an earlier rein's `state.yaml` and a snapshot moved
+  in at the first command and their files went, the store file holds no value in the clear, a
+  lost key and a lost store were each named with nothing made in their place, and a reset
+  erased the store and its key and kept the login in a new store. Not checked by hand: the
+  key in the macOS keychain, Linux and Windows, which CI covers at the push. Left for you: the
+  commit.

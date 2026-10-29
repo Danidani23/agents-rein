@@ -18,6 +18,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/adapters/localstate"
 	"github.com/Danidani23/agents-rein/internal/adapters/messagesapi"
 	"github.com/Danidani23/agents-rein/internal/adapters/release"
+	"github.com/Danidani23/agents-rein/internal/adapters/vault"
 	"github.com/Danidani23/agents-rein/internal/app/0_gateway/cli"
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
@@ -61,15 +62,17 @@ func wireFor(runner execute.Runner, executable string) cli.Orchestrate {
 			}
 			return value
 		}
-		store := localstate.Store{Home: home}
 		host := github.NewClient(github.ClientID, valueOr("REIN_GITHUB_WEB", gitHubWeb), valueOr("REIN_GITHUB_API", gitHubAPI))
 		var tokens ports.Keychain = keychain.System{Runner: runner}
 		if file := runner.Getenv("REIN_KEYCHAIN_FILE"); file != "" {
 			// a file in place of the keychain: for tests and machines without one, chosen on purpose
 			tokens = keychain.FileKeychain{Path: file}
 		}
+		// the state, the ledger and the snapshots live in the encrypted store (D51)
+		documents := vault.Store{Home: home, Keychain: tokens}
+		store := localstate.Store{Home: home, Documents: documents}
 		// every command of this process takes turns at the machine lock through one queue (D56)
-		services := orchestration.NewServices(home, host, git.Repository{Runner: runner}, store, []ports.Agent{claudecode.Agent{Runner: runner}}, claudecode.Judge{Runner: runner}, localstate.QueueOf(home), tokens, release.NewClient(valueOr("REIN_GITHUB_API", gitHubAPI)), version.String(), executable)
+		services := orchestration.NewServices(home, host, git.Repository{Runner: runner}, store, documents, []ports.Agent{claudecode.Agent{Runner: runner}}, claudecode.Judge{Runner: runner}, localstate.QueueOf(home), tokens, release.NewClient(valueOr("REIN_GITHUB_API", gitHubAPI)), version.String(), executable)
 		services.Credentials.Environment = runner.LookupEnv
 		services.Updates.Environment = runner.LookupEnv
 		services.WorkingCopy.Environment = runner.LookupEnv

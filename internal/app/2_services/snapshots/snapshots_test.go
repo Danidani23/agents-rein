@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -34,21 +33,20 @@ func TestTakeAgentHomes(t *testing.T) {
 		withSettings := &fake.Agent{Present: true, HomePath: agentHome}
 		emptyHome := &fake.Agent{Present: true, HomePath: t.TempDir()}
 		takenAt := time.Date(2026, 10, 19, 9, 30, 0, 0, time.UTC)
-		service := Service{Home: t.TempDir(), Agents: []ports.Agent{withSettings, emptyHome}, Clock: func() time.Time { return takenAt }}
+		documents := fake.NewDocuments()
+		service := Service{Home: t.TempDir(), Documents: documents, Agents: []ports.Agent{withSettings, emptyHome}, Clock: func() time.Time { return takenAt }}
 		snapshotPaths, err := service.TakeAgentHomes()
-		if err != nil || len(snapshotPaths) != 1 || filepath.Base(snapshotPaths[0]) != "fake-agent-20261019-093000.json" {
+		if err != nil || len(snapshotPaths) != 1 || snapshotPaths[0] != filepath.Join(service.Home, "snapshots", "fake-agent-20261019-093000.json") {
 			t.Fatalf("paths %v err %v", snapshotPaths, err)
 		}
-		info, _ := os.Stat(snapshotPaths[0])
-		content, _ := os.ReadFile(snapshotPaths[0])
+		content := documents.Content["snapshots/fake-agent-20261019-093000.json"]
 		var snapshot Snapshot
 		err = json.Unmarshal(content, &snapshot)
 		if err != nil || snapshot.Agent != "fake-agent" || snapshot.Folder != agentHome || !snapshot.TakenAt.Equal(takenAt) {
 			t.Fatalf("snapshot %+v err %v", snapshot, err)
 		}
-		// Windows keeps no Unix permission bits
-		if len(snapshot.Files) != 2 || snapshot.Files["INSTRUCTIONS.md"] != "be brief" || snapshot.Files["skills/commit/SKILL.md"] == "" || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
-			t.Fatalf("files %v mode %v", snapshot.Files, info.Mode())
+		if len(snapshot.Files) != 2 || snapshot.Files["INSTRUCTIONS.md"] != "be brief" || snapshot.Files["skills/commit/SKILL.md"] == "" {
+			t.Fatalf("files %v", snapshot.Files)
 		}
 		// a second snapshot in the same second gets its own file
 		snapshotPaths, err = service.TakeAgentHomes()
@@ -62,7 +60,7 @@ func TestTakeAgentHomes(t *testing.T) {
 		_ = os.Symlink(filepath.Join(agentHome, "nowhere"), filepath.Join(agentHome, "skills", "gone"))
 		absent := &fake.Agent{Present: true, HomePath: filepath.Join(t.TempDir(), "absent")}
 		dangling := &fake.Agent{Present: true, HomePath: agentHome}
-		service := Service{Home: t.TempDir(), Agents: []ports.Agent{absent, dangling}}
+		service := Service{Home: t.TempDir(), Documents: fake.NewDocuments(), Agents: []ports.Agent{absent, dangling}}
 		snapshotPaths, err := service.TakeAgentHomes()
 		if err != nil || len(snapshotPaths) != 0 {
 			t.Fatalf("paths %v err %v", snapshotPaths, err)
@@ -75,7 +73,7 @@ func TestListAndLatest(t *testing.T) {
 	writeFile(t, filepath.Join(folder, "INSTRUCTIONS.md"), []byte("x"))
 	agent := &fake.Agent{Present: true, HomePath: folder}
 	clock := time.Date(2026, 10, 19, 9, 0, 0, 0, time.UTC)
-	service := Service{Home: t.TempDir(), Agents: []ports.Agent{agent}, Clock: func() time.Time { clock = clock.Add(time.Minute); return clock }}
+	service := Service{Home: t.TempDir(), Documents: fake.NewDocuments(), Agents: []ports.Agent{agent}, Clock: func() time.Time { clock = clock.Add(time.Minute); return clock }}
 	_, _, _ = service.Take("fake-agent", "organizations.acme.projects.shop", folder, agent.HarnessPaths())
 	_, _, _ = service.Take("fake-agent", "organizations.acme.projects.shop", folder, agent.HarnessPaths())
 	_, _, _ = service.Take("fake-agent", "", folder, agent.HarnessPaths())
@@ -96,7 +94,20 @@ func TestListAndLatest(t *testing.T) {
 	if err != nil || read.Agent != "fake-agent" || read.Files["INSTRUCTIONS.md"] != "x" {
 		t.Fatalf("read %+v err %v", read, err)
 	}
-	empty, err := Service{Home: t.TempDir()}.List()
+	byName, err := service.Read(Name(home[0].Path))
+	if err != nil || byName.Path != home[0].Path {
+		t.Fatalf("by name %+v err %v", byName, err)
+	}
+	_, err = service.Read("gone-20261019-090000.json")
+	if err == nil || err.Error() != "no snapshot gone-20261019-090000.json in rein's store; rein status lists the projects, rein distill takes the latest of one" {
+		t.Fatalf("missing: %v", err)
+	}
+	err = service.Remove(home[0].Path)
+	stored, _ = service.List()
+	if err != nil || len(stored) != 3 {
+		t.Fatalf("remove %v, %d left", err, len(stored))
+	}
+	empty, err := Service{Home: t.TempDir(), Documents: fake.NewDocuments()}.List()
 	if err != nil || len(empty) != 0 {
 		t.Fatalf("empty %v err %v", empty, err)
 	}

@@ -1,8 +1,10 @@
 // Package snapshots is the service that records what an agent's home or a
 // project clone held before rein touched it (D11): the harness files, path
-// to content, as JSON under <home>/snapshots/. Never transcripts, memory or
-// caches. A snapshot is the raw material of migrate and the content restore
-// puts back.
+// to content, as JSON documents of rein's store (D51), snapshots/<name>.json.
+// Never transcripts, memory or caches. A snapshot is the raw material of
+// distill and the content restore puts back. It is known by the path its
+// file had, <home>/snapshots/<name>.json, which the ledger records; only
+// the name counts, so the name alone finds it too.
 package snapshots
 
 import (
@@ -23,12 +25,17 @@ import (
 // settings file.
 const maxFileSize = 1 << 20
 
-// Service takes snapshots. Clock stamps them (D20); nil means the wall clock.
+// Service takes snapshots into Documents. Clock stamps them (D20); nil
+// means the wall clock.
 type Service struct {
-	Home   string
-	Agents []ports.Agent
-	Clock  func() time.Time
+	Home      string
+	Documents ports.Documents
+	Agents    []ports.Agent
+	Clock     func() time.Time
 }
+
+// prefix starts the name of every snapshot's document.
+const prefix = "snapshots/"
 
 // Snapshot is one folder's harness files at one time: an agent's home, or a
 // project's folder when Project is set.
@@ -40,9 +47,19 @@ type Snapshot struct {
 	Files   map[string]string `json:"files"`
 }
 
-// Folder is where the snapshots live.
+// Folder is the folder the snapshots' paths name.
 func (service Service) Folder() string {
 	return filepath.Join(service.Home, "snapshots")
+}
+
+// Name is a snapshot's name, as messages show it and --snapshot takes it.
+func Name(snapshotPath string) string {
+	return filepath.Base(filepath.FromSlash(snapshotPath))
+}
+
+// documentOf is the document a snapshot's path names.
+func documentOf(snapshotPath string) string {
+	return prefix + Name(snapshotPath)
 }
 
 func (service Service) now() time.Time {
@@ -90,7 +107,7 @@ func (service Service) Take(agent string, project string, folder string, harness
 	return snapshotPath, files, err
 }
 
-// Stored is a snapshot on disk with its path.
+// Stored is a snapshot with its path.
 type Stored struct {
 	Path string
 	Snapshot
@@ -98,46 +115,51 @@ type Stored struct {
 
 // List reads every snapshot, oldest first.
 func (service Service) List() ([]Stored, error) {
-	entries, err := os.ReadDir(service.Folder())
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
+	names, err := service.Documents.List(prefix)
 	if err != nil {
 		return nil, err
 	}
 	var stored []Stored
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+	for _, name := range names {
+		if filepath.Ext(name) != ".json" {
 			continue
 		}
-		snapshotPath := filepath.Join(service.Folder(), entry.Name())
-		content, err := os.ReadFile(snapshotPath)
+		snapshot, err := service.Read(filepath.Join(service.Folder(), Name(name)))
 		if err != nil {
 			return nil, err
 		}
-		var snapshot Snapshot
-		err = json.Unmarshal(content, &snapshot)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", snapshotPath, err)
-		}
-		stored = append(stored, Stored{Path: snapshotPath, Snapshot: snapshot})
+		stored = append(stored, snapshot)
 	}
 	sort.Slice(stored, func(left, right int) bool { return stored[left].TakenAt.Before(stored[right].TakenAt) })
 	return stored, nil
 }
 
-// Read loads one snapshot file.
-func (Service) Read(snapshotPath string) (Stored, error) {
-	content, err := os.ReadFile(snapshotPath)
+// Content is a snapshot's document as it was written, which a proposal's
+// hash is taken over.
+func (service Service) Content(snapshotPath string) ([]byte, error) {
+	content, found, err := service.Documents.Read(documentOf(snapshotPath))
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, fmt.Errorf("no snapshot %s in rein's store; rein status lists the projects, rein distill takes the latest of one", Name(snapshotPath))
+	}
+	return content, nil
+}
+
+// Read loads one snapshot by its path or its name; the path it returns is
+// the one the ledger knows it by.
+func (service Service) Read(snapshotPath string) (Stored, error) {
+	content, err := service.Content(snapshotPath)
 	if err != nil {
 		return Stored{}, err
 	}
 	var snapshot Snapshot
 	err = json.Unmarshal(content, &snapshot)
 	if err != nil {
-		return Stored{}, fmt.Errorf("%s: %w", snapshotPath, err)
+		return Stored{}, fmt.Errorf("snapshot %s: %w", Name(snapshotPath), err)
 	}
-	return Stored{Path: snapshotPath, Snapshot: snapshot}, nil
+	return Stored{Path: filepath.Join(service.Folder(), Name(snapshotPath)), Snapshot: snapshot}, nil
 }
 
 // Latest is the newest snapshot per agent that matches: the project's when
@@ -161,25 +183,17 @@ func (service Service) Latest(project string) ([]Stored, error) {
 	return latest, nil
 }
 
-// RemoveAll deletes every snapshot: the end of a reset, after restore.
-func (service Service) RemoveAll() error {
-	return os.RemoveAll(service.Folder())
-}
-
-// Remove deletes a snapshot file: the compensation of a failed workflow.
-func (Service) Remove(snapshotPath string) error {
+// Remove deletes a snapshot: the compensation of a failed workflow.
+func (service Service) Remove(snapshotPath string) error {
 	if snapshotPath == "" {
 		return nil
 	}
-	return os.Remove(snapshotPath)
+	return service.Documents.Remove(documentOf(snapshotPath))
 }
 
-// write stores the snapshot as <name>-<time>.json, readable by the user only.
+// write stores the snapshot as <name>-<time>.json, the first such name
+// not taken, and returns the path it is known by.
 func (service Service) write(name string, snapshot Snapshot) (string, error) {
-	err := os.MkdirAll(service.Folder(), 0o700)
-	if err != nil {
-		return "", err
-	}
 	content, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
 		return "", err
@@ -191,19 +205,14 @@ func (service Service) write(name string, snapshot Snapshot) (string, error) {
 			fileName = fmt.Sprintf("%s-%s-%d.json", name, stamp, attempt)
 		}
 		snapshotPath := filepath.Join(service.Folder(), fileName)
-		file, err := os.OpenFile(snapshotPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-		if errors.Is(err, fs.ErrExist) {
+		_, taken, err := service.Documents.Read(documentOf(snapshotPath))
+		if err != nil {
+			return "", err
+		}
+		if taken {
 			continue
 		}
-		if err != nil {
-			return "", err
-		}
-		_, err = file.Write(content)
-		if err != nil {
-			file.Close()
-			return "", err
-		}
-		return snapshotPath, file.Close()
+		return snapshotPath, service.Documents.Write(documentOf(snapshotPath), content)
 	}
 }
 

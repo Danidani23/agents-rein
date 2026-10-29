@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -114,14 +115,14 @@ func printSynced(environment *commandEnvironment, synced orchestration.CloneSync
 			fmt.Fprintf(environment.out, "  removed    %s\n", removed)
 		}
 		if synced.SnapshotPath != "" && len(synced.Modified) > 0 {
-			fmt.Fprintf(environment.out, "  your edits to %s were snapshotted to %s before being overwritten\n", strings.Join(synced.Modified, ", "), synced.SnapshotPath)
+			fmt.Fprintf(environment.out, "  your edits to %s were kept in the snapshot %s before being overwritten\n", strings.Join(synced.Modified, ", "), filepath.Base(synced.SnapshotPath))
 		}
 		for _, foreign := range synced.Foreign {
 			fmt.Fprintf(environment.out, "  not from rein  %s\n", foreign)
 		}
 		switch {
 		case len(synced.Foreign) > 0 && synced.SnapshotPath != "":
-			fmt.Fprintf(environment.out, "  the files not from rein are in the snapshot %s; rein distill --snapshot %s turns them into a proposal\n", synced.SnapshotPath, synced.SnapshotPath)
+			fmt.Fprintf(environment.out, "  the files not from rein are in the snapshot %s; rein distill --snapshot %s turns them into a proposal\n", filepath.Base(synced.SnapshotPath), filepath.Base(synced.SnapshotPath))
 		case len(synced.Foreign) > 0:
 			fmt.Fprintf(environment.out, "  the files not from rein reach no other clone and not the organisation's repository; rein sync --force keeps them in a snapshot for rein distill\n")
 		}

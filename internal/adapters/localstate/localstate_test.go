@@ -2,6 +2,7 @@ package localstate
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -9,19 +10,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Danidani23/agents-rein/internal/adapters/fake"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 func TestStore(t *testing.T) {
+	newStore := func(t *testing.T) (Store, *fake.Documents) {
+		documents := fake.NewDocuments()
+		return Store{Home: t.TempDir(), Documents: documents}, documents
+	}
 	t.Run("a missing state is empty with a usable clones map and the current version", func(t *testing.T) {
-		state, err := Store{Home: t.TempDir()}.Load()
+		store, _ := newStore(t)
+		state, err := store.Load()
 		if err != nil || state.OrgClonePaths == nil || len(state.Placements) != 0 || state.Version != machine.StateVersion {
 			t.Fatalf("state %+v err %v", state, err)
 		}
 	})
 	t.Run("a saved state round-trips, with the header, the version and the previous copy", func(t *testing.T) {
-		store := Store{Home: t.TempDir()}
+		store, documents := newStore(t)
 		saved := machine.State{
 			Organizations: []machine.OrganizationRef{{ID: "id-1", Slug: "dani", Remote: "git@example:dani.git"}},
 			Active:        "dani",
@@ -32,8 +39,8 @@ func TestStore(t *testing.T) {
 		if err != nil {
 			t.Fatalf("save: %v", err)
 		}
-		content, _ := os.ReadFile(filepath.Join(store.Home, stateFile))
-		if !strings.HasPrefix(string(content), "# Written by rein") || !strings.Contains(string(content), "version: 1\n") {
+		content := string(documents.Content[stateDocument])
+		if !strings.HasPrefix(content, "# Written by rein") || !strings.Contains(content, "version: 1\n") {
 			t.Fatalf("content %q", content)
 		}
 		loaded, err := store.Load()
@@ -42,44 +49,55 @@ func TestStore(t *testing.T) {
 		}
 		loaded.Active = ""
 		err = store.Save(loaded)
-		previous, _ := os.ReadFile(filepath.Join(store.Home, previousFile))
-		if err != nil || !strings.Contains(string(previous), "active: dani") {
+		previous := string(documents.Content[previousDocument])
+		if err != nil || !strings.Contains(previous, "active: dani") {
 			t.Fatalf("previous %q err %v", previous, err)
 		}
 		entries, _ := os.ReadDir(store.Home)
-		if len(entries) != 2 {
-			t.Fatalf("temporary or lock files left: %v", entries)
+		if len(entries) != 0 {
+			t.Fatalf("files left in the home: %v", entries)
 		}
 	})
-	t.Run("a file without a version is the first version; a newer one and an unknown field are refused", func(t *testing.T) {
-		store := Store{Home: t.TempDir()}
-		_ = os.WriteFile(filepath.Join(store.Home, stateFile), []byte("organizations: []\nactive: x\n"), 0o644)
+	t.Run("a state without a version is the first version; a newer one and an unknown field are refused", func(t *testing.T) {
+		store, documents := newStore(t)
+		documents.Content[stateDocument] = []byte("organizations: []\nactive: x\n")
 		state, err := store.Load()
 		if err != nil || state.Version != 1 || state.Active != "x" {
 			t.Fatalf("state %+v err %v", state, err)
 		}
 		// the keys of the builds before 2026-10-19 are read and rewritten
-		_ = os.WriteFile(filepath.Join(store.Home, stateFile), []byte("clones:\n  id-1: /clones/1\nprojects:\n  - organization: id-1\n    address: organizations.acme.projects.shop\n    clone_path: /p\nplacements:\n  - path: /a\n    target: /t\n    mode: link\n"), 0o644)
+		documents.Content[stateDocument] = []byte("clones:\n  id-1: /clones/1\nprojects:\n  - organization: id-1\n    address: organizations.acme.projects.shop\n    clone_path: /p\nplacements:\n  - path: /a\n    target: /t\n    mode: link\n")
 		state, err = store.Load()
 		if err != nil || state.OrgClonePaths["id-1"] != "/clones/1" || len(state.ProjectClones) != 1 || len(state.Placements) != 1 {
 			t.Fatalf("migrated state %+v err %v", state, err)
 		}
 		err = store.Save(state)
-		content, _ := os.ReadFile(filepath.Join(store.Home, stateFile))
-		if err != nil || strings.Contains(string(content), "\nclones:") || !strings.Contains(string(content), "org_clone_paths:") || !strings.Contains(string(content), "project_clones:") {
+		content := string(documents.Content[stateDocument])
+		if err != nil || strings.Contains(content, "\nclones:") || !strings.Contains(content, "org_clone_paths:") || !strings.Contains(content, "project_clones:") {
 			t.Fatalf("rewritten %q err %v", content, err)
 		}
-		_ = os.WriteFile(filepath.Join(store.Home, stateFile), []byte("version: 9\n"), 0o644)
+		documents.Content[stateDocument] = []byte("version: 9\n")
 		_, err = store.Load()
 		if err == nil || !strings.Contains(err.Error(), "newer rein") {
 			t.Fatalf("err %v", err)
 		}
-		_ = os.WriteFile(filepath.Join(store.Home, stateFile), []byte("version: 1\nmystery: {}\n"), 0o644)
+		documents.Content[stateDocument] = []byte("version: 1\nmystery: {}\n")
 		_, err = store.Load()
-		if err == nil || !strings.Contains(err.Error(), "mystery") || !strings.Contains(err.Error(), previousFile) {
+		if err == nil || !strings.Contains(err.Error(), "mystery") || !strings.Contains(err.Error(), "rein store "+previousDocument) {
 			t.Fatalf("err %v", err)
 		}
 	})
+	t.Run("a store that cannot be read is an error, never an empty state", func(t *testing.T) {
+		store, documents := newStore(t)
+		documents.Fail = errors.New("rein's store does not match its key")
+		_, err := store.Load()
+		if err == nil || !strings.Contains(err.Error(), "does not match its key") {
+			t.Fatalf("err %v", err)
+		}
+	})
+}
+
+func TestLockFile(t *testing.T) {
 	t.Run("the lock file is held until released, waits for a live process and takes over one left behind", func(t *testing.T) {
 		store := Store{Home: t.TempDir()}
 		release, err := store.acquireFile(context.Background(), nil)

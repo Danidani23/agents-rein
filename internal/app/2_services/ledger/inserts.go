@@ -3,8 +3,6 @@ package ledger
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"os"
-	"path/filepath"
 	"sort"
 	"time"
 
@@ -28,25 +26,23 @@ type Inserts struct {
 
 const insertsHeader = "# Written by rein: what sync placed into each project clone of this organisation, with the hash\n# of each file as written. Edit through rein commands; rein reset project and rein reset machine read this.\n"
 
-// InsertsFolder is where the inserts files live.
-func (service Service) InsertsFolder() string {
-	return filepath.Join(service.Home, "inserts")
+// insertsPrefix starts the name of every organisation's inserts document.
+const insertsPrefix = "inserts/"
+
+// insertsDocument is the inserts document of an organisation.
+func insertsDocument(organizationID string) string {
+	return insertsPrefix + organizationID + ".yaml"
 }
 
-// InsertsPath is the inserts file of an organisation.
-func (service Service) InsertsPath(organizationID string) string {
-	return filepath.Join(service.InsertsFolder(), organizationID+".yaml")
-}
-
-// LoadInserts reads an organisation's inserts; a missing file is empty.
+// LoadInserts reads an organisation's inserts; missing ones are empty.
 func (service Service) LoadInserts(organizationID string) (Inserts, error) {
 	inserts := Inserts{Version: 1, Clones: map[string][]Insert{}}
-	content, err := os.ReadFile(service.InsertsPath(organizationID))
-	if os.IsNotExist(err) {
-		return inserts, nil
-	}
+	content, found, err := service.Documents.Read(insertsDocument(organizationID))
 	if err != nil {
 		return Inserts{}, err
+	}
+	if !found {
+		return inserts, nil
 	}
 	err = yaml.Unmarshal(content, &inserts)
 	if err != nil {
@@ -91,36 +87,12 @@ func (service Service) ForgetInserts(organizationID string, clonePath string) er
 	return service.RecordInserts(organizationID, clonePath, nil)
 }
 
-// DeleteInserts removes every inserts file: the end of a reset.
-func (service Service) DeleteInserts() error {
-	return os.RemoveAll(service.InsertsFolder())
-}
-
 func (service Service) saveInserts(organizationID string, inserts Inserts) error {
 	content, err := yaml.Marshal(inserts)
 	if err != nil {
 		return err
 	}
-	err = os.MkdirAll(service.InsertsFolder(), 0o755)
-	if err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(service.InsertsFolder(), ".inserts-*")
-	if err != nil {
-		return err
-	}
-	_, err = temporary.Write(append([]byte(insertsHeader), content...))
-	if err != nil {
-		temporary.Close()
-		os.Remove(temporary.Name())
-		return err
-	}
-	err = temporary.Close()
-	if err != nil {
-		os.Remove(temporary.Name())
-		return err
-	}
-	return os.Rename(temporary.Name(), service.InsertsPath(organizationID))
+	return service.Documents.Write(insertsDocument(organizationID), append([]byte(insertsHeader), content...))
 }
 
 // Hash is the SHA-256 of content as the inserts record it.

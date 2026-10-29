@@ -1,15 +1,17 @@
 package ledger
 
 import (
-	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Danidani23/agents-rein/internal/adapters/fake"
 )
 
 func TestRemovals(t *testing.T) {
 	removedAt := time.Date(2026, 10, 19, 10, 0, 0, 0, time.UTC)
-	service := Service{Home: t.TempDir(), Clock: func() time.Time { return removedAt }}
+	documents := fake.NewDocuments()
+	service := Service{Documents: documents, Clock: func() time.Time { return removedAt }}
 	err := service.RecordRemovals("claude-code", []Removal{
 		{Path: "/p/CLAUDE.md", Scope: ScopeProject, Project: "organizations.acme.projects.shop", Snapshot: "/s/1.json"},
 		{Path: "/p/.claude", Scope: ScopeProject, Project: "organizations.acme.projects.shop", Snapshot: "/s/1.json"},
@@ -21,7 +23,7 @@ func TestRemovals(t *testing.T) {
 	if err != nil {
 		t.Fatalf("record: %v", err)
 	}
-	content, _ := os.ReadFile(service.Path())
+	content := documents.Content[removalsDocument]
 	if !strings.HasPrefix(string(content), "# Written by rein") || !strings.Contains(string(content), "version: 1") || !strings.Contains(string(content), "removed_at: 2026-10-19T10:00:00Z") {
 		t.Fatalf("content %q", content)
 	}
@@ -39,15 +41,15 @@ func TestRemovals(t *testing.T) {
 	if err != nil || len(all.Agents) != 0 {
 		t.Fatalf("all %+v err %v", all, err)
 	}
-	entries, _ := os.ReadDir(service.Home)
-	if len(entries) != 1 {
-		t.Fatalf("temporary files left: %v", entries)
+	if len(documents.Content) != 1 {
+		t.Fatalf("documents left: %v", documents.Content)
 	}
 }
 
 func TestPendingAndRestored(t *testing.T) {
 	clock := time.Date(2026, 10, 19, 10, 0, 0, 0, time.UTC)
-	service := Service{Home: t.TempDir(), Clock: func() time.Time { return clock }}
+	documents := fake.NewDocuments()
+	service := Service{Documents: documents, Clock: func() time.Time { return clock }}
 	_ = service.RecordRemovals("claude-code", []Removal{
 		{Path: "/p/CLAUDE.md", Scope: ScopeProject, Project: "organizations.acme.projects.shop", Snapshot: "/s/1.json", Tracked: true},
 		{Path: "/p/.claude", Scope: ScopeProject, Project: "organizations.acme.projects.shop", Snapshot: "/s/1.json"},
@@ -69,15 +71,11 @@ func TestPendingAndRestored(t *testing.T) {
 	if err != nil || len(pending) != 2 {
 		t.Fatalf("pending %v err %v", pending, err)
 	}
-	err = service.Delete()
-	_, statErr := os.Stat(service.Path())
-	if err != nil || statErr == nil || service.Delete() != nil {
-		t.Fatalf("delete err %v stat %v", err, statErr)
-	}
 }
 
 func TestInserts(t *testing.T) {
-	service := Service{Home: t.TempDir(), Clock: func() time.Time { return time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC) }}
+	documents := fake.NewDocuments()
+	service := Service{Documents: documents, Clock: func() time.Time { return time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC) }}
 	err := service.RecordInserts("id-1", "/clones/shop", []Insert{{Path: "CLAUDE.md", Address: "generated", SHA256: Hash([]byte("x"))}, {Path: ".claude/rules/go.md", Address: "organizations.acme.rules.go", SHA256: Hash([]byte("y"))}})
 	if err != nil {
 		t.Fatalf("record: %v", err)
@@ -86,7 +84,7 @@ func TestInserts(t *testing.T) {
 	if err != nil || len(inserts) != 2 || inserts[0].Path != ".claude/rules/go.md" || inserts[0].WrittenAt.IsZero() {
 		t.Fatalf("inserts %+v err %v", inserts, err)
 	}
-	content, _ := os.ReadFile(service.InsertsPath("id-1"))
+	content := documents.Content["inserts/id-1.yaml"]
 	if !strings.HasPrefix(string(content), "# Written by rein") || !strings.Contains(string(content), "/clones/shop:") {
 		t.Fatalf("content %q", content)
 	}
@@ -95,10 +93,5 @@ func TestInserts(t *testing.T) {
 	inserts, _ = service.InsertsOf("id-1", "/clones/shop")
 	if len(none) != 0 || err != nil || len(inserts) != 0 {
 		t.Fatalf("after forget: %v %v", inserts, err)
-	}
-	err = service.DeleteInserts()
-	_, statErr := os.Stat(service.InsertsFolder())
-	if err != nil || statErr == nil {
-		t.Fatalf("delete: %v %v", err, statErr)
 	}
 }

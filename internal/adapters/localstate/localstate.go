@@ -1,9 +1,9 @@
-// Package localstate persists the machine model as state.yaml under the
-// folder REIN_HOME names, by default ~/.rein, which also holds the clones,
-// the snapshots, the ledger and the distillations. The file is rein's, not
-// the user's (D19): it carries a version, is validated when read, is written
-// whole through a temporary file and a rename under a lock, and the previous
-// copy is kept beside it.
+// Package localstate keeps the machine model as the document state.yaml in
+// rein's store (D51), whose home is the folder REIN_HOME names, by default
+// ~/.rein, which also holds the clones and the proposals; and it is the
+// machine lock of that home. The document is rein's, not the user's: it
+// carries a version, is validated when read, and the previous copy is kept
+// beside it as state.yaml.previous.
 package localstate
 
 import (
@@ -30,15 +30,15 @@ import (
 const HomeVariable = "REIN_HOME"
 
 const (
-	stateFile    = "state.yaml"
-	previousFile = "state.yaml.previous"
-	lockFile     = "state.lock"
+	stateDocument    = "state.yaml"
+	previousDocument = "state.yaml.previous"
+	lockFile         = "state.lock"
 	// lockStale is how old a lock may be before it counts as left behind by
 	// a rein that died.
 	lockStale = 10 * time.Minute
 )
 
-const header = "# Written by rein: what it knows about this machine. Edit through rein commands, not by hand;\n# rein status shows it, rein reset machine empties it. The previous copy is state.yaml.previous.\n"
+const header = "# Written by rein: what it knows about this machine. It changes through rein commands;\n# rein status shows it, rein reset machine empties it. The previous copy is state.yaml.previous.\n"
 
 // Home is the folder of state.yaml, the clones and the snapshots.
 func Home() (string, error) {
@@ -53,39 +53,40 @@ func Home() (string, error) {
 	return filepath.Join(userHome, ".rein"), nil
 }
 
-// Store reads and writes the state of one home folder. It is the State port.
+// Store reads and writes the state of one home folder. It is the State
+// port; Documents is rein's store, which holds it.
 type Store struct {
-	Home string
+	Home      string
+	Documents ports.Documents
 }
 
-// Load reads state.yaml; a missing file is an empty state, an unknown field
-// or a newer version is an error that names the file.
+// Load reads state.yaml; a missing document is an empty state, an unknown
+// field or a newer version is an error that names the document.
 func (store Store) Load() (machine.State, error) {
 	state := machine.Empty()
-	path := filepath.Join(store.Home, stateFile)
-	content, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return state, nil
-	}
+	content, found, err := store.Documents.Read(stateDocument)
 	if err != nil {
 		return machine.State{}, err
 	}
+	if !found {
+		return state, nil
+	}
 	content, err = migrate(content)
 	if err != nil {
-		return machine.State{}, fmt.Errorf("%s: %w; the previous copy is %s", path, err, previousFile)
+		return machine.State{}, fmt.Errorf("%s in %s: %w; rein store %s shows the copy before", stateDocument, store.Documents.Where(), err, previousDocument)
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	decoder.KnownFields(true)
 	err = decoder.Decode(&state)
 	if err != nil && !errors.Is(err, errEmptyDocument(err)) {
-		return machine.State{}, fmt.Errorf("%s: %w; the previous copy is %s", path, err, previousFile)
+		return machine.State{}, fmt.Errorf("%s in %s: %w; rein store %s shows the copy before", stateDocument, store.Documents.Where(), err, previousDocument)
 	}
 	if state.Version == 0 {
 		// a file from before the version field (P2.23) is the first version
 		state.Version = machine.StateVersion
 	}
 	if state.Version > machine.StateVersion {
-		return machine.State{}, fmt.Errorf("%s is version %d, written by a newer rein; this build reads version %d", path, state.Version, machine.StateVersion)
+		return machine.State{}, fmt.Errorf("%s in %s is version %d, written by a newer rein; this build reads version %d", stateDocument, store.Documents.Where(), state.Version, machine.StateVersion)
 	}
 	if state.OrgClonePaths == nil {
 		state.OrgClonePaths = map[string]string{}
@@ -131,43 +132,24 @@ func errEmptyDocument(err error) error {
 	return errors.New("not empty")
 }
 
-// Save writes state.yaml whole: the previous copy is kept and the new
-// content goes to a temporary file first and is renamed into place. The
-// lock against another rein is the command's, taken through Acquire.
+// Save writes state.yaml whole and keeps the previous copy.
 func (store Store) Save(state machine.State) error {
-	err := os.MkdirAll(store.Home, 0o755)
-	if err != nil {
-		return err
-	}
 	state.Version = machine.StateVersion
 	content, err := yaml.Marshal(state)
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(store.Home, stateFile)
-	current, err := os.ReadFile(path)
-	if err == nil {
-		err = os.WriteFile(filepath.Join(store.Home, previousFile), current, 0o644)
+	current, found, err := store.Documents.Read(stateDocument)
+	if err != nil {
+		return err
+	}
+	if found {
+		err = store.Documents.Write(previousDocument, current)
 		if err != nil {
 			return err
 		}
 	}
-	temporary, err := os.CreateTemp(store.Home, ".state-*")
-	if err != nil {
-		return err
-	}
-	_, err = temporary.Write(append([]byte(header), content...))
-	if err != nil {
-		temporary.Close()
-		os.Remove(temporary.Name())
-		return err
-	}
-	err = temporary.Close()
-	if err != nil {
-		os.Remove(temporary.Name())
-		return err
-	}
-	return os.Rename(temporary.Name(), path)
+	return store.Documents.Write(stateDocument, append([]byte(header), content...))
 }
 
 // lockRetry is how often the lock file is tried again while another rein

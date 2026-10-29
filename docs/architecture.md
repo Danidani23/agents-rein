@@ -35,8 +35,8 @@ flowchart TB
             libs["libraries<br/>address, declaration, lint, exchange, machine, refusal, scaffold, distill, proposal, resolve, compile, semver"]
         end
     end
-    ports["internal/ports<br/>Host, Repository, Agent, State, Prompter, Judge, MachineLock, Keychain"]
-    adapters["internal/adapters<br/>github (REST, device flow), git, claudecode, messagesapi, keychain, localstate, terminal, execute<br/>fake, for the tests"]
+    ports["internal/ports<br/>Host, Repository, Agent, State, Documents, Prompter, Judge, MachineLock, Keychain"]
+    adapters["internal/adapters<br/>github (REST, device flow), git, claudecode, messagesapi, keychain, localstate, vault, terminal, execute<br/>fake, for the tests"]
 
     main --> owner
     main --> gateway
@@ -87,10 +87,13 @@ holds this table as its `allowed` map and fails on any import outside it.
    home, so they test real behaviour and no fake has to mirror an interface.
 3. **A service owns its state and knows no other service.** `organizations` owns the
    organisations section of the machine state, `placements` the placements and imports,
-   `clones` the folders under `~/.rein/orgs/`, `snapshots` the files under
-   `~/.rein/snapshots/`, `hosting` the repositories on the host, `records` the record files
-   in an org clone and their publication, `workingcopy` a project's working copy, `ledger`
-   the removals and inserts files, `credentials` the logins and their tokens in the keychain.
+   `clones` the folders under `~/.rein/orgs/`, `snapshots` the snapshots in rein's store,
+   `hosting` the repositories on the host, `records` the record files in an org clone and
+   their publication, `workingcopy` a project's working copy, `ledger` the removals and
+   inserts in rein's store, `credentials` the logins and their tokens in the keychain. The
+   store is the `Documents` port, which the `vault` adapter keeps encrypted in one bbolt file,
+   `store.db`, its key in the keychain (D51); the state, through `localstate.Store`, is a
+   document of it too.
    A service
    reaches the outside only through a port, so a test gives it a memory state or a fake host.
    Enforced by the test: a service package may import the ports and the libraries, never a

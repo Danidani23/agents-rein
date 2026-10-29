@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -720,6 +721,87 @@ func (lock *Lock) Acquire(ctx context.Context, holder ports.LockHolder, waiting 
 		lock.Released++
 		lock.Outcomes = append(lock.Outcomes, outcome)
 	}, nil
+}
+
+// Documents is rein's store in memory: the documents by name, and whether
+// Erase was called. Fail, when set, is what every call returns.
+type Documents struct {
+	Content map[string][]byte
+	Erased  bool
+	Fail    error
+	mutex   sync.Mutex
+}
+
+var _ ports.Documents = (*Documents)(nil)
+
+// NewDocuments is an empty store.
+func NewDocuments() *Documents {
+	return &Documents{Content: map[string][]byte{}}
+}
+
+func (documents *Documents) Read(name string) ([]byte, bool, error) {
+	documents.mutex.Lock()
+	defer documents.mutex.Unlock()
+	if documents.Fail != nil {
+		return nil, false, documents.Fail
+	}
+	content, found := documents.Content[name]
+	return append([]byte(nil), content...), found, nil
+}
+
+func (documents *Documents) Write(name string, content []byte) error {
+	documents.mutex.Lock()
+	defer documents.mutex.Unlock()
+	if documents.Fail != nil {
+		return documents.Fail
+	}
+	if documents.Content == nil {
+		documents.Content = map[string][]byte{}
+	}
+	documents.Content[name] = append([]byte(nil), content...)
+	return nil
+}
+
+func (documents *Documents) Remove(name string) error {
+	documents.mutex.Lock()
+	defer documents.mutex.Unlock()
+	if documents.Fail != nil {
+		return documents.Fail
+	}
+	delete(documents.Content, name)
+	return nil
+}
+
+func (documents *Documents) List(prefix string) ([]string, error) {
+	documents.mutex.Lock()
+	defer documents.mutex.Unlock()
+	if documents.Fail != nil {
+		return nil, documents.Fail
+	}
+	var names []string
+	for name := range documents.Content {
+		if strings.HasPrefix(name, prefix) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+func (documents *Documents) Erase() error {
+	documents.mutex.Lock()
+	defer documents.mutex.Unlock()
+	if documents.Fail != nil {
+		return documents.Fail
+	}
+	documents.Content = map[string][]byte{}
+	documents.Erased = true
+	return nil
+}
+
+// Where is the store a test names.
+func (documents *Documents) Where() string {
+	return "the test's store"
 }
 
 // Releases is a fake source of rein's releases: Latest_ is what Latest

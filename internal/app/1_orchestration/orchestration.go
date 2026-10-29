@@ -51,6 +51,9 @@ type Services struct {
 	ReinVersion string
 	// Lock is the machine lock a writing command holds from start to end.
 	Lock ports.MachineLock
+	// Documents is rein's store, which the state, the ledger and the
+	// snapshots live in (D51); a reset of the machine erases it.
+	Documents ports.Documents
 	// Progress is where a workflow reports each step; nil keeps it quiet.
 	Progress func(event ProgressEvent)
 	// Clock stamps every record a workflow writes (D20).
@@ -60,10 +63,11 @@ type Services struct {
 // NewServices builds the services over the ports: identity over the host,
 // organisations over the state, clones over the repository, placements over
 // the state and the agents, hosting over the host and the repository,
-// snapshots over the agents, the judge over its backend, which may be nil.
+// snapshots over the agents and the store, the ledger over the store, the
+// judge over its backend, which may be nil.
 // Nothing runs here; main calls it once with the real adapters and the
 // tests with the fakes.
-func NewServices(home string, host ports.Host, repository ports.Repository, state ports.State, agents []ports.Agent, judgeBackend ports.Judge, lock ports.MachineLock, keychain ports.Keychain, releases ports.Releases, reinVersion string, executable string) Services {
+func NewServices(home string, host ports.Host, repository ports.Repository, state ports.State, documents ports.Documents, agents []ports.Agent, judgeBackend ports.Judge, lock ports.MachineLock, keychain ports.Keychain, releases ports.Releases, reinVersion string, executable string) Services {
 	return Services{
 		ReinVersion:   reinVersion,
 		Updates:       updates.Service{Home: home, Releases: releases, Current: reinVersion, Executable: executable, Clock: time.Now},
@@ -73,14 +77,15 @@ func NewServices(home string, host ports.Host, repository ports.Repository, stat
 		Clones:        clones.Service{Home: home, Repository: repository},
 		Placements:    placements.Service{Home: home, State: state, Agents: agents},
 		Hosting:       hosting.Service{Host: host, Repository: repository},
-		Snapshots:     snapshots.Service{Home: home, Agents: agents, Clock: time.Now},
+		Snapshots:     snapshots.Service{Home: home, Documents: documents, Agents: agents, Clock: time.Now},
 		Records:       records.Service{Repository: repository},
 		WorkingCopy:   workingcopy.Service{Repository: repository},
-		Ledger:        ledger.Service{Home: home, Clock: time.Now},
+		Ledger:        ledger.Service{Documents: documents, Clock: time.Now},
 		ProposalFiles: proposalfiles.Service{Home: home, Clock: time.Now},
 		Proposals:     proposals.Service{Repository: repository, Host: host},
 		Judge:         judge.Service{Judge: judgeBackend},
 		Lock:          lock,
+		Documents:     documents,
 		Clock:         time.Now,
 	}
 }

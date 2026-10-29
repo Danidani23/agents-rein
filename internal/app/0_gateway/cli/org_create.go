@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -42,7 +43,7 @@ func newOrgCreateCommand(environment *commandEnvironment) *cobra.Command {
 			"one of that name, writes the organisation record, the seeded label registry (language, kind,\n" +
 			"data) and CODEOWNERS in a first commit, protects main so that changes come through pull\n" +
 			"requests reviewed by a code owner, and connects this machine to it. Connecting also takes a\n" +
-			"snapshot of your agents' local settings into ~/.rein/snapshots/ on this machine, as the record\n" +
+			"snapshot of your agents' local settings into rein's store on this machine, as the record\n" +
 			"of what was there before rein; the snapshot never leaves this machine. Rein never deletes a\n" +
 			"repository: a step that fails leaves the empty repository, and a rerun adopts it. Without a\n" +
 			"terminal, --name and --yes are required; the other flags have defaults.",
@@ -68,7 +69,7 @@ func orgCreateIntro(host string) string {
 		"the repository, a first commit with the organisation record, the seeded label registry and " +
 		"CODEOWNERS, protection of main so changes come through reviewed pull requests, and the " +
 		"connection of this machine to it. Connecting takes a snapshot of your agents' local settings " +
-		"into ~/.rein/snapshots/ on this machine, as the record of what was there before rein; nothing " +
+		"into rein's store on this machine, as the record of what was there before rein; nothing " +
 		"of them goes to " + hostLabels[host] + "."
 }
 
@@ -391,6 +392,6 @@ func printConnected(environment *commandEnvironment, result orchestration.Connec
 		fmt.Fprintf(environment.out, "active organisation: %s\n", result.Slug)
 	}
 	for _, snapshotPath := range result.SnapshotPaths {
-		fmt.Fprintf(environment.out, "snapshot of an agent's local settings, kept on this machine: %s\n", snapshotPath)
+		fmt.Fprintf(environment.out, "snapshot of an agent's local settings, kept in rein's store on this machine: %s\n", filepath.Base(snapshotPath))
 	}
 }

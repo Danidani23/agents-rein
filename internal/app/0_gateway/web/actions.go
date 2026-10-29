@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
@@ -207,7 +208,7 @@ func resetPreview(orchestrator orchestration.Orchestrator, version string, actio
 		view.Hidden = []formField{{Name: "folder", Value: target.clone.ClonePath}}
 		view.Summary = []string{
 			fmt.Sprintf("This will put back the agent's files rein init moved out of %s, take the rein block out of .gitignore, forget the clone on this machine, and commit the put-back.", shortPath(target.clone.ClonePath)),
-			"The files come back from ~/.rein/snapshots/ exactly as they were. The commit holds only the files that were tracked and .gitignore; pushing it is yours. The snapshots stay until rein reset machine.",
+			"The files come back from their snapshots in rein's store exactly as they were. The commit holds only the files that were tracked and .gitignore; pushing it is yours. The snapshots stay until rein reset machine.",
 		}
 		view.Options = []formOption{
 			{Name: "no-commit", Label: "Leave the put-back staged, not committed (--no-commit)"},
@@ -285,7 +286,7 @@ func syncOutcome(result orchestration.SyncResult) outcome {
 		}
 		done.Lines = append(done.Lines, outcomeLine{Text: fmt.Sprintf("synced %s for %s: %d written, %d unchanged, %d removed", synced.Address, synced.Agent, len(synced.Written), len(synced.Unchanged), len(synced.Removed))})
 		if synced.SnapshotPath != "" && len(synced.Modified) > 0 {
-			done.Lines = append(done.Lines, outcomeLine{Text: fmt.Sprintf("your edits to %s were snapshotted to %s before being overwritten", strings.Join(synced.Modified, ", "), shortPath(synced.SnapshotPath))})
+			done.Lines = append(done.Lines, outcomeLine{Text: fmt.Sprintf("your edits to %s were kept in the snapshot %s before being overwritten", strings.Join(synced.Modified, ", "), filepath.Base(synced.SnapshotPath))})
 		}
 		if len(synced.Foreign) > 0 {
 			done.Lines = append(done.Lines, outcomeLine{Text: "not written by rein, so in no other clone and not in the organisation's repository: " + strings.Join(synced.Foreign, ", "), Warning: true})

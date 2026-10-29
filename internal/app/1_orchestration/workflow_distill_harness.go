@@ -96,7 +96,7 @@ func (orchestrator Orchestrator) DistillHarness(request DistillRequest) (Distill
 			Do: func() error {
 				var contents [][]byte
 				for _, snapshot := range stored {
-					content, err := os.ReadFile(snapshot.Path)
+					content, err := services.Snapshots.Content(snapshot.Path)
 					if err != nil {
 						return err
 					}

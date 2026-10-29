@@ -97,7 +97,7 @@ func TestSyncRunsFromTheProjectsPage(t *testing.T) {
 		page, orchestrator := serveProjects(t, "Danidani23")
 		client, root := signIn(t, page)
 		body := runAction(t, page, client, root, "actions/sync", url.Values{"folder": {cloneOf(t, orchestrator)}, "force": {"on"}})
-		containsAll(t, body, "synced organizations.dani.projects.shop", "snapshotted", "Next:")
+		containsAll(t, body, "synced organizations.dani.projects.shop", "were kept in the snapshot organizations.dani.projects.shop-", "Next:")
 		containsNone(t, body, "refused")
 	})
 	t.Run("every clone, as sync --all does", func(t *testing.T) {

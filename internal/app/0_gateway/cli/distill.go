@@ -30,7 +30,7 @@ func newDistillCommand(environment *commandEnvironment) *cobra.Command {
 			"~/.rein/proposals/pending/ for your agent's home. Review and edit it, then rein propose. A\n" +
 			"distiller that fails or is not there writes nothing, so the next distill starts fresh;\n" +
 			"--distiller none takes rein's own cut alone. Nothing is written into the org repository.",
-		Example: "  rein distill\n  rein distill --project shop\n  rein distill --home\n  rein distill --snapshot ~/.rein/snapshots/claude-code-20261019-093000.json",
+		Example: "  rein distill\n  rein distill --project shop\n  rein distill --home\n  rein distill --snapshot claude-code-20261019-093000.json",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
 			return runDistill(environment, request)
@@ -40,7 +40,7 @@ func newDistillCommand(environment *commandEnvironment) *cobra.Command {
 	command.Flags().StringVar(&request.Organization, "org", "", "the organisation's slug (default: the active one)")
 	command.Flags().StringVar(&request.Project, "project", "", "the project's slug, instead of the folder")
 	command.Flags().BoolVar(&request.Home, "home", false, "distill your agent's home into your user level instead of a project")
-	command.Flags().StringVar(&request.SnapshotPath, "snapshot", "", "a snapshot file to distill, instead of the latest")
+	command.Flags().StringVar(&request.SnapshotPath, "snapshot", "", "a snapshot to distill by its name, as rein store lists it, instead of the latest")
 	command.Flags().StringVar(&request.Judge, "distiller", "", "agent-cli to ask your agent's CLI, none to skip the model pass (default: the organisation's provider, else agent-cli)")
 	command.Flags().StringVar(&request.Model, "model", "", "the model the distiller asks, such as sonnet for a large harness (default: your agent's default)")
 	command.Flags().BoolVar(&request.DryRun, "dry-run", false, "print the brief that would go to the distiller and write nothing")
@@ -84,7 +84,7 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 	for _, candidate := range document.Candidates {
 		counts[candidate.Compared.Verdict]++
 	}
-	fmt.Fprintf(environment.out, "distilled %d candidates for %s from %s\n", len(document.Candidates), result.Level, document.Snapshot.Path)
+	fmt.Fprintf(environment.out, "distilled %d candidates for %s from %s\n", len(document.Candidates), result.Level, "the snapshot "+filepath.Base(document.Snapshot.Path))
 	for _, candidate := range document.Candidates {
 		line := fmt.Sprintf("  %-10s %-24s %s", candidate.Compared.Verdict, candidate.Kind+"/"+candidate.ID, strings.Join(candidate.Sources, ", "))
 		if len(candidate.Compared.Related) > 0 {

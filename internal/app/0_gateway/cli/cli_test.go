@@ -68,6 +68,7 @@ type harness struct {
 	releases   *fake.Releases
 	lock       *fake.Lock
 	keychain   *fake.Keychain
+	documents  *fake.Documents
 }
 
 func newHarness(t *testing.T) *harness {
@@ -81,6 +82,7 @@ func newHarness(t *testing.T) *harness {
 		judge:      &fake.Judge{Unavailable: "no judge in this test"},
 		releases:   &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}},
 		lock:       &fake.Lock{},
+		documents:  fake.NewDocuments(),
 		keychain:   &fake.Keychain{Tokens: map[string]ports.Token{"Danidani23": {Login: "Danidani23", AccessToken: "token-of-Danidani23", ExpiresAt: time.Now().Add(time.Hour)}}},
 	}
 	fixture.state.Current.Logins = []string{"Danidani23"}
@@ -88,7 +90,7 @@ func newHarness(t *testing.T) *harness {
 }
 
 func (fixture *harness) orchestrate() (orchestration.Orchestrator, error) {
-	return orchestration.New(orchestration.NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock, fixture.keychain, fixture.releases, "v0.1.0", filepath.Join(fixture.home, "bin", "rein"))), nil
+	return orchestration.New(orchestration.NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, fixture.documents, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock, fixture.keychain, fixture.releases, "v0.1.0", filepath.Join(fixture.home, "bin", "rein"))), nil
 }
 
 // seedConnectedOrganization leaves the state as a connect of acme would, with a clone folder
@@ -628,7 +630,7 @@ func TestInit(t *testing.T) {
 		_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
 		folder := projectClone(t)
 		code, out, errOut := fixture.run("init", "--path", folder, "--project", "shop", "--yes")
-		for _, expected := range []string{"bound " + folder + " to organizations.acme.projects.shop (fingerprint: 1 root commit(s))", "moved out for fake-agent: INSTRUCTIONS.md", "snapshot: " + filepath.Join(fixture.home, "snapshots"), ".gitignore: rein block added", "committed f4ce000: move agent settings out to rein", "next: rein sync"} {
+		for _, expected := range []string{"bound " + folder + " to organizations.acme.projects.shop (fingerprint: 1 root commit(s))", "moved out for fake-agent: INSTRUCTIONS.md", "snapshot: organizations.acme.projects.shop-fake-agent-", ", in rein's store", ".gitignore: rein block added", "committed f4ce000: move agent settings out to rein", "next: rein sync"} {
 			if code != ExitWorked || !strings.Contains(out, expected) {
 				t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 			}
@@ -938,7 +940,7 @@ func TestSync(t *testing.T) {
 		t.Fatalf("hook refusal: code %d out %q", code, out)
 	}
 	code, out, _ = fixture.run("sync", "--path", folder, "--force")
-	if code != ExitWorked || !strings.Contains(out, "your edits to CLAUDE.md were snapshotted to") {
+	if code != ExitWorked || !strings.Contains(out, "your edits to CLAUDE.md were kept in the snapshot organizations.acme.projects.shop-fake-agent-") {
 		t.Fatalf("force: code %d out %q", code, out)
 	}
 }

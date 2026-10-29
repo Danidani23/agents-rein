@@ -326,6 +326,25 @@ type State interface {
 	Save(machine.State) error
 }
 
+// Documents keeps rein's own records on this machine, each a document
+// under the name its file had: state.yaml, removals.yaml,
+// inserts/<organisation>.yaml, snapshots/<name>.json. In use it is the
+// encrypted store the background process opens (D51).
+type Documents interface {
+	// Read returns a document; a missing one is not found, no error.
+	Read(name string) (content []byte, found bool, err error)
+	// Write creates or replaces a document whole.
+	Write(name string, content []byte) error
+	// Remove deletes a document; a missing one is no error.
+	Remove(name string) error
+	// List names the documents whose name starts with prefix, sorted.
+	List(prefix string) (names []string, err error)
+	// Erase removes every document, the store itself and its key.
+	Erase() error
+	// Where names the store, as a plan or a message shows it.
+	Where() string
+}
+
 // Text is a free-text question.
 type Text struct {
 	Title       string

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -30,8 +31,8 @@ func newInitCommand(environment *commandEnvironment) *cobra.Command {
 		Long: "init works inside a project clone. It fingerprints the repository by its root commits and\n" +
 			"finds the project record that carries that fingerprint; when none does, it binds the clone\n" +
 			"to a record you pick, or creates the project on the spot. Then it moves the agent's files,\n" +
-			"CLAUDE.md, .claude/ and .mcp.json, into a snapshot under ~/.rein/snapshots/, records the\n" +
-			"removal in ~/.rein/removals.yaml, adds a marked block to .gitignore so rein sync can write\n" +
+			"CLAUDE.md, .claude/ and .mcp.json, into a snapshot in rein's store, records the removal in\n" +
+			"the ledger beside it, adds a marked block to .gitignore so rein sync can write\n" +
 			"them back as generated files, registers the clone on this machine, and commits exactly the\n" +
 			"paths it touched; --no-commit leaves them staged. Then rein sync writes the settings it resolves.",
 		Example: "  rein init\n  rein init --project shop --yes\n  rein init --path services/shop",
@@ -112,7 +113,7 @@ func runInit(environment *commandEnvironment, answers initAnswers) error {
 		if !prompter.CanAsk() {
 			return refusal.New("no terminal to confirm on; pass --yes")
 		}
-		confirmed, err := prompter.Confirm("Continue?", "The files are kept in ~/.rein/snapshots/ and listed in ~/.rein/removals.yaml; rein reset project puts them back. The commit holds only the removed paths and .gitignore; pushing it is yours.")
+		confirmed, err := prompter.Confirm("Continue?", "The files are kept in a snapshot in rein's store and listed in its ledger; rein reset project puts them back. The commit holds only the removed paths and .gitignore; pushing it is yours.")
 		if err != nil {
 			return refusal.New(err.Error())
 		}
@@ -167,7 +168,7 @@ func printInitialized(environment *commandEnvironment, result orchestration.Init
 	}
 	fmt.Fprintf(environment.out, "%s %s to %s (fingerprint: %d root commit(s))\n", verb, result.Folder, result.Address, len(result.Fingerprint))
 	for _, moveOut := range result.MovedOut {
-		fmt.Fprintf(environment.out, "moved out for %s: %s\n  snapshot: %s\n", moveOut.Agent, strings.Join(moveOut.Paths, ", "), moveOut.SnapshotPath)
+		fmt.Fprintf(environment.out, "moved out for %s: %s\n  snapshot: %s, in rein's store\n", moveOut.Agent, strings.Join(moveOut.Paths, ", "), filepath.Base(moveOut.SnapshotPath))
 	}
 	if len(result.MovedOut) == 0 {
 		fmt.Fprintf(environment.out, "nothing to move out: the clone held no agent settings\n")

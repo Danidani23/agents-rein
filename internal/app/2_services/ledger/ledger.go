@@ -1,23 +1,23 @@
 // Package ledger is the service that keeps the record of what rein removed
-// from this machine (D12): one file, <home>/removals.yaml, with a section per
-// agent, each removal pointing at the snapshot that holds the content. The
-// inserts, what rein placed, get a file per organisation with sync. The
-// file is written whole through a temporary file and a rename (D19).
+// from this machine (D12): one document of rein's store (D51),
+// removals.yaml, with a section per agent, each removal pointing at the
+// snapshot that holds the content. The inserts, what rein placed, get a
+// document per organisation with sync. Each is written whole.
 package ledger
 
 import (
-	"os"
-	"path/filepath"
 	"sort"
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
-// Service owns the removals file.
+// Service owns the removals and the inserts, in Documents.
 type Service struct {
-	Home  string
-	Clock func() time.Time
+	Documents ports.Documents
+	Clock     func() time.Time
 }
 
 // Removal is one path rein took out of an agent's home or a project clone.
@@ -52,14 +52,9 @@ type Removals struct {
 	Agents  map[string][]Removal `yaml:"agents"`
 }
 
-const removalsFile = "removals.yaml"
+const removalsDocument = "removals.yaml"
 
 const header = "# Written by rein: what it removed from this machine, with the snapshot that holds each file.\n# Edit through rein commands; rein reset project reads this.\n"
-
-// Path is the removals file.
-func (service Service) Path() string {
-	return filepath.Join(service.Home, removalsFile)
-}
 
 func (service Service) now() time.Time {
 	if service.Clock == nil {
@@ -68,15 +63,15 @@ func (service Service) now() time.Time {
 	return service.Clock()
 }
 
-// Load reads the file; a missing one is empty.
+// Load reads the removals; missing ones are empty.
 func (service Service) Load() (Removals, error) {
 	removals := Removals{Version: 1, Agents: map[string][]Removal{}}
-	content, err := os.ReadFile(service.Path())
-	if os.IsNotExist(err) {
-		return removals, nil
-	}
+	content, found, err := service.Documents.Read(removalsDocument)
 	if err != nil {
 		return Removals{}, err
+	}
+	if !found {
+		return removals, nil
 	}
 	err = yaml.Unmarshal(content, &removals)
 	if err != nil {
@@ -156,15 +151,6 @@ func (service Service) stamp(snapshotPaths []string, restoredAt time.Time) error
 	return service.save(all)
 }
 
-// Delete removes the file: the end of a reset, after everything is put back.
-func (service Service) Delete() error {
-	err := os.Remove(service.Path())
-	if os.IsNotExist(err) {
-		return nil
-	}
-	return err
-}
-
 // ForgetSnapshot drops every removal that points at the snapshot: the
 // compensation of a move-out that was put back.
 func (service Service) ForgetSnapshot(snapshotPath string) error {
@@ -188,30 +174,11 @@ func (service Service) ForgetSnapshot(snapshotPath string) error {
 	return service.save(all)
 }
 
-// save writes the file whole, through a temporary file and a rename.
+// save writes the removals whole.
 func (service Service) save(all Removals) error {
 	content, err := yaml.Marshal(all)
 	if err != nil {
 		return err
 	}
-	err = os.MkdirAll(service.Home, 0o755)
-	if err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(service.Home, ".removals-*")
-	if err != nil {
-		return err
-	}
-	_, err = temporary.Write(append([]byte(header), content...))
-	if err != nil {
-		temporary.Close()
-		os.Remove(temporary.Name())
-		return err
-	}
-	err = temporary.Close()
-	if err != nil {
-		os.Remove(temporary.Name())
-		return err
-	}
-	return os.Rename(temporary.Name(), service.Path())
+	return service.Documents.Write(removalsDocument, append([]byte(header), content...))
 }

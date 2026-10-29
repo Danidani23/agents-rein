@@ -44,9 +44,11 @@ type ResetResult struct {
 
 // ResetMachine puts every initialised project back as restore does, removes
 // every placement rein made in the agents' homes, dangling ones included,
-// forgets the organisations and deletes their clones, and deletes the
-// ledger, the snapshots, the distillations and the imports: the machine as
-// before rein (D12). A project whose folder is gone is skipped; a project
+// forgets the organisations and deletes their clones, deletes the
+// proposals and the imports, and erases rein's store with the ledger and
+// the snapshots and its key (D51): the machine as before rein (D12). What
+// survives a reset, the logins, whose tokens stay in the keychain, and the
+// placements rein could not remove, goes into a new store. A project whose folder is gone is skipped; a project
 // whose restore fails stops the reset before anything is wiped, so no
 // snapshot is lost. Deletions cannot be compensated, so the order leaves the
 // least damage if one fails: files first, then the state that describes them.
@@ -112,15 +114,17 @@ func (orchestrator Orchestrator) ResetMachine(plan ResetPlan) (ResetResult, erro
 		}
 		result.RemovedOrgClones = append(result.RemovedOrgClones, organizationID)
 	}
+	logins, err := services.Credentials.Logins()
+	if err != nil {
+		return ResetResult{}, err
+	}
 	wipes := []struct {
 		name string
 		wipe func() error
 	}{
 		{plan.OrgClonesFolder, services.Clones.RemoveAllOrgClones},
-		{plan.RemovalsFile, services.Ledger.Delete},
-		{plan.SnapshotsFolder, services.Snapshots.RemoveAll},
 		{plan.ProposalsFolder, services.ProposalFiles.RemoveAll},
-		{plan.InsertsFolder, services.Ledger.DeleteInserts},
+		{plan.Store + " and its key", services.Documents.Erase},
 	}
 	for _, wipe := range wipes {
 		err = wipe.wipe()
@@ -128,6 +132,18 @@ func (orchestrator Orchestrator) ResetMachine(plan ResetPlan) (ResetResult, erro
 			return ResetResult{}, err
 		}
 		result.Wiped = append(result.Wiped, wipe.name)
+	}
+	for _, login := range logins {
+		err = services.Credentials.Remember(login)
+		if err != nil {
+			return ResetResult{}, err
+		}
+	}
+	if len(kept) > 0 {
+		err = services.Placements.Keep(kept)
+		if err != nil {
+			return ResetResult{}, err
+		}
 	}
 	return result, nil
 }

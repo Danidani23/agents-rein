@@ -38,7 +38,7 @@ func servePage(t *testing.T, loggedIn bool) *Page {
 	state.Current.ProjectClones = []machine.ProjectClone{{Organization: organizationID, Address: "organizations.dani.projects.shop", ClonePath: t.TempDir()}}
 	keychain := &fake.Keychain{Tokens: map[string]ports.Token{"Danidani23": {Login: "Danidani23", AccessToken: "token", ExpiresAt: time.Now().Add(time.Hour)}}}
 	agents := []ports.Agent{&fake.Agent{Present: true, HomePath: t.TempDir()}}
-	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, &fake.Repository{}, state, agents, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, keychain, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
+	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, &fake.Repository{}, state, fake.NewDocuments(), agents, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, keychain, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
 	page, err := Open(orchestration.New(services), "v0.1.0", Interrupt{})
 	if err != nil {
 		t.Fatalf("open: %v", err)

@@ -32,6 +32,7 @@ type harness struct {
 	releases   *fake.Releases
 	lock       *fake.Lock
 	keychain   *fake.Keychain
+	documents  *fake.Documents
 	// provider answers for an organisation that declares its distiller
 	provider *fake.Judge
 }
@@ -47,6 +48,7 @@ func newHarness(t *testing.T) *harness {
 		judge:      &fake.Judge{Unavailable: "no judge in this test"},
 		releases:   &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}},
 		lock:       &fake.Lock{},
+		documents:  fake.NewDocuments(),
 		keychain:   &fake.Keychain{Tokens: map[string]ports.Token{"Danidani23": {Login: "Danidani23", AccessToken: "token-of-Danidani23", ExpiresAt: time.Now().Add(time.Hour)}}},
 	}
 	fixture.state.Current.Logins = []string{"Danidani23"}
@@ -54,7 +56,7 @@ func newHarness(t *testing.T) *harness {
 }
 
 func (fixture *harness) orchestrator() Orchestrator {
-	services := NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock, fixture.keychain, fixture.releases, "v0.1.0", filepath.Join(fixture.home, "bin", "rein"))
+	services := NewServices(fixture.home, fixture.host, fixture.repository, fixture.state, fixture.documents, []ports.Agent{fixture.agent}, fixture.judge, fixture.lock, fixture.keychain, fixture.releases, "v0.1.0", filepath.Join(fixture.home, "bin", "rein"))
 	if fixture.provider != nil {
 		services.Judge.Provider = func(declaration.Provider) ports.Judge { return fixture.provider }
 	}
@@ -252,7 +254,7 @@ func TestStatus(t *testing.T) {
 }
 
 func TestReset(t *testing.T) {
-	t.Run("the plan lists what the state holds and where the ledger lives", func(t *testing.T) {
+	t.Run("the plan lists what the state holds and where the store lives", func(t *testing.T) {
 		fixture := newHarness(t)
 		fixture.state.Current.Placements = []machine.Placement{{Path: "/a"}}
 		fixture.state.Current.Organizations = []machine.OrganizationRef{{Slug: "acme"}}
@@ -260,18 +262,19 @@ func TestReset(t *testing.T) {
 		if err != nil || len(plan.Placements) != 1 || len(plan.Organizations) != 1 {
 			t.Fatalf("plan %+v err %v", plan, err)
 		}
-		if plan.OrgClonesFolder != filepath.Join(fixture.home, "orgs") || plan.ImportsFolder != filepath.Join(fixture.home, "imports") || plan.RemovalsFile != filepath.Join(fixture.home, "removals.yaml") || plan.SnapshotsFolder != filepath.Join(fixture.home, "snapshots") || plan.ProposalsFolder != filepath.Join(fixture.home, "proposals") {
+		if plan.OrgClonesFolder != filepath.Join(fixture.home, "orgs") || plan.ImportsFolder != filepath.Join(fixture.home, "imports") || plan.Store != "the test's store" || plan.ProposalsFolder != filepath.Join(fixture.home, "proposals") {
 			t.Fatalf("plan %+v", plan)
 		}
 	})
-	t.Run("reset unplaces through the agent, keeps what was skipped, forgets the machine and wipes rein's folders", func(t *testing.T) {
+	t.Run("reset unplaces through the agent, keeps what was skipped, forgets the machine, wipes rein's folders and erases its store", func(t *testing.T) {
 		fixture := newHarness(t)
 		orgClonePath := filepath.Join(fixture.home, "orgs", "id-1")
 		_ = os.MkdirAll(orgClonePath, 0o755)
-		for _, folder := range []string{"imports", "snapshots", "proposals"} {
+		for _, folder := range []string{"imports", "proposals"} {
 			_ = os.MkdirAll(filepath.Join(fixture.home, folder), 0o755)
 		}
-		_ = os.WriteFile(filepath.Join(fixture.home, "removals.yaml"), []byte("version: 1\n"), 0o644)
+		fixture.documents.Content["removals.yaml"] = []byte("version: 1\n")
+		fixture.documents.Content["snapshots/shop-claude-code-20261029-100000.json"] = []byte("{}")
 		fixture.state.Current.Placements = []machine.Placement{{Path: "/a"}, {Path: "/foreign"}}
 		fixture.state.Current.Organizations = []machine.OrganizationRef{{ID: "id-1", Slug: "acme"}}
 		fixture.state.Current.OrgClonePaths = map[string]string{"id-1": orgClonePath}
@@ -279,14 +282,17 @@ func TestReset(t *testing.T) {
 		fixture.state.Current.Imports = []machine.Import{{}}
 		plan, _ := fixture.orchestrator().PlanReset()
 		result, err := fixture.orchestrator().ResetMachine(plan)
-		if err != nil || result.Kept != 1 || len(result.RemovedOrgClones) != 1 || len(fixture.agent.Unplaced) != 2 || len(result.Wiped) != 5 {
+		if err != nil || result.Kept != 1 || len(result.RemovedOrgClones) != 1 || len(fixture.agent.Unplaced) != 2 || len(result.Wiped) != 3 || result.Wiped[2] != "the test's store and its key" {
 			t.Fatalf("result %+v err %v unplaced %v", result, err, fixture.agent.Unplaced)
 		}
+		if !fixture.documents.Erased || len(fixture.documents.Content) != 0 {
+			t.Fatalf("the store was not erased: %v", fixture.documents.Content)
+		}
 		state := fixture.state.Current
-		if len(state.Placements) != 1 || state.Placements[0].Path != "/foreign" || state.Active != "" || len(state.Organizations) != 0 || len(state.ProjectClones) != 0 || len(state.Imports) != 0 {
+		if len(state.Placements) != 1 || state.Placements[0].Path != "/foreign" || state.Active != "" || len(state.Organizations) != 0 || len(state.ProjectClones) != 0 || len(state.Imports) != 0 || len(state.Logins) != 1 {
 			t.Fatalf("state %+v", state)
 		}
-		for _, gone := range []string{orgClonePath, filepath.Join(fixture.home, "imports"), filepath.Join(fixture.home, "snapshots"), filepath.Join(fixture.home, "proposals"), filepath.Join(fixture.home, "removals.yaml")} {
+		for _, gone := range []string{orgClonePath, filepath.Join(fixture.home, "imports"), filepath.Join(fixture.home, "proposals")} {
 			_, err = os.Stat(gone)
 			if err == nil {
 				t.Fatalf("%s still there", gone)
@@ -311,9 +317,8 @@ func TestReset(t *testing.T) {
 		if err != nil || string(content) != "be brief" {
 			t.Fatalf("instructions %q err %v", content, err)
 		}
-		_, err = os.Stat(filepath.Join(fixture.home, "removals.yaml"))
-		if err == nil || len(fixture.state.Current.ProjectClones) != 0 || len(fixture.state.Current.Organizations) != 0 {
-			t.Fatalf("ledger err %v state %+v", err, fixture.state.Current)
+		if !fixture.documents.Erased || len(fixture.state.Current.ProjectClones) != 0 || len(fixture.state.Current.Organizations) != 0 {
+			t.Fatalf("erased %v state %+v", fixture.documents.Erased, fixture.state.Current)
 		}
 		// a restore that fails stops the reset before the wipe
 		fixture, _ = withTeam(t)
@@ -326,8 +331,8 @@ func TestReset(t *testing.T) {
 		if !errors.Is(err, refusal.ErrRefused) || !result.Stopped || !result.ProjectClones[0].Failed || len(fixture.state.Current.Organizations) != 1 {
 			t.Fatalf("result %+v err %v", result, err)
 		}
-		_, err = os.Stat(filepath.Join(fixture.home, "removals.yaml"))
-		if err != nil {
+		_, kept := fixture.documents.Content["removals.yaml"]
+		if !kept || fixture.documents.Erased {
 			t.Fatalf("the ledger was wiped although a restore failed")
 		}
 	})
@@ -1536,7 +1541,7 @@ func TestSyncClone(t *testing.T) {
 		if err != nil || result.Clones[0].SnapshotPath == "" {
 			t.Fatalf("forced %+v err %v", result.Clones, err)
 		}
-		snapshot, _ := os.ReadFile(result.Clones[0].SnapshotPath)
+		snapshot, _ := fixture.orchestrator().Snapshots.Content(result.Clones[0].SnapshotPath)
 		if !strings.Contains(string(snapshot), "name: mine") {
 			t.Fatalf("the snapshot lacks the hand-made skill: %s", snapshot)
 		}

@@ -115,12 +115,13 @@ func (service Service) CompleteLogin(code ports.DeviceCode) (ports.Identity, err
 		if err != nil {
 			return ports.Identity{}, err
 		}
-		return identity, service.remember(identity.Login)
+		return identity, service.Remember(identity.Login)
 	}
 }
 
-// remember adds a login to the state once.
-func (service Service) remember(login string) error {
+// Remember adds a login to the state once: at a login, and when a reset
+// of the machine keeps the logins in a new store.
+func (service Service) Remember(login string) error {
 	state, err := service.State.Load()
 	if err != nil {
 		return err

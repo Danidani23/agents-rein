@@ -2,7 +2,6 @@ package orchestration
 
 import (
 	"fmt"
-	"os"
 	"path"
 	"sort"
 	"strings"
@@ -305,10 +304,43 @@ type ResetPlan struct {
 	ProjectClones   []machine.ProjectClone
 	ImportsFolder   string
 	OrgClonesFolder string
-	RemovalsFile    string
-	SnapshotsFolder string
 	ProposalsFolder string
-	InsertsFolder   string
+	// Store is rein's store, with the state, the ledger and the snapshots.
+	Store string
+}
+
+// StoredDocument is one document of rein's store, by its name and size.
+type StoredDocument struct {
+	Name  string
+	Bytes int
+}
+
+// StoreDocuments names what rein's store holds and where it is (D51).
+func (orchestrator Orchestrator) StoreDocuments() (where string, documents []StoredDocument, err error) {
+	names, err := orchestrator.Documents.List("")
+	if err != nil {
+		return "", nil, err
+	}
+	for _, name := range names {
+		content, _, err := orchestrator.Documents.Read(name)
+		if err != nil {
+			return "", nil, err
+		}
+		documents = append(documents, StoredDocument{Name: name, Bytes: len(content)})
+	}
+	return orchestrator.Documents.Where(), documents, nil
+}
+
+// StoreDocument is one document of rein's store as it was written.
+func (orchestrator Orchestrator) StoreDocument(name string) ([]byte, error) {
+	content, found, err := orchestrator.Documents.Read(name)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, refusal.New(fmt.Sprintf("rein's store holds no %s; rein store lists what it holds", name))
+	}
+	return content, nil
 }
 
 // PlanReset reads the state and says what a reset would do.
@@ -333,10 +365,8 @@ func (orchestrator Orchestrator) PlanReset() (ResetPlan, error) {
 		ProjectClones:   projects,
 		ImportsFolder:   services.Placements.ImportsFolder(),
 		OrgClonesFolder: services.Clones.OrgClonesFolder(),
-		RemovalsFile:    services.Ledger.Path(),
-		SnapshotsFolder: services.Snapshots.Folder(),
 		ProposalsFolder: services.ProposalFiles.Folder(),
-		InsertsFolder:   services.Ledger.InsertsFolder(),
+		Store:           services.Documents.Where(),
 	}, nil
 }
 
@@ -681,7 +711,7 @@ func snapshotFate(services Services, clone machine.ProjectClone, pending []propo
 	}
 	var contents [][]byte
 	for _, snapshot := range stored {
-		content, err := os.ReadFile(snapshot.Path)
+		content, err := services.Snapshots.Content(snapshot.Path)
 		if err != nil {
 			return ""
 		}

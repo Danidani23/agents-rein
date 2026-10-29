@@ -50,7 +50,7 @@ func runResetProject(environment *commandEnvironment, request orchestration.Rest
 		if !prompter.CanAsk() {
 			return refusal.New("no terminal to confirm on; pass --yes")
 		}
-		confirmed, err := prompter.Confirm("Continue?", "The files come back from ~/.rein/snapshots/ exactly as they were. The commit holds only the files that were tracked and .gitignore; pushing it is yours. The snapshots stay until rein reset machine.")
+		confirmed, err := prompter.Confirm("Continue?", "The files come back from their snapshots in rein's store exactly as they were. The commit holds only the files that were tracked and .gitignore; pushing it is yours. The snapshots stay until rein reset machine.")
 		if err != nil {
 			return refusal.New(err.Error())
 		}
