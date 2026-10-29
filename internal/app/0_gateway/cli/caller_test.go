@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Danidani23/agents-rein/internal/adapters/execute"
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 // lockedBuffer is a buffer a command may still write while the test reads.
@@ -103,6 +104,39 @@ func TestRunFor(t *testing.T) {
 		case <-finished:
 		case <-time.After(5 * time.Second):
 			t.Fatalf("the command did not finish once its input ended")
+		}
+	})
+	t.Run("a Ctrl-C while the command waits for its turn takes it out of the line", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.lock.Ahead = &ports.LockHolder{Command: "rein sync --all", Caller: "a terminal", Folder: "/work", Since: time.Now()}
+		fixture.lock.Free = make(chan struct{})
+		var outBuffer, errBuffer lockedBuffer
+		caller := Caller{In: strings.NewReader(""), Out: &outBuffer, ErrOut: &errBuffer, Folder: t.TempDir(), Runner: execute.NewRunner(nil)}
+		interrupts := make(chan struct{}, 1)
+		codes := make(chan int, 1)
+		finishedOf := make(chan (<-chan struct{}), 1)
+		go func() {
+			code, finished := RunFor(caller, []string{"org", "use", "acme"}, interrupts, fixture.orchestrate)
+			finishedOf <- finished
+			codes <- code
+		}()
+		deadline := time.Now().Add(5 * time.Second)
+		for !strings.Contains(errBuffer.String(), "waiting for rein sync --all") {
+			if time.Now().After(deadline) {
+				t.Fatalf("the wait was never said: %q", errBuffer.String())
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		interrupts <- struct{}{}
+		finished := <-finishedOf
+		code := <-codes
+		select {
+		case <-finished:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("the command still waits in line")
+		}
+		if code != ExitInterrupted || fixture.lock.Acquired != 0 {
+			t.Fatalf("code %d acquired %d", code, fixture.lock.Acquired)
 		}
 	})
 }

@@ -5,6 +5,8 @@
 package ports
 
 import (
+	"context"
+	"fmt"
 	"time"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
@@ -256,12 +258,66 @@ type JudgeProgress struct {
 	Written  string
 }
 
-// MachineLock keeps two rein processes from changing this machine at once:
-// a command that writes holds it from its start to its end (P2.24).
+// MachineLock keeps two commands from changing this machine at once: a
+// command that writes holds it from its start to its end (P2.24), and the
+// commands that want it take turns by the rules of D56.
 type MachineLock interface {
-	// Acquire takes the lock, waiting up to wait for another rein to finish,
-	// and returns what releases it; a lock that cannot be had names its holder.
-	Acquire(wait time.Duration) (release func(), err error)
+	// Acquire takes the lock for holder once every command that asked
+	// before it is done (R2), until ctx ends; waiting is told what it
+	// waits for, each time that changes. A holder identical to one in line,
+	// the same command in the same folder, never runs: Acquire waits for
+	// that one and returns a Joined with how it ended (R3). release gives
+	// the lock back with the holder's outcome, nil when it worked.
+	Acquire(ctx context.Context, holder LockHolder, waiting func(LockWait)) (release func(outcome error), err error)
+}
+
+// LockHolder is a command that holds the machine lock or waits for it:
+// what was typed, by which caller, in which folder, and since when. A
+// holder in another process is known only by its process.
+type LockHolder struct {
+	Command string
+	Caller  string
+	Folder  string
+	Since   time.Time
+	Process int
+}
+
+// String names the holder as a waiting command says it.
+func (holder LockHolder) String() string {
+	since := holder.Since.Format("15:04:05")
+	if holder.Command == "" {
+		return fmt.Sprintf("another rein, process %d, since %s", holder.Process, since)
+	}
+	return fmt.Sprintf("%s in %s, run from %s since %s", holder.Command, holder.Folder, holder.Caller, since)
+}
+
+// LockWait is what a waiting command waits for: the holder, how many
+// commands are ahead of it, and whether it waits for an identical one,
+// which it joins instead of running twice.
+type LockWait struct {
+	Holder  LockHolder
+	Ahead   int
+	Joining bool
+}
+
+// Joined is the end of a command that ran not at all, because an
+// identical one was in line: that one, and how it ended. It unwraps to the
+// outcome, so the exit code is the one that ran.
+type Joined struct {
+	Holder  LockHolder
+	Outcome error
+}
+
+func (joined Joined) Error() string {
+	ended := "it worked"
+	if joined.Outcome != nil {
+		ended = "it ended: " + joined.Outcome.Error()
+	}
+	return fmt.Sprintf("the same command ran: %s; this one waited for it instead of running twice, and %s", joined.Holder, ended)
+}
+
+func (joined Joined) Unwrap() error {
+	return joined.Outcome
 }
 
 // State persists the machine model.

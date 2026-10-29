@@ -113,6 +113,9 @@ holds this table as its `allowed` map and fails on any import outside it.
    report; the gateway shows it and, for a reset, asks before calling the workflow with the
    plan the person confirmed. A command that changes the machine holds the machine lock from
    its start to its end, through `orchestrateLocked` in the gateway; a query runs without it.
+   The lock is `localstate.Queue`, one per process and home: commands take it in the order
+   they ask and an identical one joins the command in line (D56); the gateway gives it back
+   with the command's outcome when the command ends.
 7. **A refusal is not a crash.** A precondition that failed, nothing changed, is a refusal
    from the `refusal` library, `refusal.New(reason)`, and exits 1; any other error exits 2; a
    program rein ran that failed exits 3. Every layer raises refusals the same way: a service

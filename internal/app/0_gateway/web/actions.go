@@ -1,15 +1,15 @@
 package web
 
 import (
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
-	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 // Every action follows one pattern (D46): its preview, reached by a link,
@@ -45,21 +45,27 @@ type formOption struct {
 	Label string
 }
 
-// lockWait is how long an action waits for another rein to finish, as the
-// CLI's writing commands wait.
-const lockWait = 5 * time.Second
-
-// lockFor takes the machine lock for one action; a lock another rein holds
-// is a refusal, nothing changed.
-func lockFor(orchestrator orchestration.Orchestrator) (release func(), err error) {
+// lockFor waits for the action's turn at the machine lock, as the CLI's
+// writing commands wait (D56), showing what it waits for as a step; Cancel
+// leaves the line. command and folder are the CLI's command it does, so an
+// identical command in line is joined (R3).
+func lockFor(current *run, orchestrator orchestration.Orchestrator, command string, folder string) (release func(outcome error), err error) {
 	if orchestrator.Lock == nil {
-		return func() {}, nil
+		return func(error) {}, nil
 	}
-	release, err = orchestrator.Lock.Acquire(lockWait)
-	if err != nil {
-		return nil, refusal.New(err.Error())
+	release, err = orchestrator.Lock.Acquire(current.ctx, ports.LockHolder{Command: command, Caller: "the page", Folder: folder}, current.waitFor)
+	current.waited()
+	return release, err
+}
+
+// joinedOutcome is the end of an action that ran not at all because the
+// same one was in line: done when that one worked, its failure otherwise.
+func joinedOutcome(err error) (outcome, error) {
+	var joined ports.Joined
+	if errors.As(err, &joined) && joined.Outcome == nil {
+		return outcome{Headline: "done: " + joined.Error()}, nil
 	}
-	return release, nil
+	return outcome{}, err
 }
 
 // actionTarget is what an action's request names, checked against what
@@ -161,14 +167,14 @@ func syncAction(orchestrator orchestration.Orchestrator, version string, actions
 			name = "Sync " + projectOf(target.clone)
 		}
 		syncRequest := orchestration.SyncRequest{Directory: target.clone.ClonePath, All: target.all, Force: request.FormValue("force") == "on"}
-		begin(writer, request, actions, problem, status, name, func(progress func(orchestration.ProgressEvent)) (outcome, error) {
+		begin(writer, request, actions, problem, status, name, func(current *run) (done outcome, err error) {
 			acting := orchestrator
-			acting.Progress = progress
-			release, err := lockFor(acting)
+			acting.Progress = current.record
+			release, err := lockFor(current, acting, syncCommand(syncRequest), syncRequest.Directory)
 			if err != nil {
-				return outcome{}, err
+				return joinedOutcome(err)
 			}
-			defer release()
+			defer func() { release(err) }()
 			syncRequest.ReinExecutable, err = os.Executable()
 			if err != nil {
 				return outcome{}, err
@@ -221,14 +227,14 @@ func resetAction(orchestrator orchestration.Orchestrator, version string, action
 		}
 		name := "Reset " + projectOf(target.clone)
 		restoreRequest := orchestration.RestoreRequest{Directory: target.clone.ClonePath, NoCommit: request.FormValue("no-commit") == "on", Force: request.FormValue("force") == "on"}
-		begin(writer, request, actions, problem, status, name, func(progress func(orchestration.ProgressEvent)) (outcome, error) {
+		begin(writer, request, actions, problem, status, name, func(current *run) (done outcome, err error) {
 			acting := orchestrator
-			acting.Progress = progress
-			release, err := lockFor(acting)
+			acting.Progress = current.record
+			release, err := lockFor(current, acting, "rein reset project", restoreRequest.Directory)
 			if err != nil {
-				return outcome{}, err
+				return joinedOutcome(err)
 			}
-			defer release()
+			defer func() { release(err) }()
 			result, err := acting.RestoreProject(restoreRequest)
 			if err != nil {
 				return outcome{}, err
@@ -255,6 +261,18 @@ func begin(writer http.ResponseWriter, request *http.Request, actions *runner, p
 	view := refused()
 	view.Problem = problem
 	render(writer, page, view, status)
+}
+
+// syncCommand is the CLI's command a sync from the page does.
+func syncCommand(syncRequest orchestration.SyncRequest) string {
+	command := "rein sync"
+	if syncRequest.All {
+		command += " --all"
+	}
+	if syncRequest.Force {
+		command += " --force"
+	}
+	return command
 }
 
 // syncOutcome is what sync did to each clone, worded as the CLI prints it.

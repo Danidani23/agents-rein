@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,11 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Danidani23/agents-rein/internal/adapters/execute"
 	"github.com/Danidani23/agents-rein/internal/adapters/fake"
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/proposal"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
@@ -942,23 +945,59 @@ func TestSync(t *testing.T) {
 
 func TestMachineLock(t *testing.T) {
 	fixture := newHarness(t)
+	since := time.Date(2026, 10, 29, 14, 2, 7, 0, time.Local)
 	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
-	if fixture.lock.Acquired != 1 || fixture.lock.Released != 1 {
-		t.Fatalf("org create took the lock %d times and released it %d times", fixture.lock.Acquired, fixture.lock.Released)
+	if fixture.lock.Acquired != 1 || fixture.lock.Released != 1 || fixture.lock.Outcomes[0] != nil {
+		t.Fatalf("org create took the lock %d times and released it %d times with %v", fixture.lock.Acquired, fixture.lock.Released, fixture.lock.Outcomes)
 	}
-	fixture.lock.Holder = "4242"
-	code, _, errOut := fixture.run("org", "use", "acme")
-	if code != ExitRefused || !strings.Contains(errOut, "another rein is running (pid 4242") {
-		t.Fatalf("code %d err %q", code, errOut)
+	folder, _ := os.Getwd()
+	if fixture.lock.Holders[0] != (ports.LockHolder{Command: "rein org create --name Acme --yes", Caller: "a program without a terminal", Folder: folder}) {
+		t.Fatalf("holder %+v", fixture.lock.Holders[0])
 	}
-	code, out, _ := fixture.run("status")
-	if code != ExitWorked || !strings.Contains(out, "* acme") {
-		t.Fatalf("status under a held lock: code %d out %q", code, out)
-	}
-	code, out, _ = fixture.run("resolve", "--project", "nope")
-	if code != ExitRefused || strings.Contains(out, "another rein") {
-		t.Fatalf("resolve under a held lock: code %d out %q", code, out)
-	}
+	t.Run("a change waits for the command ahead and says which", func(t *testing.T) {
+		fixture.lock.Ahead = &ports.LockHolder{Command: "rein sync --all", Caller: "a terminal", Folder: "/work", Since: since}
+		defer func() { fixture.lock.Ahead = nil }()
+		code, _, errOut := fixture.run("org", "use", "acme")
+		if code != ExitWorked || !strings.Contains(errOut, "waiting for rein sync --all in /work, run from a terminal since 14:02:07; Ctrl-C leaves the line") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+	})
+	t.Run("a read never asks for the lock", func(t *testing.T) {
+		asked := len(fixture.lock.Holders)
+		code, out, _ := fixture.run("status")
+		if code != ExitWorked || !strings.Contains(out, "* acme") {
+			t.Fatalf("status: code %d out %q", code, out)
+		}
+		code, out, _ = fixture.run("org", "list")
+		if code != ExitWorked || !strings.Contains(out, "* acme") {
+			t.Fatalf("org list: code %d out %q", code, out)
+		}
+		code, _, _ = fixture.run("resolve", "--project", "nope")
+		if code != ExitRefused || len(fixture.lock.Holders) != asked {
+			t.Fatalf("resolve: code %d, asked %d times", code, len(fixture.lock.Holders)-asked)
+		}
+	})
+	t.Run("a command identical to one in line ends as that one did", func(t *testing.T) {
+		ran := ports.LockHolder{Command: "rein org use acme", Caller: "the session-start hook", Folder: folder, Since: since}
+		fixture.lock.Joined = &ports.Joined{Holder: ran}
+		defer func() { fixture.lock.Joined = nil }()
+		code, out, errOut := fixture.run("org", "use", "acme")
+		if code != ExitWorked || !strings.Contains(errOut, "the same command is running: rein org use acme in "+folder+", run from the session-start hook since 14:02:07; waiting for it instead of running it twice") || !strings.Contains(out, "the same command ran: rein org use acme in "+folder+", run from the session-start hook since 14:02:07; this one waited for it instead of running twice, and it worked") {
+			t.Fatalf("worked: code %d out %q err %q", code, out, errOut)
+		}
+		fixture.lock.Joined = &ports.Joined{Holder: ran, Outcome: refusal.New("not logged in")}
+		code, _, errOut = fixture.run("org", "use", "acme")
+		if code != ExitRefused || !strings.Contains(errOut, "rein: the same command ran: rein org use acme in "+folder+", run from the session-start hook since 14:02:07; this one waited for it instead of running twice, and it ended: not logged in") {
+			t.Fatalf("refused: code %d err %q", code, errOut)
+		}
+	})
+	t.Run("the lock goes back with the command's outcome", func(t *testing.T) {
+		code, _, _ := fixture.run("org", "use", "nope")
+		last := fixture.lock.Outcomes[len(fixture.lock.Outcomes)-1]
+		if code != ExitRefused || !errors.Is(last, refusal.ErrRefused) {
+			t.Fatalf("code %d outcome %v", code, last)
+		}
+	})
 }
 
 func TestEditAtTheConfirmation(t *testing.T) {
@@ -1187,11 +1226,16 @@ func TestInterruptReleasesTheLock(t *testing.T) {
 	if err != nil || environment.releaseLock == nil || fixture.lock.Acquired != 1 || fixture.lock.Released != 0 {
 		t.Fatalf("lock: err %v acquired %d released %d", err, fixture.lock.Acquired, fixture.lock.Released)
 	}
-	environment.releaseLockNow()
-	if fixture.lock.Released != 1 || environment.releaseLock != nil {
-		t.Fatalf("the interrupt did not release the lock: released %d", fixture.lock.Released)
+	_, _, err = environment.orchestrateLocked()
+	if err != nil || fixture.lock.Acquired != 1 {
+		t.Fatalf("a command that holds the lock asked again: err %v acquired %d", err, fixture.lock.Acquired)
+	}
+	environment.releaseLockWith(execute.ErrInterrupted)
+	if fixture.lock.Released != 1 || environment.releaseLock != nil || !errors.Is(fixture.lock.Outcomes[0], execute.ErrInterrupted) {
+		t.Fatalf("the interrupt did not release the lock: released %d with %v", fixture.lock.Released, fixture.lock.Outcomes)
 	}
 	release()
+	environment.releaseLockWith(nil)
 	if fixture.lock.Released != 1 {
 		t.Fatalf("released twice: %d", fixture.lock.Released)
 	}

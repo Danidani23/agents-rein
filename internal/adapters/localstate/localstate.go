@@ -8,6 +8,7 @@ package localstate
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -169,21 +170,21 @@ func (store Store) Save(state machine.State) error {
 	return os.Rename(temporary.Name(), path)
 }
 
-// lockRetry is how often Acquire tries again while it waits.
+// lockRetry is how often the lock file is tried again while another rein
+// holds it.
 const lockRetry = 200 * time.Millisecond
 
-var _ ports.MachineLock = Store{}
-
-// Acquire takes the lock file for the rest of the command, waiting up to
-// wait for another rein to release it; a lock older than lockStale is taken
-// over as left behind by a rein that died.
-func (store Store) Acquire(wait time.Duration) (release func(), err error) {
+// acquireFile takes the lock file against another rein process, until ctx
+// ends; waiting hears of each process that holds it. A lock older than
+// lockStale, or one whose process is gone or is this one, is taken over as
+// left behind: only the first in this process's line asks for it.
+func (store Store) acquireFile(ctx context.Context, waiting func(ports.LockWait)) (release func(), err error) {
 	err = os.MkdirAll(store.Home, 0o755)
 	if err != nil {
 		return nil, err
 	}
 	path := filepath.Join(store.Home, lockFile)
-	deadline := time.Now().Add(wait)
+	told := 0
 	for {
 		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err == nil {
@@ -200,15 +201,20 @@ func (store Store) Acquire(wait time.Duration) (release func(), err error) {
 			continue
 		}
 		holder, _ := os.ReadFile(path)
-		if pid, parseErr := strconv.Atoi(strings.TrimSpace(string(holder))); parseErr == nil && !processAlive(pid) {
+		pid, parseErr := strconv.Atoi(strings.TrimSpace(string(holder)))
+		if parseErr == nil && (pid == os.Getpid() || !processAlive(pid)) {
 			os.Remove(path)
 			continue
 		}
-		if time.Now().After(deadline) {
-			holder, _ := os.ReadFile(path)
-			return nil, fmt.Errorf("another rein is running (pid %s holds %s); wait for it, or remove the lock if that rein is gone", strings.TrimSpace(string(holder)), path)
+		if pid != told && statErr == nil {
+			waiting(ports.LockWait{Holder: ports.LockHolder{Process: pid, Since: info.ModTime()}, Ahead: 1})
+			told = pid
 		}
-		time.Sleep(lockRetry)
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("another rein is running (pid %s holds %s); wait for it, or remove the lock if that rein is gone: %w", strings.TrimSpace(string(holder)), path, ctx.Err())
+		case <-time.After(lockRetry):
+		}
 	}
 }
 

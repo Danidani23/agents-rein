@@ -65,11 +65,11 @@ func newOrgListCommand(environment *commandEnvironment) *cobra.Command {
 		Short: "List the connected organisations; the active one is marked",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			orchestrator, release, err := environment.orchestrateLocked()
+			// a read never waits for the machine lock (R1, D56)
+			orchestrator, err := environment.orchestrate()
 			if err != nil {
 				return err
 			}
-			defer release()
 			err = requireLogin(orchestrator)
 			if err != nil {
 				return err

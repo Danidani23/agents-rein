@@ -45,8 +45,17 @@ when that path is too long for a socket, on `rein-<hash>.sock` in the system's t
 folder; either is open to your account alone. What it has to say about itself goes to
 `owner.log` in rein's home. A `rein` of another version or another build makes it stop taking
 commands and end once its running ones have, and starts one of its own, so `rein update` takes
-effect at the next command. Several commands run at once; until the rules of P6.7 are built,
-a second command that changes something waits for the machine lock as before.
+effect at the next command.
+
+Several commands run at once, and when they collide the background process decides by the
+rules of D56. A command that only reads, such as `status`, `resolve` or `org list`, never
+waits. Commands that change something, the page's actions among them, take turns in the order
+they arrive; one that waits says what for, which command, run from where and since when, and
+Ctrl-C, or Cancel on the page, takes it out of the line with nothing done. A command identical
+to one in line, the same command line in the same folder, does not run twice: it waits for that
+one and ends as it did, with its exit code. The `list` commands of teams, projects, labels and
+declarations pull the organisation's repository first, which changes its clone, so they wait
+like a change.
 
 ## The MCP server
 

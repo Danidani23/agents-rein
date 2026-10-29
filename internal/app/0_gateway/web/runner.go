@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 // Interrupt is what Cancel does, the way Ctrl-C does it in a terminal: Stop
@@ -39,12 +41,19 @@ type run struct {
 	mutex   sync.Mutex
 	events  []orchestration.ProgressEvent
 	changed chan struct{}
-	// finished, cancelAsked and cancelMessage are guarded by mutex;
-	// Outcome is written before done is closed.
+	// finished, cancelAsked, cancelMessage, waitingStep and leftLine are
+	// guarded by mutex; Outcome is written before done is closed.
 	finished      bool
 	cancelAsked   bool
 	cancelMessage string
-	Outcome       outcome
+	// waitingStep is the step that waits for the machine lock, "" when the
+	// action does not wait; leftLine is set when Cancel ended the wait.
+	waitingStep string
+	leftLine    bool
+	Outcome     outcome
+	// ctx ends when Cancel is pressed while the action waits for its turn.
+	ctx  context.Context
+	stop context.CancelFunc
 }
 
 // outcome is what an action ends with: a headline, the lines the CLI would
@@ -63,8 +72,9 @@ type outcomeLine struct {
 	Warning bool
 }
 
-// work is what an action does, reporting its steps through progress.
-type work func(progress func(orchestration.ProgressEvent)) (outcome, error)
+// work is what an action does, reporting its steps through the run's
+// record and waiting for its turn at the machine lock through lockFor.
+type work func(current *run) (outcome, error)
 
 // start runs work as the action name unless another action is running.
 func (actions *runner) start(name string, action work) (*run, error) {
@@ -74,9 +84,11 @@ func (actions *runner) start(name string, action work) (*run, error) {
 		return nil, refusal.New(actions.current.Name + " is running; one action runs at a time")
 	}
 	started := &run{Name: name, done: make(chan struct{}), changed: make(chan struct{})}
+	started.ctx, started.stop = context.WithCancel(context.Background())
 	actions.current = started
 	go func() {
-		result, err := action(started.record)
+		defer started.stop()
+		result, err := action(started)
 		started.finish(result, err)
 	}()
 	return started, nil
@@ -99,6 +111,12 @@ func (actions *runner) cancel() string {
 	switch {
 	case current == nil || current.isFinished():
 		return "nothing is running"
+	case current.isWaiting():
+		message = "leaving the line; nothing was done"
+		current.mutex.Lock()
+		current.leftLine = true
+		current.mutex.Unlock()
+		current.stop()
 	case actions.interrupt.Running != nil && actions.interrupt.Running():
 		message = "stopping the running program; the steps already done are undone"
 		current.mutex.Lock()
@@ -141,6 +159,8 @@ func (current *run) finish(result outcome, err error) {
 	}
 	switch {
 	case err == nil:
+	case current.leftLine:
+		result.Headline, result.Failed = "cancelled while waiting for its turn; nothing was done", true
 	case current.cancelAsked:
 		result.Headline, result.Failed = "cancelled; the steps already done were undone: "+err.Error(), true
 	case errors.Is(err, refusal.ErrRefused):
@@ -153,6 +173,40 @@ func (current *run) finish(result outcome, err error) {
 	close(current.changed)
 	current.mutex.Unlock()
 	close(current.done)
+}
+
+// waitFor shows what the action waits for as a step of its own, the step
+// before it done once it changes.
+func (current *run) waitFor(wait ports.LockWait) {
+	step := "waiting for " + wait.Holder.String()
+	if wait.Joining {
+		step = "waiting for the same action, which runs: " + wait.Holder.String()
+	}
+	current.mutex.Lock()
+	before := current.waitingStep
+	current.waitingStep = step
+	current.mutex.Unlock()
+	if before != "" {
+		current.record(orchestration.ProgressEvent{Kind: orchestration.ProgressDone, Step: before})
+	}
+	current.record(orchestration.ProgressEvent{Kind: orchestration.ProgressStarted, Step: step})
+}
+
+// waited ends the waiting step, if the action waited.
+func (current *run) waited() {
+	current.mutex.Lock()
+	step := current.waitingStep
+	current.waitingStep = ""
+	current.mutex.Unlock()
+	if step != "" {
+		current.record(orchestration.ProgressEvent{Kind: orchestration.ProgressDone, Step: step})
+	}
+}
+
+func (current *run) isWaiting() bool {
+	current.mutex.Lock()
+	defer current.mutex.Unlock()
+	return current.waitingStep != ""
 }
 
 func (current *run) isFinished() bool {

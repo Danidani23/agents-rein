@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,31 +56,45 @@ type commandEnvironment struct {
 	// runner runs programs for the caller and reads its environment.
 	runner      execute.Runner
 	orchestrate Orchestrate
+	// arguments and ctx are the command as typed and the context that ends
+	// when its caller is let go, set when it starts.
+	arguments []string
+	ctx       context.Context
 	// pendingStep is the step whose start line is still open on the
 	// terminal, waiting to be rewritten with its outcome.
 	pendingStep string
 	// spinner redraws the open line with the time elapsed while a step
 	// runs; nil off a terminal.
 	spinner *spinner
-	// releaseLock gives the machine lock back; set while a command holds
-	// it, so an interrupt at a prompt leaves no lock behind.
-	releaseLock func()
+	// releaseLock gives the machine lock back with the command's outcome;
+	// set while a command holds it, so an interrupt at a prompt leaves no
+	// lock behind.
+	releaseLock func(outcome error)
 	locking     sync.Mutex
 }
 
-// setReleaseLock remembers, or forgets, the release of the machine lock.
-func (environment *commandEnvironment) setReleaseLock(release func()) {
+// setReleaseLock remembers the release of the machine lock.
+func (environment *commandEnvironment) setReleaseLock(release func(outcome error)) {
 	environment.locking.Lock()
 	defer environment.locking.Unlock()
 	environment.releaseLock = release
 }
 
-// releaseLockNow gives the machine lock back if a command holds it.
-func (environment *commandEnvironment) releaseLockNow() {
+// holdsLock says whether the command holds the machine lock.
+func (environment *commandEnvironment) holdsLock() bool {
+	environment.locking.Lock()
+	defer environment.locking.Unlock()
+	return environment.releaseLock != nil
+}
+
+// releaseLockWith gives the machine lock back, if the command holds it,
+// with how the command ended, which an identical command waiting for it
+// ends with too (R3).
+func (environment *commandEnvironment) releaseLockWith(outcome error) {
 	environment.locking.Lock()
 	defer environment.locking.Unlock()
 	if environment.releaseLock != nil {
-		environment.releaseLock()
+		environment.releaseLock(outcome)
 		environment.releaseLock = nil
 	}
 }
@@ -155,31 +170,63 @@ func (environment *commandEnvironment) prompter() ports.Prompter {
 	return terminal.New(environment.in, environment.out, environment.terminal)
 }
 
-// lockWait is how long a writing command waits for another rein to finish.
-const lockWait = 5 * time.Second
-
 // orchestrateLocked is orchestrate for a command that changes the machine:
-// it holds the machine lock until release is called, so two reins never
-// interleave a read and a write of the state (P2.24). A refused lock is a
-// refusal, nothing changed.
+// it waits for its turn at the machine lock, saying what it waits for, and
+// holds the lock until the command ends, so two commands never interleave
+// a read and a write of the state (P2.24, D56). The lock goes back with the
+// command's outcome when the command ends; release is for the command's
+// defer and changes nothing. Ctrl-C while waiting leaves the line, nothing
+// changed. A command identical to one in line ends as that one did (R3).
 func (environment *commandEnvironment) orchestrateLocked() (orchestrator orchestration.Orchestrator, release func(), err error) {
 	orchestrator, err = environment.orchestrate()
 	if err != nil {
 		return orchestration.Orchestrator{}, nil, err
 	}
-	if orchestrator.Lock == nil {
-		return orchestrator, func() {}, nil
+	release = func() {}
+	if orchestrator.Lock == nil || environment.holdsLock() {
+		orchestrator.Progress = environment.printProgress
+		return orchestrator, release, nil
 	}
-	acquired, err := orchestrator.Lock.Acquire(lockWait)
+	ctx := environment.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	acquired, err := orchestrator.Lock.Acquire(ctx, environment.lockHolder(), environment.printWaiting)
 	if err != nil {
-		return orchestration.Orchestrator{}, nil, refusal.New(err.Error())
+		return orchestration.Orchestrator{}, nil, err
 	}
 	environment.setReleaseLock(acquired)
-	release = func() {
-		environment.releaseLockNow()
-	}
 	orchestrator.Progress = environment.printProgress
 	return orchestrator, release, nil
+}
+
+// lockHolder is the command as the machine lock tells others of it: as
+// typed, from which caller, in which folder.
+func (environment *commandEnvironment) lockHolder() ports.LockHolder {
+	caller := "a program without a terminal"
+	for _, argument := range environment.arguments {
+		if argument == "--hook" {
+			caller = "the session-start hook"
+		}
+	}
+	if environment.terminal {
+		caller = "a terminal"
+	}
+	return ports.LockHolder{Command: strings.TrimSpace("rein " + strings.Join(environment.arguments, " ")), Caller: caller, Folder: environment.folder}
+}
+
+// printWaiting says what the command waits for, each time that changes.
+func (environment *commandEnvironment) printWaiting(wait ports.LockWait) {
+	style := environment.style()
+	if wait.Joining {
+		fmt.Fprintf(environment.errOut, "%s\n", style.Yellow(fmt.Sprintf("the same command is running: %s; waiting for it instead of running it twice, Ctrl-C stops waiting", wait.Holder)))
+		return
+	}
+	more := ""
+	if wait.Ahead > 1 {
+		more = fmt.Sprintf(", %d commands ahead", wait.Ahead)
+	}
+	fmt.Fprintf(environment.errOut, "%s\n", style.Yellow(fmt.Sprintf("waiting for %s%s; Ctrl-C leaves the line", wait.Holder, more)))
 }
 
 // printNext ends a command with what comes next, bold after a blank line,
@@ -281,7 +328,7 @@ func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer, orch
 		first := true
 		for range signals {
 			if !first || !execute.Running() {
-				environment.releaseLockNow()
+				environment.releaseLockWith(execute.ErrInterrupted)
 				os.Exit(ExitInterrupted)
 			}
 			first = false
@@ -299,10 +346,17 @@ func runCommand(environment *commandEnvironment, arguments []string) int {
 // runCommandWithin runs the command; a command that serves until it is
 // stopped, ui or mcp, stops when ctx ends.
 func runCommandWithin(ctx context.Context, environment *commandEnvironment, arguments []string) int {
+	environment.arguments, environment.ctx = arguments, ctx
 	root := newRootCommand(environment)
 	root.SetArgs(arguments)
 	err := root.ExecuteContext(ctx)
+	environment.releaseLockWith(err)
 	if err == nil {
+		return ExitWorked
+	}
+	var joined ports.Joined
+	if errors.As(err, &joined) && joined.Outcome == nil {
+		fmt.Fprintf(environment.out, "%s\n", joined.Error())
 		return ExitWorked
 	}
 	fmt.Fprintf(environment.errOut, "rein: %v\n", err)

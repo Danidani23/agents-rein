@@ -2278,11 +2278,26 @@ keychain and the signing, is checked by you on your machine before the commit.
 - 🟢 **P6.6 — The app's own keychain section on macOS.** [PENDING] The store's key, the GitHub
   tokens and the providers' keys move from the login keychain into the signed app's keychain
   section, which only the app reads (D51). Needs the signed build of P6.5.
-- 🟢 **P6.7 — The collision rules.** [PENDING] Added 2026-10-28 (D56), built after P6.1. Inside
+- ✅ **P6.7 — The collision rules.** [EXECUTED] Added 2026-10-28 (D56), built after P6.1. Inside
   the owner, R1: a read never waits; R2: changes wait in the order they arrive, and the waiting
   command prints what it waits for, which command, started by whom and since when, instead of
   failing after 5 seconds; R3: a command identical to the running one, same command line and
   folder, waits for it and prints its outcome instead of running twice. R4 is P6.4.
+
+  Built 2026-10-29. The machine lock is `localstate.Queue`, one per process and rein home, in
+  front of the lock file, which only the first in line takes, against a rein of another
+  build still finishing its commands; the page's actions queue through it too, as the CLI's
+  command they do (`rein sync`, `rein sync --all`, `rein reset project`) in the clone's
+  folder, so a page sync and a terminal `rein sync` there are identical. Deviations: "by
+  whom" is the caller as rein knows it, a terminal, the session-start hook, the page or a
+  program without a terminal; "its outcome" is how the identical command ended, its error or
+  that it worked, with its exit code, not a replay of its output; the lock goes back with
+  the command's outcome when the command ends, not at the command's own release, and a
+  command that holds it never asks again; `org list` no longer takes the lock, while the
+  `list` commands that pull the organisation's repository still wait, since the pull changes
+  its clone; a lock file naming this very process is taken over as left behind, since only
+  the first in line asks for it. The waiting has no time limit: Ctrl-C, Cancel on the page,
+  or Claude Code ending a hook it waited too long for, leaves the line.
 
 ## Open points
 
@@ -2919,3 +2934,12 @@ writes is read from the next session on, not in the same one.
   41 ms through it, `rein ui` ended with 130 on Ctrl-C and closed its port, the socket was
   `srw-------`. Not checked by hand: Linux and Windows, which CI covers at the push. Left for
   you: the commits.
+- (2026-10-29) P6.7 built: the collision rules R1 to R3 of D56 in the background process,
+  through one queue per process in front of the lock file. `task rein:check` green; the race
+  detector clean on localstate, the CLI and web gateways and `cmd/rein`; the queue's tests five
+  times in a row. Each new behaviour was broken once on purpose and its test failed: the
+  join, the waiting notice of the queue, the CLI's waiting line, Cancel while waiting on the
+  page. Checked by hand with the built binary on a scratch home, against a local server that
+  answers GitHub's device flow after 4 seconds: a second identical `rein login` said it waited
+  for the first and ended with its error, a `rein logout` said what it waited for and then
+  ran, and `status` took as long beside the login as alone. Left for you: the commit.

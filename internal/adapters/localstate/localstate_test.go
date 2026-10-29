@@ -1,6 +1,7 @@
 package localstate
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 func TestStore(t *testing.T) {
@@ -78,52 +80,61 @@ func TestStore(t *testing.T) {
 			t.Fatalf("err %v", err)
 		}
 	})
-	t.Run("the machine lock is held until released, refuses a live holder and takes over a stale one", func(t *testing.T) {
+	t.Run("the lock file is held until released, waits for a live process and takes over one left behind", func(t *testing.T) {
 		store := Store{Home: t.TempDir()}
-		release, err := store.Acquire(0)
+		release, err := store.acquireFile(context.Background(), nil)
 		if err != nil {
 			t.Fatalf("acquire: %v", err)
 		}
 		lock := filepath.Join(store.Home, lockFile)
 		holder, _ := os.ReadFile(lock)
-		if string(holder) == "" {
-			t.Fatalf("the lock does not name its holder")
-		}
-		_, err = store.Acquire(0)
-		if err == nil || !strings.Contains(err.Error(), "another rein is running (pid "+string(holder)) {
-			t.Fatalf("err %v", err)
+		if string(holder) != strconv.Itoa(os.Getpid()) {
+			t.Fatalf("the lock names %q, not this process", holder)
 		}
 		release()
 		_, lockErr := os.Stat(lock)
 		if lockErr == nil {
 			t.Fatalf("the lock stayed after release")
 		}
-		_ = os.WriteFile(lock, []byte("4242"), 0o644)
-		stale := time.Now().Add(-lockStale - time.Minute)
-		_ = os.Chtimes(lock, stale, stale)
-		release, err = store.Acquire(0)
-		if err != nil {
-			t.Fatalf("a stale lock was not taken over: %v", err)
+		// a live process holds it: the wait names it and ends with the context
+		live := strconv.Itoa(os.Getppid())
+		_ = os.WriteFile(lock, []byte(live), 0o644)
+		var told []ports.LockWait
+		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+		defer cancel()
+		_, err = store.acquireFile(ctx, func(wait ports.LockWait) { told = append(told, wait) })
+		if err == nil || !strings.Contains(err.Error(), "another rein is running (pid "+live) {
+			t.Fatalf("err %v", err)
 		}
-		release()
-		// a holder that is gone, such as a rein killed at a prompt, is taken over at once
-		_ = os.WriteFile(lock, []byte("999999"), 0o644)
-		release, err = store.Acquire(0)
-		if err != nil {
-			t.Fatalf("a dead holder was not taken over: %v", err)
+		if len(told) != 1 || told[0].Holder.Process != os.Getppid() || !strings.HasPrefix(told[0].Holder.String(), "another rein, process "+live+", since ") {
+			t.Fatalf("told %+v", told)
 		}
-		release()
 		// a holder that releases within the wait is waited for
-		_ = os.WriteFile(lock, []byte(strconv.Itoa(os.Getpid())), 0o644)
 		go func() {
 			time.Sleep(300 * time.Millisecond)
 			os.Remove(lock)
 		}()
-		release, err = store.Acquire(2 * time.Second)
+		release, err = store.acquireFile(context.Background(), func(ports.LockWait) {})
 		if err != nil {
 			t.Fatalf("waiting for a holder: %v", err)
 		}
 		release()
+		// a stale lock, a holder that is gone such as a rein killed at a
+		// prompt, and this process, whose line has no holder, are taken over
+		for _, left := range []string{"4242", "999999", strconv.Itoa(os.Getpid())} {
+			_ = os.WriteFile(lock, []byte(left), 0o644)
+			if left == "4242" {
+				stale := time.Now().Add(-lockStale - time.Minute)
+				_ = os.Chtimes(lock, stale, stale)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			release, err = store.acquireFile(ctx, func(ports.LockWait) {})
+			cancel()
+			if err != nil {
+				t.Fatalf("%s was not taken over: %v", left, err)
+			}
+			release()
+		}
 	})
 }
 

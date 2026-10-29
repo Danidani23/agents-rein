@@ -4,12 +4,14 @@
 package fake
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
@@ -673,21 +675,51 @@ func (judge *Judge) answer(model string, progress func(ports.JudgeProgress)) (st
 	return answer, "fake-session", nil
 }
 
-// Lock is a machine lock that is free, or held by someone else when Holder
-// is set. It counts how often it was taken.
+// Lock is a machine lock that is free, or has a command ahead when Ahead
+// is set, which it tells the waiting command of and then ends, so the lock
+// is taken; or has an identical command in line when Joined is set, which
+// Acquire returns. Free, closed by a test, holds the turn until then. It
+// keeps who asked, how often it was taken and what each release was told.
 type Lock struct {
-	Holder   string
+	Ahead    *ports.LockHolder
+	Joined   *ports.Joined
+	Free     chan struct{}
+	Holders  []ports.LockHolder
+	Outcomes []error
 	Acquired int
 	Released int
+	mutex    sync.Mutex
 }
 
-// Acquire fails while Holder is set, else counts and returns a release.
-func (lock *Lock) Acquire(wait time.Duration) (func(), error) {
-	if lock.Holder != "" {
-		return nil, errors.New("another rein is running (pid " + lock.Holder + " holds the lock); wait for it")
+// Acquire tells waiting of Ahead, waits for Free or ctx, or returns
+// Joined; else it counts and returns a release.
+func (lock *Lock) Acquire(ctx context.Context, holder ports.LockHolder, waiting func(ports.LockWait)) (func(error), error) {
+	lock.mutex.Lock()
+	lock.Holders = append(lock.Holders, holder)
+	lock.mutex.Unlock()
+	if lock.Joined != nil {
+		waiting(ports.LockWait{Holder: lock.Joined.Holder, Joining: true})
+		return nil, *lock.Joined
 	}
+	if lock.Ahead != nil {
+		waiting(ports.LockWait{Holder: *lock.Ahead, Ahead: 1})
+	}
+	if lock.Free != nil {
+		select {
+		case <-lock.Free:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	lock.mutex.Lock()
 	lock.Acquired++
-	return func() { lock.Released++ }, nil
+	lock.mutex.Unlock()
+	return func(outcome error) {
+		lock.mutex.Lock()
+		defer lock.mutex.Unlock()
+		lock.Released++
+		lock.Outcomes = append(lock.Outcomes, outcome)
+	}, nil
 }
 
 // Releases is a fake source of rein's releases: Latest_ is what Latest

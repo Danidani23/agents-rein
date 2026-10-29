@@ -68,7 +68,8 @@ func wireFor(runner execute.Runner, executable string) cli.Orchestrate {
 			// a file in place of the keychain: for tests and machines without one, chosen on purpose
 			tokens = keychain.FileKeychain{Path: file}
 		}
-		services := orchestration.NewServices(home, host, git.Repository{Runner: runner}, store, []ports.Agent{claudecode.Agent{Runner: runner}}, claudecode.Judge{Runner: runner}, store, tokens, release.NewClient(valueOr("REIN_GITHUB_API", gitHubAPI)), version.String(), executable)
+		// every command of this process takes turns at the machine lock through one queue (D56)
+		services := orchestration.NewServices(home, host, git.Repository{Runner: runner}, store, []ports.Agent{claudecode.Agent{Runner: runner}}, claudecode.Judge{Runner: runner}, localstate.QueueOf(home), tokens, release.NewClient(valueOr("REIN_GITHUB_API", gitHubAPI)), version.String(), executable)
 		services.Credentials.Environment = runner.LookupEnv
 		services.Updates.Environment = runner.LookupEnv
 		services.WorkingCopy.Environment = runner.LookupEnv
