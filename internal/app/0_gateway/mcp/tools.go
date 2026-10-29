@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"path/filepath"
 
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/lint"
@@ -41,7 +42,7 @@ type lintArguments struct {
 
 // addTools registers every tool: a query each, read-only, behind the login
 // gate where its command is.
-func addTools(server *mcp.Server, orchestrator orchestration.Orchestrator) {
+func addTools(server *mcp.Server, orchestrator orchestration.Orchestrator, folder string) {
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
 	mcp.AddTool(server, &mcp.Tool{Name: "status", Title: "What rein knows about this machine", Annotations: readOnly,
 		Description: "The logins, the agents found here, the connected organisations, the initialised project clones with the drift of what sync wrote and what became of their latest snapshot, and the pending proposals. Runs without a login."},
@@ -85,9 +86,24 @@ func addTools(server *mcp.Server, orchestrator orchestration.Orchestrator) {
 	mcp.AddTool(server, &mcp.Tool{Name: "proposals_pending", Title: "The proposals waiting to be proposed", Annotations: readOnly,
 		Description: "The proposal files rein distill wrote and rein propose has not opened a pull request from yet, with their level, candidates and time."},
 		query(func(arguments pendingArguments) (any, error) {
-			return result(orchestrator.PendingProposals(arguments.Directory))
+			directory := arguments.Directory
+			if directory != "" {
+				directory = absoluteIn(folder, directory)
+			}
+			return result(orchestrator.PendingProposals(directory))
 		}))
 	mcp.AddTool(server, &mcp.Tool{Name: "lint", Title: "Lint a declarations folder", Annotations: readOnly,
 		Description: "The errors and warnings rein lint reports for a declarations folder, with the file and the rule each comes from."},
-		query(func(arguments lintArguments) (any, error) { return result(lint.Run(arguments.Path)) }))
+		query(func(arguments lintArguments) (any, error) {
+			return result(lint.Run(absoluteIn(folder, arguments.Path)))
+		}))
+}
+
+// absoluteIn is path from folder, the one the agent's session runs in; ""
+// leaves a relative path to this process's working folder.
+func absoluteIn(folder string, path string) string {
+	if filepath.IsAbs(path) || folder == "" {
+		return path
+	}
+	return filepath.Join(folder, path)
 }

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -41,7 +40,7 @@ func runResetProject(environment *commandEnvironment, request orchestration.Rest
 		return err
 	}
 	defer release()
-	request.Directory, err = filepath.Abs(request.Directory)
+	request.Directory, err = environment.absolute(request.Directory)
 	if err != nil {
 		return err
 	}

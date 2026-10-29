@@ -3,7 +3,6 @@ package cli
 import (
 	"bufio"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -77,7 +76,7 @@ func newGitCredentialCommand(environment *commandEnvironment) *cobra.Command {
 			if arguments[0] != "get" {
 				return nil
 			}
-			login := os.Getenv("REIN_LOGIN")
+			login := environment.runner.Getenv("REIN_LOGIN")
 			if login == "" {
 				return refusal.New("git-credential is for rein's own git calls; REIN_LOGIN is not set")
 			}

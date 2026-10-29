@@ -27,15 +27,15 @@ const Instructions = "rein keeps the settings of AI coding agents as declaration
 
 // Serve speaks MCP over in and out until in is closed, which is how the
 // agent ends the session. version is what rein version prints.
-func Serve(ctx context.Context, in io.Reader, out io.Writer, orchestrator orchestration.Orchestrator, version string) error {
-	return NewServer(orchestrator, version).Run(ctx, &mcp.IOTransport{Reader: io.NopCloser(in), Writer: nopCloser{out}})
+func Serve(ctx context.Context, in io.Reader, out io.Writer, orchestrator orchestration.Orchestrator, version string, folder string) error {
+	return NewServer(orchestrator, version, folder).Run(ctx, &mcp.IOTransport{Reader: io.NopCloser(in), Writer: nopCloser{out}})
 }
 
 // NewServer builds the server with every tool; a test connects it over an
 // in-memory transport.
-func NewServer(orchestrator orchestration.Orchestrator, version string) *mcp.Server {
+func NewServer(orchestrator orchestration.Orchestrator, version string, folder string) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: ServerName, Title: "Agents Rein", Version: version}, &mcp.ServerOptions{Instructions: Instructions})
-	addTools(server, orchestrator)
+	addTools(server, orchestrator, folder)
 	return server
 }
 

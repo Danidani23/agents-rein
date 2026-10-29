@@ -57,7 +57,8 @@ the start of every chat session with the agent.
   not repository settings.
 - A harness that already exists in a repository is distilled into declarations: a distiller cuts
   it into units of one concern and suggests the level each belongs to.
-- It is a compiler and a linter, never a service, and never deletes a repository.
+- It is a compiler and a linter that runs on your machine, never a hosted service, and never
+  deletes a repository.
 
 ## Install
 

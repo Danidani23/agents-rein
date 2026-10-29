@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -18,7 +17,11 @@ import (
 // headless with the brief on its standard input, one turn, no tools, on the
 // developer's own subscription. It is the fallback when an organisation
 // declares no provider.
-type Judge struct{}
+type Judge struct {
+	// Runner runs claude for the caller, found on its PATH; the zero Runner
+	// is this process's.
+	Runner execute.Runner
+}
 
 var _ ports.Judge = Judge{}
 
@@ -28,8 +31,8 @@ func (Judge) Name() string {
 }
 
 // Available needs the claude command on the PATH.
-func (Judge) Available() (string, bool) {
-	_, err := exec.LookPath("claude")
+func (judge Judge) Available() (string, bool) {
+	err := judge.Runner.Preflight("claude")
 	if err != nil {
 		return "claude is not on the PATH; install Claude Code, or declare a provider in the organisation", false
 	}
@@ -103,33 +106,33 @@ const judgeTimeout = 15 * time.Minute
 // folder without tools, so no project's instructions, hooks or tools
 // colour the verdict; model names the model, "" for the developer's
 // default. Never --bare: it skips the login with the hooks.
-func (Judge) Ask(brief string, model string, progress func(ports.JudgeProgress)) (string, string, error) {
+func (judge Judge) Ask(brief string, model string, progress func(ports.JudgeProgress)) (string, string, error) {
 	session := newSessionID()
-	answer, err := converse(brief, judgeArguments(model, session, false), progress)
+	answer, err := judge.converse(brief, judgeArguments(model, session, false), progress)
 	return answer, session, err
 }
 
 // Reply goes on in the conversation the brief started, from another empty
 // folder, which claude finds by its id; the conversation keeps its id, so
 // one conversation holds the brief, the answers and the message (P2.58).
-func (Judge) Reply(conversation ports.JudgeConversation, message string, model string, progress func(ports.JudgeProgress)) (string, string, error) {
+func (judge Judge) Reply(conversation ports.JudgeConversation, message string, model string, progress func(ports.JudgeProgress)) (string, string, error) {
 	if conversation.Session == "" {
 		return "", "", errors.New("claude has no conversation to reply in")
 	}
-	answer, err := converse(message, judgeArguments(model, conversation.Session, true), progress)
+	answer, err := judge.converse(message, judgeArguments(model, conversation.Session, true), progress)
 	return answer, conversation.Session, err
 }
 
 // converse runs claude -p once with input on its standard input, in an
 // empty folder, and returns the result text.
-func converse(input string, arguments []string, progress func(ports.JudgeProgress)) (string, error) {
+func (judge Judge) converse(input string, arguments []string, progress func(ports.JudgeProgress)) (string, error) {
 	scratch, err := os.MkdirTemp("", "rein-judge-*")
 	if err != nil {
 		return "", err
 	}
 	defer os.RemoveAll(scratch)
 	stream := &judgeStream{progress: progress}
-	result, err := execute.RunWith(execute.Options{Directory: scratch, Input: input, Timeout: judgeTimeout, Lines: stream.line}, "claude", arguments...)
+	result, err := judge.Runner.RunWith(execute.Options{Directory: scratch, Input: input, Timeout: judgeTimeout, Lines: stream.line}, "claude", arguments...)
 	err = explainFailure(err)
 	output, parsed := resultOf(result.Stdout)
 	if err != nil {

@@ -33,6 +33,21 @@ GitHub account, and the agents on your machine are detected.
 Planned, in the board's order: `rein import` and `rein export`, which move a level into and
 out of an org repository; `rein review`; `rein migrate`.
 
+## The background process
+
+Every command above except `version`, `lint` and help runs in rein's background process, one
+per machine and rein home (D52, D55). The `rein` you start, in a terminal, from the
+session-start hook or as the tool server, sends the command line, your folder and your
+environment to it and relays what you type, Ctrl-C and what the command prints, as `ssh` does;
+the exit code is the command's. The first command that needs it starts it, as `rein owner`,
+and it ends after 15 minutes without a command. It listens on `owner.sock` in rein's home, or,
+when that path is too long for a socket, on `rein-<hash>.sock` in the system's temporary
+folder; either is open to your account alone. What it has to say about itself goes to
+`owner.log` in rein's home. A `rein` of another version or another build makes it stop taking
+commands and end once its running ones have, and starts one of its own, so `rein update` takes
+effect at the next command. Several commands run at once; until the rules of P6.7 are built,
+a second command that changes something waits for the machine lock as before.
+
 ## The MCP server
 
 `rein mcp` serves rein's queries to an agent as tools of the MCP (the Model Context Protocol)

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -68,7 +67,7 @@ func runInit(environment *commandEnvironment, answers initAnswers) error {
 	if err != nil {
 		return err
 	}
-	directory, err := filepath.Abs(answers.path)
+	directory, err := environment.absolute(answers.path)
 	if err != nil {
 		return err
 	}

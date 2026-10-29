@@ -8,11 +8,13 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -41,12 +43,17 @@ const (
 type Orchestrate func() (orchestration.Orchestrator, error)
 
 // commandEnvironment is what every command receives: the streams, whether a person
-// is typing, and the orchestrator.
+// is typing, the caller's folder and runner, and the orchestrator.
 type commandEnvironment struct {
-	in          io.Reader
-	out         io.Writer
-	errOut      io.Writer
-	terminal    bool
+	in       io.Reader
+	out      io.Writer
+	errOut   io.Writer
+	terminal bool
+	// folder is where the caller's relative paths start; "" is this
+	// process's working folder.
+	folder string
+	// runner runs programs for the caller and reads its environment.
+	runner      execute.Runner
 	orchestrate Orchestrate
 	// pendingStep is the step whose start line is still open on the
 	// terminal, waiting to be rewritten with its outcome.
@@ -134,6 +141,14 @@ func (environment *commandEnvironment) stopSpinner() {
 	close(environment.spinner.stop)
 	<-environment.spinner.done
 	environment.spinner = nil
+}
+
+// absolute is path from the caller's folder.
+func (environment *commandEnvironment) absolute(path string) (string, error) {
+	if filepath.IsAbs(path) || environment.folder == "" {
+		return filepath.Abs(path)
+	}
+	return filepath.Join(environment.folder, path), nil
 }
 
 func (environment *commandEnvironment) prompter() ports.Prompter {
@@ -253,11 +268,12 @@ func (environment *commandEnvironment) closeLine(step string, text string) {
 	fmt.Fprintf(environment.out, "  %s\n", text)
 }
 
-// Run executes rein with arguments and returns the exit code. Ctrl-C stops
-// the running program so the workflow undoes what it did; a second Ctrl-C
-// quits at once.
+// Run executes rein with arguments for this process and returns the exit
+// code. Ctrl-C stops the running program so the workflow undoes what it
+// did; a second Ctrl-C quits at once.
 func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer, orchestrate Orchestrate) int {
-	environment := &commandEnvironment{in: in, out: out, errOut: errOut, terminal: terminal.IsTerminal(in), orchestrate: orchestrate}
+	folder, _ := os.Getwd()
+	environment := newEnvironment(Caller{In: in, Out: out, ErrOut: errOut, Terminal: terminal.IsTerminal(in), Folder: folder}, orchestrate)
 	signals := make(chan os.Signal, 2)
 	signal.Notify(signals, os.Interrupt)
 	defer signal.Stop(signals)
@@ -277,9 +293,15 @@ func Run(arguments []string, in io.Reader, out io.Writer, errOut io.Writer, orch
 }
 
 func runCommand(environment *commandEnvironment, arguments []string) int {
+	return runCommandWithin(context.Background(), environment, arguments)
+}
+
+// runCommandWithin runs the command; a command that serves until it is
+// stopped, ui or mcp, stops when ctx ends.
+func runCommandWithin(ctx context.Context, environment *commandEnvironment, arguments []string) int {
 	root := newRootCommand(environment)
 	root.SetArgs(arguments)
-	err := root.Execute()
+	err := root.ExecuteContext(ctx)
 	if err == nil {
 		return ExitWorked
 	}
@@ -330,7 +352,8 @@ func newRootCommand(environment *commandEnvironment) *cobra.Command {
 			"tool servers, hooks and permissions, as declarations in one git repository per\n" +
 			"organisation, at four levels: organisation, team, project and user. rein checks them,\n" +
 			"works out which apply to a project, and writes them into each clone in the form your\n" +
-			"agent reads. It is a compiler and a linter, never a service.\n\n" +
+			"agent reads. It is a compiler and a linter that runs on this machine, never a hosted\n" +
+			"service.\n\n" +
 			"Your identity is your GitHub account: rein login signs you in through the Agents Rein app and\n" +
 			"keeps the token in your keychain. Start with rein org create, or rein org connect for an\n" +
 			"organisation that exists. rein status shows what has been set up, rein update keeps rein\n" +

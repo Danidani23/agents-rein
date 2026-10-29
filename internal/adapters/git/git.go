@@ -19,7 +19,7 @@ var askpassVariables = []string{"GIT_ASKPASS", "SSH_ASKPASS", "SSH_ASKPASS_REQUI
 // no dialog, and rein itself as the only credential helper, answering with
 // the login's token (D25). A remote without a login, a local path, gets no
 // helper.
-func network(access ports.RemoteAccess, directory string, arguments ...string) error {
+func (repository Repository) network(access ports.RemoteAccess, directory string, arguments ...string) error {
 	options := execute.Options{Directory: directory, Timeout: execute.NetworkTimeout, Unset: append([]string{"GIT_CONFIG_COUNT"}, askpassVariables...)}
 	if access.Login != "" {
 		executable, err := os.Executable()
@@ -33,24 +33,27 @@ func network(access ports.RemoteAccess, directory string, arguments ...string) e
 			"GIT_CONFIG_KEY_1=credential.helper", "GIT_CONFIG_VALUE_1=!" + strconv.Quote(executable) + " git-credential",
 		}
 	}
-	_, err := execute.RunWith(options, "git", arguments...)
+	_, err := repository.Runner.RunWith(options, "git", arguments...)
 	return err
 }
 
-// Repository runs git on this machine.
-type Repository struct{}
+// Repository runs git on this machine, for the caller its Runner names.
+type Repository struct {
+	// Runner runs git for the caller; the zero Runner is this process's.
+	Runner execute.Runner
+}
 
 var _ ports.Repository = Repository{}
 
 // Preflight checks that git is installed before anything changes.
-func (Repository) Preflight() error {
-	return execute.Preflight("git")
+func (repository Repository) Preflight() error {
+	return repository.Runner.Preflight("git")
 }
 
 // Clone clones remote into directory, quietly and without prompting.
 // Publish initialises directory on main, commits everything in it with the
 // user's own git identity, and pushes to remote as origin.
-func (Repository) Publish(access ports.RemoteAccess, directory string, remote string, message string) error {
+func (repository Repository) Publish(access ports.RemoteAccess, directory string, remote string, message string) error {
 	steps := [][]string{
 		{"init", "-q"},
 		{"symbolic-ref", "HEAD", "refs/heads/main"},
@@ -59,50 +62,50 @@ func (Repository) Publish(access ports.RemoteAccess, directory string, remote st
 		{"remote", "add", "origin", remote},
 	}
 	for _, arguments := range steps {
-		_, err := execute.Run(directory, "git", arguments...)
+		_, err := repository.Runner.Run(directory, "git", arguments...)
 		if err != nil {
 			return err
 		}
 	}
-	return network(access, directory, "push", "-q", "-u", "origin", "main")
+	return repository.network(access, directory, "push", "-q", "-u", "origin", "main")
 }
 
 // Pull fast-forwards the clone to its origin; a diverged clone is an error,
 // since rein never merges.
-func (Repository) Pull(access ports.RemoteAccess, directory string) error {
-	return network(access, directory, "pull", "-q", "--ff-only")
+func (repository Repository) Pull(access ports.RemoteAccess, directory string) error {
+	return repository.network(access, directory, "pull", "-q", "--ff-only")
 }
 
 // CommitPaths stages the paths and commits them with the user's identity.
-func (Repository) CommitPaths(directory string, relativePaths []string, message string) error {
+func (repository Repository) CommitPaths(directory string, relativePaths []string, message string) error {
 	arguments := append([]string{"add", "--"}, relativePaths...)
-	_, err := execute.Run(directory, "git", arguments...)
+	_, err := repository.Runner.Run(directory, "git", arguments...)
 	if err != nil {
 		return err
 	}
-	_, err = execute.Run(directory, "git", "commit", "-q", "-m", message)
+	_, err = repository.Runner.Run(directory, "git", "commit", "-q", "-m", message)
 	return err
 }
 
 // Push pushes main to origin.
-func (Repository) Push(access ports.RemoteAccess, directory string) error {
-	return network(access, directory, "push", "-q", "origin", "main")
+func (repository Repository) Push(access ports.RemoteAccess, directory string) error {
+	return repository.network(access, directory, "push", "-q", "origin", "main")
 }
 
 // ResetToRemote throws away local commits and changes: the clone is rein's
 // cache of the remote and nothing in it is the user's work.
-func (Repository) ResetToRemote(directory string) error {
-	_, err := execute.Run(directory, "git", "reset", "-q", "--hard", "origin/main")
+func (repository Repository) ResetToRemote(directory string) error {
+	_, err := repository.Runner.Run(directory, "git", "reset", "-q", "--hard", "origin/main")
 	if err != nil {
 		return err
 	}
-	_, err = execute.Run(directory, "git", "clean", "-qfd")
+	_, err = repository.Runner.Run(directory, "git", "clean", "-qfd")
 	return err
 }
 
 // Root is the repository's top folder.
-func (Repository) Root(directory string) (string, error) {
-	result, err := execute.Run(directory, "git", "rev-parse", "--show-toplevel")
+func (repository Repository) Root(directory string) (string, error) {
+	result, err := repository.Runner.Run(directory, "git", "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", err
 	}
@@ -110,8 +113,8 @@ func (Repository) Root(directory string) (string, error) {
 }
 
 // RemoteURL is the URL of origin; a repository without one gives "".
-func (Repository) RemoteURL(directory string) (string, error) {
-	result, err := execute.Run(directory, "git", "remote", "get-url", "origin")
+func (repository Repository) RemoteURL(directory string) (string, error) {
+	result, err := repository.Runner.Run(directory, "git", "remote", "get-url", "origin")
 	if err != nil {
 		var failure *execute.Failure
 		if errors.As(err, &failure) {
@@ -123,8 +126,8 @@ func (Repository) RemoteURL(directory string) (string, error) {
 }
 
 // RootCommits lists the parentless commits reachable from HEAD.
-func (Repository) RootCommits(directory string) ([]string, error) {
-	result, err := execute.Run(directory, "git", "rev-list", "--max-parents=0", "HEAD")
+func (repository Repository) RootCommits(directory string) ([]string, error) {
+	result, err := repository.Runner.Run(directory, "git", "rev-list", "--max-parents=0", "HEAD")
 	if err != nil {
 		return nil, err
 	}
@@ -132,9 +135,9 @@ func (Repository) RootCommits(directory string) ([]string, error) {
 }
 
 // TrackedPaths asks the index which of the paths it holds.
-func (Repository) TrackedPaths(directory string, relativePaths []string) ([]string, error) {
+func (repository Repository) TrackedPaths(directory string, relativePaths []string) ([]string, error) {
 	arguments := append([]string{"ls-files", "--"}, relativePaths...)
-	result, err := execute.Run(directory, "git", arguments...)
+	result, err := repository.Runner.Run(directory, "git", arguments...)
 	if err != nil {
 		return nil, err
 	}
@@ -142,16 +145,16 @@ func (Repository) TrackedPaths(directory string, relativePaths []string) ([]stri
 }
 
 // StagePaths stages additions, changes and deletions under the paths.
-func (Repository) StagePaths(directory string, relativePaths []string) error {
+func (repository Repository) StagePaths(directory string, relativePaths []string) error {
 	arguments := append([]string{"add", "-A", "--"}, relativePaths...)
-	_, err := execute.Run(directory, "git", arguments...)
+	_, err := repository.Runner.Run(directory, "git", arguments...)
 	return err
 }
 
 // HasStagedChanges is git diff --cached --quiet, which exits 1 when there is
 // something to commit.
-func (Repository) HasStagedChanges(directory string) (bool, error) {
-	_, err := execute.Run(directory, "git", "diff", "--cached", "--quiet")
+func (repository Repository) HasStagedChanges(directory string) (bool, error) {
+	_, err := repository.Runner.Run(directory, "git", "diff", "--cached", "--quiet")
 	if err == nil {
 		return false, nil
 	}
@@ -163,12 +166,12 @@ func (Repository) HasStagedChanges(directory string) (bool, error) {
 }
 
 // CommitStaged commits with the user's identity and returns the hash.
-func (Repository) CommitStaged(directory string, message string) (string, error) {
-	_, err := execute.Run(directory, "git", "commit", "-q", "-m", message)
+func (repository Repository) CommitStaged(directory string, message string) (string, error) {
+	_, err := repository.Runner.Run(directory, "git", "commit", "-q", "-m", message)
 	if err != nil {
 		return "", err
 	}
-	result, err := execute.Run(directory, "git", "rev-parse", "HEAD")
+	result, err := repository.Runner.Run(directory, "git", "rev-parse", "HEAD")
 	if err != nil {
 		return "", err
 	}
@@ -176,33 +179,33 @@ func (Repository) CommitStaged(directory string, message string) (string, error)
 }
 
 // CreateBranch is git checkout -b.
-func (Repository) CreateBranch(directory string, branch string) error {
-	_, err := execute.Run(directory, "git", "checkout", "-q", "-b", branch)
+func (repository Repository) CreateBranch(directory string, branch string) error {
+	_, err := repository.Runner.Run(directory, "git", "checkout", "-q", "-b", branch)
 	return err
 }
 
 // Checkout switches branches.
-func (Repository) Checkout(directory string, branch string) error {
-	_, err := execute.Run(directory, "git", "checkout", "-q", branch)
+func (repository Repository) Checkout(directory string, branch string) error {
+	_, err := repository.Runner.Run(directory, "git", "checkout", "-q", branch)
 	return err
 }
 
 // DeleteBranch is git branch -D.
-func (Repository) DeleteBranch(directory string, branch string) error {
-	_, err := execute.Run(directory, "git", "branch", "-q", "-D", branch)
+func (repository Repository) DeleteBranch(directory string, branch string) error {
+	_, err := repository.Runner.Run(directory, "git", "branch", "-q", "-D", branch)
 	return err
 }
 
 // PushBranch pushes the branch to origin.
-func (Repository) PushBranch(access ports.RemoteAccess, directory string, branch string) error {
-	return network(access, directory, "push", "-q", "-u", "origin", branch)
+func (repository Repository) PushBranch(access ports.RemoteAccess, directory string, branch string) error {
+	return repository.network(access, directory, "push", "-q", "-u", "origin", branch)
 }
 
 // DeleteRemoteBranch removes the branch from origin.
-func (Repository) DeleteRemoteBranch(access ports.RemoteAccess, directory string, branch string) error {
-	return network(access, directory, "push", "-q", "origin", "--delete", branch)
+func (repository Repository) DeleteRemoteBranch(access ports.RemoteAccess, directory string, branch string) error {
+	return repository.network(access, directory, "push", "-q", "origin", "--delete", branch)
 }
 
-func (Repository) Clone(access ports.RemoteAccess, remote string, directory string) error {
-	return network(access, "", "clone", "--quiet", remote, directory)
+func (repository Repository) Clone(access ports.RemoteAccess, remote string, directory string) error {
+	return repository.network(access, "", "clone", "--quiet", remote, directory)
 }

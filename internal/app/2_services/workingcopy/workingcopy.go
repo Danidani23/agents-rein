@@ -20,6 +20,9 @@ import (
 // Service acts on working copies through version control and the file system.
 type Service struct {
 	Repository ports.Repository
+	// Environment reads a variable of the caller's environment; nil means
+	// os.LookupEnv.
+	Environment func(name string) (string, bool)
 }
 
 // Location is a project's place in its repository: the repository's root,
@@ -244,10 +247,14 @@ func (Service) RemoveEmptyFolders(folder string, relativePaths []string) {
 }
 
 // UnsetVariables names the environment variables among names that are not set.
-func (Service) UnsetVariables(names []string) []string {
+func (service Service) UnsetVariables(names []string) []string {
+	lookup := service.Environment
+	if lookup == nil {
+		lookup = os.LookupEnv
+	}
 	var unset []string
 	for _, name := range names {
-		_, found := os.LookupEnv(name)
+		_, found := lookup(name)
 		if !found {
 			unset = append(unset, name)
 		}

@@ -30,6 +30,10 @@ var claudeStubFolder string
 // runs only executables and no shell script. Started as claude, the binary
 // answers a judge brief with the canned verdict for the rules of the init test.
 func TestMain(tests *testing.M) {
+	// started as rein owner, the binary is the background process of a test's home
+	if len(os.Args) > 1 && os.Args[1] == ownerCommand {
+		os.Exit(runRein(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	}
 	if strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe") == "claude" {
 		if len(os.Args) > 1 && os.Args[1] == "-p" {
 			_, _ = io.Copy(io.Discard, os.Stdin)

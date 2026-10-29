@@ -22,6 +22,12 @@ import (
 // scratch home, and returns the client's session.
 func connect(t *testing.T, loggedIn bool) *mcp.ClientSession {
 	t.Helper()
+	return connectIn(t, loggedIn, "")
+}
+
+// connectIn is connect for an agent whose session runs in folder.
+func connectIn(t *testing.T, loggedIn bool, folder string) *mcp.ClientSession {
+	t.Helper()
 	home := t.TempDir()
 	state := fake.NewState()
 	if loggedIn {
@@ -30,7 +36,7 @@ func connect(t *testing.T, loggedIn bool) *mcp.ClientSession {
 	keychain := &fake.Keychain{Tokens: map[string]ports.Token{"Danidani23": {Login: "Danidani23", AccessToken: "token", ExpiresAt: time.Now().Add(time.Hour)}}}
 	agents := []ports.Agent{&fake.Agent{Present: true, HomePath: t.TempDir()}}
 	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, &fake.Repository{}, state, agents, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, keychain, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
-	server := NewServer(orchestration.New(services), "v0.1.0")
+	server := NewServer(orchestration.New(services), "v0.1.0", folder)
 	clientEnd, serverEnd := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(context.Background(), serverEnd, nil)
 	if err != nil {
@@ -113,12 +119,24 @@ func TestAMissingArgumentIsRejectedBeforeTheQueryRuns(t *testing.T) {
 }
 
 func TestLintReadsAFolderOnThisMachine(t *testing.T) {
-	session := connect(t, true)
-	folder := t.TempDir()
-	_ = os.MkdirAll(filepath.Join(folder, "rules"), 0o755)
-	_ = os.WriteFile(filepath.Join(folder, "rules", "go.md"), []byte("Two-line errors.\n"), 0o644)
-	answer, text := call(t, session, "lint", map[string]any{"path": folder})
-	if answer.IsError || answer.StructuredContent == nil {
-		t.Fatalf("lint: error %v text %q", answer.IsError, text)
-	}
+	t.Run("a folder given whole", func(t *testing.T) {
+		session := connect(t, true)
+		folder := t.TempDir()
+		_ = os.MkdirAll(filepath.Join(folder, "rules"), 0o755)
+		_ = os.WriteFile(filepath.Join(folder, "rules", "go.md"), []byte("Two-line errors.\n"), 0o644)
+		answer, text := call(t, session, "lint", map[string]any{"path": folder})
+		if answer.IsError || answer.StructuredContent == nil {
+			t.Fatalf("lint: error %v text %q", answer.IsError, text)
+		}
+	})
+	t.Run("a relative path starts from the folder the agent's session runs in", func(t *testing.T) {
+		sessionFolder := t.TempDir()
+		_ = os.MkdirAll(filepath.Join(sessionFolder, "declarations", "rules"), 0o755)
+		_ = os.WriteFile(filepath.Join(sessionFolder, "declarations", "rules", "go.md"), []byte("Two-line errors.\n"), 0o644)
+		session := connectIn(t, true, sessionFolder)
+		answer, text := call(t, session, "lint", map[string]any{"path": "declarations"})
+		if answer.IsError || answer.StructuredContent == nil {
+			t.Fatalf("lint: error %v text %q", answer.IsError, text)
+		}
+	})
 }

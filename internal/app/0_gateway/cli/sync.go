@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -52,7 +51,7 @@ func runSync(environment *commandEnvironment, request orchestration.SyncRequest,
 	if err != nil {
 		return hookOrError(environment, hook, err)
 	}
-	request.Directory, err = filepath.Abs(request.Directory)
+	request.Directory, err = environment.absolute(request.Directory)
 	if err != nil {
 		return err
 	}

@@ -36,6 +36,9 @@ type backend interface {
 
 // System is the operating system's keychain.
 type System struct {
+	// Runner runs the system's keychain command for the caller; the zero
+	// Runner is this process's.
+	Runner execute.Runner
 	// keeper replaces the operating system's store, for a test.
 	keeper backend
 }
@@ -49,9 +52,9 @@ func (system System) store() backend {
 	}
 	switch runtime.GOOS {
 	case "darwin":
-		return securityCommand{run: execute.RunWith}
+		return securityCommand{run: system.Runner.RunWith, look: system.Runner.Preflight}
 	case "linux":
-		return secretTool{run: execute.RunWith, look: execute.Preflight}
+		return secretTool{run: system.Runner.RunWith, look: system.Runner.Preflight}
 	case "windows":
 		return credentialManager{}
 	}
@@ -119,11 +122,12 @@ type run func(options execute.Options, name string, arguments ...string) (execut
 // securityCommand is macOS's login keychain through the security command,
 // a secret as a generic password.
 type securityCommand struct {
-	run run
+	run  run
+	look func(name string) error
 }
 
-func (securityCommand) available() (string, bool) {
-	err := execute.Preflight("security")
+func (keychain securityCommand) available() (string, bool) {
+	err := keychain.look("security")
 	if err != nil {
 		return err.Error(), false
 	}

@@ -163,7 +163,7 @@ func (service Service) Logout(login string) error {
 // AccessToken is the token of a login, renewed when expired. An empty login
 // means the only one, and is a refusal when there are several or none.
 func (service Service) AccessToken(login string) (string, error) {
-	if token, found := actionsToken(); found {
+	if token, found := service.actionsToken(); found {
 		return token, nil
 	}
 	if login == "" {
@@ -235,12 +235,21 @@ func (service Service) Resolve(login string) (ports.Identity, error) {
 }
 
 // actionsToken is the job's own token inside GitHub Actions.
-func actionsToken() (string, bool) {
-	if os.Getenv("GITHUB_ACTIONS") == "" {
+func (service Service) actionsToken() (string, bool) {
+	inActions, _ := service.lookup("GITHUB_ACTIONS")
+	if inActions == "" {
 		return "", false
 	}
-	token := os.Getenv("GITHUB_TOKEN")
+	token, _ := service.lookup("GITHUB_TOKEN")
 	return token, token != ""
+}
+
+// lookup reads a variable of the caller's environment.
+func (service Service) lookup(name string) (string, bool) {
+	if service.Environment == nil {
+		return os.LookupEnv(name)
+	}
+	return service.Environment(name)
 }
 
 func slugOf(login string) string {
@@ -264,11 +273,7 @@ func (service Service) Key(name string) (string, bool) {
 			return value, true
 		}
 	}
-	lookup := service.Environment
-	if lookup == nil {
-		lookup = os.LookupEnv
-	}
-	value, found := lookup(name)
+	value, found := service.lookup(name)
 	return value, found && value != ""
 }
 

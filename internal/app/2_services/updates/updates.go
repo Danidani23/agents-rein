@@ -38,6 +38,9 @@ type Service struct {
 	// OS and Arch name the build to fetch; empty means this machine's.
 	OS   string
 	Arch string
+	// Environment reads a variable of the caller's environment; nil means
+	// os.LookupEnv.
+	Environment func(name string) (string, bool)
 }
 
 // checkInterval is how long a check result holds before the host is asked
@@ -158,7 +161,7 @@ func (service Service) Nudge() string {
 func (service Service) HowInstalled() Install {
 	executable := filepath.ToSlash(service.Executable)
 	home, _ := os.UserHomeDir()
-	localApplicationData := os.Getenv("LOCALAPPDATA")
+	localApplicationData := service.getenv("LOCALAPPDATA")
 	switch {
 	case strings.Contains(executable, "/Cellar/") || strings.Contains(executable, "/homebrew/") || strings.Contains(executable, "/linuxbrew/"):
 		return Install{Kind: InstallBrew, Command: "brew upgrade --cask rein"}
@@ -172,7 +175,7 @@ func (service Service) HowInstalled() Install {
 	// the .deb, .rpm and .apk of a release and the AUR's rein-bin all put rein here
 	case executable == "/usr/bin/rein":
 		return Install{Kind: InstallPackage, Advice: "install the new release's .deb, .rpm or .apk from https://github.com/Danidani23/agents-rein/releases/latest, or, for the AUR's rein-bin, upgrade with your AUR helper"}
-	case strings.HasPrefix(executable, filepath.ToSlash(goBinFolder())+"/"):
+	case strings.HasPrefix(executable, filepath.ToSlash(service.goBinFolder())+"/"):
 		return Install{Kind: InstallGo, Command: "go install github.com/Danidani23/agents-rein/cmd/rein@latest"}
 	case home != "" && strings.HasPrefix(executable, filepath.ToSlash(filepath.Join(home, ".local", "bin"))+"/"):
 		return Install{Kind: InstallScript, Self: true}
@@ -183,11 +186,11 @@ func (service Service) HowInstalled() Install {
 }
 
 // goBinFolder is where go install puts binaries.
-func goBinFolder() string {
-	if goBin := os.Getenv("GOBIN"); goBin != "" {
+func (service Service) goBinFolder() string {
+	if goBin := service.getenv("GOBIN"); goBin != "" {
 		return goBin
 	}
-	if goPath := os.Getenv("GOPATH"); goPath != "" {
+	if goPath := service.getenv("GOPATH"); goPath != "" {
 		return filepath.Join(goPath, "bin")
 	}
 	home, _ := os.UserHomeDir()
@@ -341,4 +344,13 @@ func (service Service) Writable() bool {
 	}
 	os.Remove(probe)
 	return true
+}
+
+// getenv reads a variable of the caller's environment.
+func (service Service) getenv(name string) string {
+	if service.Environment == nil {
+		return os.Getenv(name)
+	}
+	value, _ := service.Environment(name)
+	return value
 }

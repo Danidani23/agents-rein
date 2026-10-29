@@ -5,9 +5,9 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 
+	"github.com/Danidani23/agents-rein/internal/adapters/execute"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
@@ -17,7 +17,11 @@ const Name = "claude-code"
 
 // Agent is Claude Code as rein sees it: its command, its home folder and the
 // placements made there. It is the Agent port.
-type Agent struct{}
+type Agent struct {
+	// Runner is the caller's: its PATH finds claude, its CLAUDE_CONFIG_DIR
+	// names Claude Code's home. The zero Runner is this process's.
+	Runner execute.Runner
+}
 
 var _ ports.Agent = Agent{}
 
@@ -27,14 +31,13 @@ func (Agent) Name() string {
 }
 
 // Installed reports whether the claude command is on the PATH.
-func (Agent) Installed() bool {
-	_, err := exec.LookPath("claude")
-	return err == nil
+func (agent Agent) Installed() bool {
+	return agent.Runner.Preflight("claude") == nil
 }
 
 // Home is CLAUDE_CONFIG_DIR when set, else ~/.claude.
-func (Agent) Home() (string, error) {
-	return ClaudeHome()
+func (agent Agent) Home() (string, error) {
+	return claudeHome(agent.Runner)
 }
 
 // TrustsFolder reads Claude Code's own config, .claude.json, which records
@@ -42,8 +45,8 @@ func (Agent) Home() (string, error) {
 // approvals in a local settings file apply only after that. The folder is
 // looked up as given and with its links resolved. No file, no entry, or a
 // file that does not parse all mean not trusted yet.
-func (Agent) TrustsFolder(folder string) (bool, error) {
-	configPath, err := claudeConfigFile()
+func (agent Agent) TrustsFolder(folder string) (bool, error) {
+	configPath, err := claudeConfigFile(agent.Runner)
 	if err != nil {
 		return false, err
 	}
@@ -79,8 +82,8 @@ func (Agent) TrustCommand() string {
 
 // claudeConfigFile is Claude Code's own config: .claude.json under
 // CLAUDE_CONFIG_DIR when set, else in the user's home folder.
-func claudeConfigFile() (string, error) {
-	if value := os.Getenv("CLAUDE_CONFIG_DIR"); value != "" {
+func claudeConfigFile(runner execute.Runner) (string, error) {
+	if value := runner.Getenv("CLAUDE_CONFIG_DIR"); value != "" {
 		return filepath.Join(value, ".claude.json"), nil
 	}
 	userHome, err := os.UserHomeDir()

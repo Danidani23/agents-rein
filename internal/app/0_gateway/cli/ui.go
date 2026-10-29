@@ -6,7 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Danidani23/agents-rein/internal/adapters/execute"
 	"github.com/Danidani23/agents-rein/internal/app/0_gateway/web"
 	"github.com/Danidani23/agents-rein/internal/version"
 )
@@ -29,7 +28,7 @@ func newUICommand(environment *commandEnvironment) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			page, err := web.Open(orchestrator, version.String(), web.Interrupt{Stop: execute.Interrupt, Running: execute.Running})
+			page, err := web.Open(orchestrator, version.String(), web.Interrupt{Stop: environment.runner.Interrupt, Running: environment.runner.Running})
 			if err != nil {
 				return err
 			}
@@ -48,7 +47,7 @@ func newUICommand(environment *commandEnvironment) *cobra.Command {
 // failure is a warning: the printed address still works.
 func openInBrowser(environment *commandEnvironment, address string) {
 	program, arguments := browserCommand(runtime.GOOS, address)
-	_, err := execute.Run("", program, arguments...)
+	_, err := environment.runner.Run("", program, arguments...)
 	if err != nil {
 		fmt.Fprintf(environment.errOut, "warning: the browser did not open: %v; open the address above\n", err)
 	}

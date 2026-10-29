@@ -32,7 +32,7 @@ func newStatusCommand(environment *commandEnvironment) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			folder, err := filepath.Abs(directory)
+			folder, err := environment.absolute(directory)
 			if err != nil {
 				return err
 			}

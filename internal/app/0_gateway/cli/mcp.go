@@ -23,7 +23,7 @@ func newMCPCommand(environment *commandEnvironment) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return mcpgateway.Serve(command.Context(), environment.in, environment.out, orchestrator, version.String())
+			return mcpgateway.Serve(command.Context(), environment.in, environment.out, orchestrator, version.String(), environment.folder)
 		},
 	}
 }

@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+
+	"github.com/Danidani23/agents-rein/internal/adapters/execute"
 )
 
 // Mode is how a placement is made.
@@ -49,10 +51,10 @@ type Outcome struct {
 	Reason string
 }
 
-// ClaudeHome is where Claude Code reads global instructions and skills:
-// CLAUDE_CONFIG_DIR when set, else ~/.claude.
-func ClaudeHome() (string, error) {
-	value := os.Getenv("CLAUDE_CONFIG_DIR")
+// claudeHome is where Claude Code reads global instructions and skills:
+// the caller's CLAUDE_CONFIG_DIR when set, else ~/.claude.
+func claudeHome(runner execute.Runner) (string, error) {
+	value := runner.Getenv("CLAUDE_CONFIG_DIR")
 	if value != "" {
 		return value, nil
 	}

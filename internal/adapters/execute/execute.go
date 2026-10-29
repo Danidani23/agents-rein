@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -102,76 +103,177 @@ func (writer *lineWriter) flush() {
 	}
 }
 
-// generation is the context every run shares; Interrupt cancels it and
-// starts a new one, so the programs that follow, the compensations, run.
-var (
+// Runner runs programs for one caller: in the caller's environment, found
+// on the caller's PATH, and stopped together by the caller's Ctrl-C. The
+// zero Runner is this process's own. The package's functions use it.
+type Runner struct {
+	// Environment is the caller's, as NAME=value; nil means this process's.
+	Environment []string
+	runs        *group
+}
+
+// group is the runs one Interrupt stops: their shared context, which
+// Interrupt cancels and replaces, so the programs that follow, the
+// compensations, run.
+type group struct {
 	mutex      sync.Mutex
 	generation context.Context
 	cancel     context.CancelFunc
 	running    int
-)
-
-func init() {
-	generation, cancel = context.WithCancel(context.Background())
 }
 
-// Interrupt kills every running program and lets later ones run.
+func newGroup() *group {
+	runs := &group{}
+	runs.generation, runs.cancel = context.WithCancel(context.Background())
+	return runs
+}
+
+// processRuns is the group of this process's own runner.
+var processRuns = newGroup()
+
+// NewRunner is the runner of a caller other than this process, such as a
+// command the background process runs for a terminal: its environment and
+// a Ctrl-C of its own.
+func NewRunner(environment []string) Runner {
+	return Runner{Environment: environment, runs: newGroup()}
+}
+
+func (runner Runner) group() *group {
+	if runner.runs == nil {
+		return processRuns
+	}
+	return runner.runs
+}
+
+// Interrupt kills every program of this process's runner and lets later
+// ones run.
 func Interrupt() {
-	mutex.Lock()
-	defer mutex.Unlock()
-	cancel()
-	generation, cancel = context.WithCancel(context.Background())
+	Runner{}.Interrupt()
 }
 
-// Running reports whether a program is in flight right now.
+// Running reports whether a program of this process's runner is in flight.
 func Running() bool {
-	mutex.Lock()
-	defer mutex.Unlock()
-	return running > 0
+	return Runner{}.Running()
+}
+
+// Preflight checks that a program is on this process's PATH.
+func Preflight(name string) error {
+	return Runner{}.Preflight(name)
+}
+
+// Run runs name with this process's runner.
+func Run(directory string, name string, arguments ...string) (Result, error) {
+	return Runner{}.Run(directory, name, arguments...)
+}
+
+// RunWithInput is Run with text on the program's standard input.
+func RunWithInput(directory string, input string, name string, arguments ...string) (Result, error) {
+	return Runner{}.RunWithInput(directory, input, name, arguments...)
+}
+
+// RunWith runs name with this process's runner under the options.
+func RunWith(options Options, name string, arguments ...string) (Result, error) {
+	return Runner{}.RunWith(options, name, arguments...)
+}
+
+// Interrupt kills every running program of this runner and lets later
+// ones run.
+func (runner Runner) Interrupt() {
+	runs := runner.group()
+	runs.mutex.Lock()
+	defer runs.mutex.Unlock()
+	runs.cancel()
+	runs.generation, runs.cancel = context.WithCancel(context.Background())
+}
+
+// Running reports whether a program of this runner is in flight right now.
+func (runner Runner) Running() bool {
+	runs := runner.group()
+	runs.mutex.Lock()
+	defer runs.mutex.Unlock()
+	return runs.running > 0
+}
+
+// LookupEnv reads a variable of the caller's environment, as os.LookupEnv
+// reads this process's.
+func (runner Runner) LookupEnv(name string) (string, bool) {
+	if runner.Environment == nil {
+		return os.LookupEnv(name)
+	}
+	value := ""
+	found := false
+	for _, pair := range runner.Environment {
+		key, rest, separated := strings.Cut(pair, "=")
+		if separated && (key == name || runtime.GOOS == "windows" && strings.EqualFold(key, name)) {
+			value, found = rest, true
+		}
+	}
+	return value, found
+}
+
+// Getenv is LookupEnv without saying whether the variable is set.
+func (runner Runner) Getenv(name string) string {
+	value, _ := runner.LookupEnv(name)
+	return value
 }
 
 // Preflight checks that a program is on the PATH before anything changes.
-func Preflight(name string) error {
-	_, err := exec.LookPath(name)
+func (runner Runner) Preflight(name string) error {
+	_, err := runner.lookPath(name)
 	if err != nil {
 		return fmt.Errorf("%s is not on the PATH; install it first", name)
 	}
 	return nil
 }
 
+// lookPath finds a program on this runner's PATH: the caller's, or this
+// process's for the zero Runner.
+func (runner Runner) lookPath(name string) (string, error) {
+	if runner.Environment == nil {
+		return exec.LookPath(name)
+	}
+	return lookPathIn(name, runner.Environment)
+}
+
 // Run runs name with arguments in directory and returns what it printed.
-func Run(directory string, name string, arguments ...string) (Result, error) {
-	return RunWith(Options{Directory: directory}, name, arguments...)
+func (runner Runner) Run(directory string, name string, arguments ...string) (Result, error) {
+	return runner.RunWith(Options{Directory: directory}, name, arguments...)
 }
 
 // RunWithInput is Run with text on the program's standard input.
-func RunWithInput(directory string, input string, name string, arguments ...string) (Result, error) {
-	return RunWith(Options{Directory: directory, Input: input}, name, arguments...)
+func (runner Runner) RunWithInput(directory string, input string, name string, arguments ...string) (Result, error) {
+	return runner.RunWith(Options{Directory: directory, Input: input}, name, arguments...)
 }
 
 // RunWith runs name with arguments under the options. A non-zero exit, the
 // time limit and an interruption are each a Failure. Git is told never to
 // prompt for credentials.
-func RunWith(options Options, name string, arguments ...string) (Result, error) {
+func (runner Runner) RunWith(options Options, name string, arguments ...string) (Result, error) {
 	timeout := options.Timeout
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
-	mutex.Lock()
-	parent := generation
-	running++
-	mutex.Unlock()
+	runs := runner.group()
+	runs.mutex.Lock()
+	parent := runs.generation
+	runs.running++
+	runs.mutex.Unlock()
 	defer func() {
-		mutex.Lock()
-		running--
-		mutex.Unlock()
+		runs.mutex.Lock()
+		runs.running--
+		runs.mutex.Unlock()
 	}()
 	limited, stop := context.WithTimeout(parent, timeout)
 	defer stop()
 	command := exec.CommandContext(limited, name, arguments...)
+	if runner.Environment != nil {
+		// exec looked on this process's PATH; the program is the caller's
+		path, err := lookPathIn(name, runner.Environment)
+		command.Path, command.Err = path, err
+	}
 	command.Dir = options.Directory
 	command.Stdin = strings.NewReader(options.Input)
-	command.Env = environment(options)
+	command.Env = runner.environment(options)
 	command.WaitDelay = 2 * time.Second
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
@@ -199,10 +301,10 @@ func RunWith(options Options, name string, arguments ...string) (Result, error) 
 	return result, &Failure{Command: described, Stderr: stderr.String(), Cause: err}
 }
 
-// environment is the program's environment: this process's, minus the
+// environment is the program's environment: the runner's, minus the
 // variables to unset, plus the ones given, and never a terminal prompt
 // from git.
-func environment(options Options) []string {
+func (runner Runner) environment(options Options) []string {
 	unset := map[string]bool{"GIT_TERMINAL_PROMPT": true}
 	for _, name := range options.Unset {
 		unset[name] = true
@@ -210,8 +312,12 @@ func environment(options Options) []string {
 	for _, pair := range options.Environment {
 		unset[strings.SplitN(pair, "=", 2)[0]] = true
 	}
+	base := runner.Environment
+	if base == nil {
+		base = os.Environ()
+	}
 	var variables []string
-	for _, pair := range os.Environ() {
+	for _, pair := range base {
 		if !unset[strings.SplitN(pair, "=", 2)[0]] {
 			variables = append(variables, pair)
 		}

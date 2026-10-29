@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -58,12 +57,12 @@ func runPropose(environment *commandEnvironment, request orchestration.ProposeRe
 	}
 	prompter := environment.prompter()
 	if request.Source == "" {
-		request.Source, err = pendingProposalSource(prompter, orchestrator)
+		request.Source, err = pendingProposalSource(environment, prompter, orchestrator)
 		if err != nil {
 			return err
 		}
 	}
-	request.Source, err = filepath.Abs(request.Source)
+	request.Source, err = environment.absolute(request.Source)
 	if err != nil {
 		return err
 	}
@@ -115,9 +114,9 @@ func runPropose(environment *commandEnvironment, request orchestration.ProposeRe
 }
 
 // pendingProposalSource picks the pending proposal to propose: the one in
-// the current project folder, or on a terminal one of several.
-func pendingProposalSource(prompter ports.Prompter, orchestrator orchestration.Orchestrator) (string, error) {
-	directory, err := os.Getwd()
+// the caller's project folder, or on a terminal one of several.
+func pendingProposalSource(environment *commandEnvironment, prompter ports.Prompter, orchestrator orchestration.Orchestrator) (string, error) {
+	directory, err := environment.absolute(".")
 	if err != nil {
 		return "", err
 	}

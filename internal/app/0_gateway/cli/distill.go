@@ -61,7 +61,7 @@ func runDistill(environment *commandEnvironment, request orchestration.DistillRe
 	if err != nil {
 		return err
 	}
-	request.Directory, err = filepath.Abs(request.Directory)
+	request.Directory, err = environment.absolute(request.Directory)
 	if err != nil {
 		return err
 	}

@@ -5,20 +5,25 @@ they exist, and where a new piece goes. The mechanical part is enforced by the t
 [internal/architecture/architecture_test.go](../internal/architecture/architecture_test.go);
 the rest is convention. Decided as D15 to D18 on the
 [board](implementation_plans/2026-10-11_harness-distribution-tool.md#decisions); the product
-boundary, a compiler and a linter and never a service, is the
+boundary, a compiler and a linter and never a hosted service, is the
 [ADR](decisions/2026-10-11_harness-tool-compiler-and-linter.md).
 
 ## The shape
 
-One binary, one process, a modular monolith: three application layers under `internal/app/`,
-numbered so a reader meets them in call order, with the ports and the adapters beside them.
-Dependencies point one way, from the gateway inward to the ports; the adapters implement the
-ports and are known only to `main`.
+One binary, a modular monolith: three application layers under `internal/app/`, numbered so
+a reader meets them in call order, with the ports and the adapters beside them. Dependencies
+point one way, from the gateway inward to the ports; the adapters implement the ports and are
+known only to `main`. A command that needs the machine runs in the background process of
+rein's home, which the first such command starts: the `rein` a terminal, a hook or an agent
+starts relays the command line, its folder, its environment and its streams to it, and that
+process runs the command for its caller, several at once (D52, D55, the
+[app ADR](decisions/2026-10-28_an-always-running-app-owns-the-machine.md)).
 
 ```mermaid
 flowchart TB
-    main["cmd/rein<br/>composition root"]
+    main["cmd/rein<br/>composition root, relay or background process"]
     subgraph app["internal/app"]
+        owner["0_gateway/owner<br/>the socket, the relay, one session per command"]
         gateway["0_gateway/cli<br/>flags, questions, printing, exit codes"]
         subgraph orchestration["1_orchestration"]
             workflows["workflows<br/>steps with compensations"]
@@ -33,6 +38,7 @@ flowchart TB
     ports["internal/ports<br/>Host, Repository, Agent, State, Prompter, Judge, MachineLock, Keychain"]
     adapters["internal/adapters<br/>github (REST, device flow), git, claudecode, messagesapi, keychain, localstate, terminal, execute<br/>fake, for the tests"]
 
+    main --> owner
     main --> gateway
     main --> adapters
     gateway --> workflows
@@ -50,9 +56,10 @@ flowchart TB
 
 | Layer | Folder | Holds | May import |
 |---|---|---|---|
-| Composition root | `cmd/rein` | `main` and `wire`, the one place that knows every adapter | everything |
+| Composition root | `cmd/rein` | `main`, `wire` and `wireFor`, the one place that knows every adapter, wired for the caller a command runs for; `runRein`, which runs `version`, `lint` and help in place, makes `rein owner` the background process, and relays every other command to it, starting it when none of this build answers | everything |
 | Operator CLI | `cmd/reinctl` | what a maintainer runs on this repository, `release`; never shipped to users, wraps the git commands the human runs | `adapters/execute` |
-| Gateway | `internal/app/0_gateway/cli` | cobra commands: read flags, ask through the prompter, call, print, map errors to exit codes | `1_orchestration`, `ports`, the libraries, `adapters/terminal`, `adapters/execute`, `version`, `0_gateway/mcp`, `0_gateway/web` |
+| Gateway | `internal/app/0_gateway/cli` | cobra commands: read flags, ask through the prompter, call, print, map errors to exit codes; `Run` for this process as the caller, `RunFor` for the caller the background process names, with its folder, its runner and its Ctrl-C | `1_orchestration`, `ports`, the libraries, `adapters/terminal`, `adapters/execute`, `version`, `0_gateway/mcp`, `0_gateway/web` |
+| Background process gateway | `internal/app/0_gateway/owner` | the owner's side takes each command a client sends over a Unix socket in rein's home and runs it through the `Run` that `main` hands it, several at once, until it is idle, stopped, or a client of another build arrives; the client's side relays a command, the caller's input and Ctrl-C, and the command's output and exit code, over HTTP upgraded to a stream of frames (D57); it knows no command | the standard library |
 | MCP gateway | `internal/app/0_gateway/mcp` | the queries as MCP tools over stdio through the official SDK, started by the CLI's `mcp` command; no lock, no printing | `1_orchestration`, `ports`, the libraries |
 | Web gateway | `internal/app/0_gateway/web` | `rein ui`: the queries as pages in the browser, served on 127.0.0.1 behind the run's token and the `Host` and `Origin` checks, started by the CLI's `ui` command, which hands it the interrupt Cancel uses; templates, stylesheet and script embedded; pages read without the lock, each action takes it for itself, one action at a time | `1_orchestration`, `ports`, the libraries |
 | Orchestration | `internal/app/1_orchestration` | the one concrete `Orchestrator`, which embeds `Services`: the workflows, the queries, the saga runner, `NewServices` and `New` | `2_services`, `ports` |
@@ -135,6 +142,13 @@ holds this table as its `allowed` map and fails on any import outside it.
 13. **Every record carries the time it was written** (D20): `OrganizationRef.ConnectedAt`
     today, the ledger's entries later. A service that writes records takes a `Clock` so its
     tests can fix the time; nil means the wall clock.
+14. **A command runs for its caller, never for the process it is in** (D55). The background
+    process runs commands for several callers at once, so no code reads this process's
+    working folder, environment or Ctrl-C. A relative path starts from the caller's folder
+    (`absolute` in the gateway); a variable is read through the caller's `execute.Runner`, or
+    through the `Environment` lookup a service is wired with; a program runs through that
+    runner, found on the caller's PATH and stopped by the caller's Ctrl-C alone. The zero
+    `Runner` is this process's own, which `Run` and the tests use.
 
 ## Where a new piece goes
 
@@ -163,7 +177,7 @@ holds this table as its `allowed` map and fails on any import outside it.
 | Services | the real service over the fake adapters |
 | Orchestration | the real services over the fake adapters; the saga runner on scripted steps, including a failing undo |
 | Gateway | the real orchestrator over the fake adapters and a scratch home; scripted answers for the prompts; the output guard |
-| `cmd/rein` | end to end with a stub `gh` and `claude` on the `PATH` and a scratch home through `REIN_HOME` |
+| `cmd/rein` | end to end with a stub `gh` and `claude` on the `PATH` and a scratch home through `REIN_HOME`; the test binary, started as `rein owner`, is the background process of the relay test |
 | Architecture | the import-direction test over every Go file under `internal/`, and the one-workflow-per-file check over the orchestration |
 
 `task rein:check` runs gofmt, `go vet ./...`, `go test ./...`, builds the binary and runs
@@ -185,3 +199,7 @@ holds this table as its `allowed` map and fails on any import outside it.
 - **Refusal**: a precondition that failed with nothing changed, raised by any layer through
   the `refusal` library and mapped to exit code 1 by the gateway.
 - **Composition root**: `main`, where adapters, services and the orchestrator are wired.
+- **Background process**, or **owner**: the one process per machine and home that runs the
+  commands, `rein owner`, or the app on a desktop (D50); `rein` in a terminal is its client.
+- **Caller**: who a command runs for, with its streams, terminal, folder, environment and
+  Ctrl-C.
