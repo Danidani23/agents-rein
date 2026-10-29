@@ -425,7 +425,28 @@ committed instead of gitignored (D4).
   by the user (Q35 a). P4.3 and P4.9 first, then P6.1 to P6.4, then P4.4 to P4.8 as the app's
   pages, so the pages move to the owner once, not twice. Placed by the agent with it: P5's
   remaining items go with the app, whose check they are, and the release (P6.5, P6.6) follows
-  once the app works.
+  once the app works. Amended 2026-10-28 by the user (Q39 a): P4.9 moves after P6.3, with the
+  rest of P4, since nothing in P6 needs it.
+- ✅ **D55 — The owner runs the whole command; `rein`, the hook and the tool server relay it.**
+  Decided 2026-10-28 by the user (Q38 a), who wants every command to run in the background
+  process so that it decides when an agent and a person collide. The client sends the command
+  line, its folder, its environment and whether it runs in a terminal, relays input and output
+  and Ctrl-C, and ends with the owner's exit code, as `ssh` does. Each command's code and tests
+  stay as they are; what is shared by the whole process today becomes per command: the folder,
+  the environment and what Ctrl-C stops. Turned down: one call per operation, 47 call sites
+  rewritten, which would let the owner see only pieces of a command. Amends D50 and its
+  [ADR](../decisions/2026-10-28_an-always-running-app-owns-the-machine.md). P6.1.
+- ✅ **D56 — When commands collide, the owner decides by four rules.** Decided 2026-10-28 by the
+  user (Q40 a). R1, reads never wait. R2, changes run one at a time in the order they arrive,
+  and a waiting command says what it waits for. R3, a request identical to the running one
+  joins it and receives its result. R4, what removes or overwrites waits for the app (D53).
+  Turned down: today's wait of 5 seconds, then a refusal. P6.7, P6.4.
+- ✅ **D57 — `rein` and the owner talk HTTP over the socket, from the standard library.**
+  Decided 2026-10-28 by the user (Q41 a). The command travels as JSON; the owner answers
+  `101 Switching Protocols`, and the connection carries the two-way stream as frames. Turned
+  down: gRPC, which needs a code generator outside Go, a module that lists 22 direct
+  requirements, and its own way to reach a Unix socket on Windows, while every client is rein
+  itself. Same ADR. P6.1.
 - ✅ **D46 — The page offers every command a person runs, through one pattern.** Decided
   2026-10-27 by the user (Q14 R1, Q15, Q16 G2). Each command becomes a form asking what the
   CLI asks, a preview of what will change, a confirmation, its steps as they run with a
@@ -2113,7 +2134,8 @@ between P4.3 and P4.6 (Q21 a). P4.9, split from P4.3, follows P4.3 directly.
   P4.3 on 2026-10-28. When a proposal waits in a clone, the Projects page shows its
   candidates with their include, level and conflict; a new operation writes the choices into
   the candidate files, then `ProposeDeclarations` runs through the pattern of P4.3 as it runs
-  today, refusing an unresolved conflict as today.
+  today, refusing an unresolved conflict as today. Moved 2026-10-28 (Q39 a, D54): built after
+  P6.3, as a page of the app.
 - 🟢 **P4.6 — Init from the page.** [PENDING] Added 2026-10-27 (D46, Q15, Q16 G2), built
   before P4.4. "Add a folder…" at the end of the Projects dropdown opens a folder browser
   served by rein over the home folder: folder names only, never a file's content, the git
@@ -2202,15 +2224,31 @@ through the owner; [architecture.md](../architecture.md) and the architecture te
 the code; what a test cannot reach, such as the window, the tray, the notifications, the
 keychain and the signing, is checked by you on your machine before the commit.
 
-- 🟢 **P6.1 — The owner and its clients.** [PENDING] `rein` gains an owner mode without a
-  window (D52): it opens the machine's state, runs the `Orchestrator`, serves it on a Unix
-  socket in rein's home that only the developer's account can open, and exits when idle. The
-  CLI, the session-start hook and the tool server send each request as HTTP with JSON and start
-  the owner when none answers. Progress comes back as server-sent events, Ctrl-C sends a
-  cancel, the questions are asked by the CLI and sent with the request, and every request
-  carries the protocol's version. A command that needs no machine state, such as `rein lint`,
-  runs in the CLI's process. The owner first works on today's `state.yaml`, so P6.2 changes
-  one adapter. Tested over the fakes and over a real socket in a temporary folder.
+- ✅ **P6.1 — The owner and its clients.** [EXECUTED] `rein` gains an owner mode without a
+  window (D52): it listens on a Unix socket in rein's home that only the developer's account
+  can open, runs each command it receives with today's command code, and exits when idle.
+  `rein`, the session-start hook and the tool server relay their command to it and start it
+  when none answers (D55, D57): the command line, the folder, the environment and whether a
+  terminal is attached go first, then input, output and Ctrl-C as frames, then the exit code.
+  An owner built differently from the client, by version or by binary, stops taking commands,
+  finishes the running ones and exits, and the client starts a fresh one. `version`, `lint`
+  and help run in the client's own process. What is shared by the whole process today becomes
+  per command: the folder relative paths resolve against, the environment lookups, the
+  environment and PATH of the programs run, and what Ctrl-C stops. Until P6.7 a second change
+  waits for the machine lock as it does today. The owner works on today's `state.yaml`, so
+  P6.2 changes one adapter. Tested over the fakes and over a real socket in a temporary
+  folder, on the three operating systems of CI.
+
+  Built 2026-10-28. The owner mode is `rein owner`, which `runRein` in `main` handles, so help
+  does not list it; the gateway is `internal/app/0_gateway/owner`, and `cli.RunFor` runs a
+  command for a `Caller`. Deviations: the owner ends after 15 minutes without a command; a
+  build is told apart by its version and the size and time of its binary, so two builds of
+  one version do not share an owner; a socket path longer than a Unix socket holds goes to the
+  system's temporary folder under a name made from the home; on Windows the socket gets no
+  mode, the folder's access list protecting it; a caller that disappears counts as Ctrl-C
+  twice, and a third Ctrl-C quits the relaying `rein` at once while the command finishes in the
+  owner; `rein ui` opens the browser from the owner. Until P6.7 the second of two changes waits
+  for the machine lock and names the owner's own process as the one holding it.
 - 🟢 **P6.2 — The encrypted store.** [PENDING] bbolt, every value encrypted with AES-GCM, the
   key made at the owner's first start and kept in the system's keychain (D51). The state, the
   ledger and the snapshots move in at the first start and are read back before the files are
@@ -2240,6 +2278,11 @@ keychain and the signing, is checked by you on your machine before the commit.
 - 🟢 **P6.6 — The app's own keychain section on macOS.** [PENDING] The store's key, the GitHub
   tokens and the providers' keys move from the login keychain into the signed app's keychain
   section, which only the app reads (D51). Needs the signed build of P6.5.
+- 🟢 **P6.7 — The collision rules.** [PENDING] Added 2026-10-28 (D56), built after P6.1. Inside
+  the owner, R1: a read never waits; R2: changes wait in the order they arrive, and the waiting
+  command prints what it waits for, which command, started by whom and since when, instead of
+  failing after 5 seconds; R3: a command identical to the running one, same command line and
+  folder, waits for it and prints its outcome instead of running twice. R4 is P6.4.
 
 ## Open points
 
@@ -2861,3 +2904,18 @@ writes is read from the next session on, not in the same one.
   and D48 amended; P5.3, P5.4 and P5.7 dropped; the phase P6 added. No code changed. Left for
   you: reading both ADRs, the diagram in the app ADR checked in a Markdown preview, and the
   commits.
+- (2026-10-28) D55 to D57 decided by the user (Q38 a, Q40 a, Q41 a) and P4.9 moved after P6.3
+  (Q39 a); the app ADR amended; P6.7 added. P6.1 built: the program runner per caller, with
+  its environment, its PATH, its own Ctrl-C and a detached start; git, the Claude Code agent
+  and judge, the keychain, credentials, updates and the working copy read the caller's
+  environment; the CLI resolves paths from the caller's folder and runs a command for a caller
+  through `RunFor`; the tool server resolves a relative path from its session's folder; the
+  `owner` gateway; `main` relays every command but `version`, `lint` and help, starting the
+  owner when none of its build answers. Tests first; their first runs failed at the build, so
+  the caller's environment, folder and the end-to-end relay were broken once on purpose and
+  their tests failed. Gate: `task rein:check` green, the changed packages also under the race
+  detector, the owner's tests five times in a row. Checked by hand with the built binary on a
+  scratch home, never this machine's: `status` started `rein owner`, a second command took
+  41 ms through it, `rein ui` ended with 130 on Ctrl-C and closed its port, the socket was
+  `srw-------`. Not checked by hand: Linux and Windows, which CI covers at the push. Left for
+  you: the commits.

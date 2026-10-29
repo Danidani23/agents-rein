@@ -159,4 +159,27 @@ flowchart LR
 - Before the app is released, the user enrols in the Apple Developer Program, and takes an Azure
   subscription with identity validation for Windows signing.
 - Desktop widgets stay out: the release notes of Wails v3.0.0 name none.
+- Amended 2026-10-28 by the user (Q38 a, Q40 a, Q41 a), before anything was built:
+  - **The owner runs the whole command; the client relays.** A client no longer calls one
+    operation at a time. It sends the command line, its working folder, its environment and
+    whether it runs in a terminal, then relays what is typed to the owner and what the command
+    prints back, Ctrl-C as a cancel, and ends with the owner's exit code, the way `ssh` shows
+    a program that runs elsewhere. The owner runs the same command code as today, once per
+    command, so the questions are asked by the owner's code and appear in the developer's
+    terminal. Because the owner sees each command whole, it decides when two collide. Turned
+    down: one call per operation, 47 of them, each call site rewritten.
+  - **Collisions.** R1, reads never wait. R2, changes run one at a time in the order they
+    arrive, and a waiting command says what it waits for instead of failing after 5 seconds.
+    R3, a request identical to the one running joins it and receives its result. R4, what
+    removes or overwrites waits for a confirmation in the app, as decided above.
+  - **The protocol is HTTP over the socket, from the standard library.** The command travels
+    as JSON in an HTTP request that the owner answers with `101 Switching Protocols`; the
+    connection then carries the two-way stream as small frames. Turned down: gRPC, which needs
+    the `protoc` compiler and two plugins to generate code
+    ([gRPC quickstart](https://grpc.io/docs/languages/go/quickstart/)), whose Go module lists
+    22 modules as direct requirements ([go.mod of v1.85.0](https://github.com/grpc/grpc-go/blob/v1.85.0/go.mod)),
+    and whose address scheme lists Unix sockets for "Unix systems only"
+    ([gRPC naming](https://github.com/grpc/grpc/blob/master/doc/naming.md)), while every client
+    here is rein itself. Go's own `net/rpc` "is frozen and is not accepting new features"
+    ([net/rpc](https://pkg.go.dev/net/rpc)).
 - The board records this as D50, D52 to D54 and the phase P6.
