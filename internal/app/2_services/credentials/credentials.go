@@ -6,6 +6,7 @@
 package credentials
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -91,32 +92,53 @@ func (service Service) BeginLogin() (ports.DeviceCode, error) {
 	return service.Host.StartDeviceFlow()
 }
 
-// CompleteLogin waits for the approval, reads the user the token acts as,
-// stores the token under that login and remembers the login.
+// CompleteLogin waits for the approval and keeps the login, as
+// AwaitApproval and KeepLogin do one after the other.
 func (service Service) CompleteLogin(code ports.DeviceCode) (ports.Identity, error) {
+	token, identity, err := service.AwaitApproval(context.Background(), code)
+	if err != nil {
+		return ports.Identity{}, err
+	}
+	return identity, service.KeepLogin(token)
+}
+
+// AwaitApproval waits until the code is approved on the host, it expires,
+// or ctx ends, and reads the user the token acts as. It changes nothing on
+// this machine, so it needs no lock (D59).
+func (service Service) AwaitApproval(ctx context.Context, code ports.DeviceCode) (token ports.Token, identity ports.Identity, err error) {
 	for {
+		err = ctx.Err()
+		if err != nil {
+			return ports.Token{}, ports.Identity{}, err
+		}
 		token, pending, err := service.Host.PollDeviceFlow(code)
 		if err != nil {
-			return ports.Identity{}, refusal.New(err.Error())
+			return ports.Token{}, ports.Identity{}, refusal.New(err.Error())
 		}
 		if pending {
 			if service.now().After(code.ExpiresAt) {
-				return ports.Identity{}, refusal.New("the code expired before it was entered; run rein login again")
+				return ports.Token{}, ports.Identity{}, refusal.New("the code expired before it was entered; log in again")
 			}
 			service.sleep(code.Interval)
 			continue
 		}
-		identity, err := service.Host.Identity(token.AccessToken)
+		identity, err = service.Host.Identity(token.AccessToken)
 		if err != nil {
-			return ports.Identity{}, err
+			return ports.Token{}, ports.Identity{}, err
 		}
 		token.Login = identity.Login
-		err = service.Keychain.Store(token)
-		if err != nil {
-			return ports.Identity{}, err
-		}
-		return identity, service.Remember(identity.Login)
+		return token, identity, nil
 	}
+}
+
+// KeepLogin stores the token under its login in the keychain and
+// remembers the login.
+func (service Service) KeepLogin(token ports.Token) error {
+	err := service.Keychain.Store(token)
+	if err != nil {
+		return err
+	}
+	return service.Remember(token.Login)
 }
 
 // Remember adds a login to the state once: at a login, and when a reset

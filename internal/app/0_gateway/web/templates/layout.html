@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="/static/rein.css">
 <script src="/static/rein.js" defer></script>
 </head>
-<body>
+<body{{if .InWindow}} data-window="true"{{end}}>
 <header class="bar">
   <a class="brand" href="{{.MachineLink}}">
     <picture>

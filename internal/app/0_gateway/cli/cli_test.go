@@ -914,7 +914,7 @@ func TestSync(t *testing.T) {
 	}
 	fixture.agent.Untrusted = true
 	code, out, errOut = fixture.run("sync", "--path", folder)
-	if code != ExitWorked || !strings.Contains(errOut, "warning: fake-agent has not trusted this folder yet, so rein's tool server stays pending; start it here once and accept the trust dialog:\n  cd "+folder+" && fake-agent") {
+	if code != ExitWorked || !strings.Contains(errOut, "warning: fake-agent has not trusted this folder yet, so rein's tool server stays pending; start it there once and accept the trust dialog: cd "+folder+" && fake-agent") {
 		t.Fatalf("untrusted folder: code %d out %q err %q", code, out, errOut)
 	}
 	code, out, errOut = fixture.run("sync", "--path", folder, "--hook")

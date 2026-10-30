@@ -31,6 +31,9 @@ type ProgressEvent struct {
 	Elapsed time.Duration
 	Error   string
 	Note    string
+	// Link is the address a detail points the developer to, such as
+	// GitHub's page for the login code.
+	Link string
 }
 
 // Step is one activity of a workflow with its compensation. Do performs it;

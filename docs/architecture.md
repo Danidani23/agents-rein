@@ -62,6 +62,7 @@ flowchart TB
 | Background process gateway | `internal/app/0_gateway/owner` | the owner's side takes each command a client sends over a Unix socket in rein's home and runs it through the `Run` that `main` hands it, several at once, until it is idle, stopped, or a client of another build arrives; the client's side relays a command, the caller's input and Ctrl-C, and the command's output and exit code, over HTTP upgraded to a stream of frames (D57); it knows no command | the standard library |
 | MCP gateway | `internal/app/0_gateway/mcp` | the queries as MCP tools over stdio through the official SDK, started by the CLI's `mcp` command; no lock, no printing | `1_orchestration`, `ports`, the libraries |
 | Web gateway | `internal/app/0_gateway/web` | `rein ui`: the queries as pages in the browser, served on 127.0.0.1 behind the run's token and the `Host` and `Origin` checks, started by the CLI's `ui` command, which hands it the interrupt Cancel uses; templates, stylesheet and script embedded; pages read without the lock, each action takes it for itself, one action at a time | `1_orchestration`, `ports`, the libraries |
+| Shared wording | `internal/app/0_gateway/wording` | the sentences the CLI and the pages both show, what a command will do, what it did and what comes next, built from the orchestration's plain data (D60); each gateway lays them out its own way | `1_orchestration`, the libraries |
 | Orchestration | `internal/app/1_orchestration` | the one concrete `Orchestrator`, which embeds `Services`: the workflows, the queries, the saga runner, `NewServices` and `New` | `2_services`, `ports` |
 | Services | `internal/app/2_services/<service>` | one piece of state or one kind of side effect each, behind the ports | `ports`, the libraries |
 | Libraries | `internal/app/2_services/{address, declaration, lint, exchange, machine, refusal, scaffold, distill, proposal, resolve, compile, semver}` | pure logic and data types, no I/O beyond reading or writing files they are pointed at | the other libraries |
@@ -155,6 +156,13 @@ holds this table as its `allowed` map and fails on any import outside it.
     through the `Environment` lookup a service is wired with; a program runs through that
     runner, found on the caller's PATH and stopped by the caller's Ctrl-C alone. The zero
     `Runner` is this process's own, which `Run` and the tests use.
+15. **The CLI and the page share everything but the layout** (D58 to D60). What a command
+    does is a service method or a workflow both call; what it will do before it asks is a query
+    returning data; how far it has come is the workflow's progress, which the terminal prints
+    and the run page streams, a detail with a `Link` the page shows as a button; and every
+    sentence both show lives in `wording`. A command that waits for the developer, such as for
+    GitHub's approval at login, waits without the machine lock and takes it only for what it
+    changes.
 
 ## Where a new piece goes
 

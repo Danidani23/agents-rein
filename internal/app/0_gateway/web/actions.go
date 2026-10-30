@@ -6,9 +6,9 @@ import (
 	"html/template"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/Danidani23/agents-rein/internal/app/0_gateway/wording"
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/ports"
@@ -87,7 +87,7 @@ func targetOf(orchestrator orchestration.Orchestrator, request *http.Request, al
 		return actionTarget{}, "", 0, err
 	}
 	if len(target.report.Logins) == 0 {
-		return target, "not logged in; run rein login in a terminal, it opens the GitHub device flow", http.StatusForbidden, nil
+		return target, "not logged in; Log in on This machine, which opens GitHub's device flow", http.StatusForbidden, nil
 	}
 	if allowAll && request.FormValue("all") == "on" {
 		target.all = true
@@ -207,10 +207,8 @@ func resetPreview(orchestrator orchestration.Orchestrator, version string, actio
 		view.Title = "Reset " + projectOf(target.clone)
 		view.Back = "/projects?project=" + projectOf(target.clone)
 		view.Hidden = []formField{{Name: "folder", Value: target.clone.ClonePath}}
-		view.Summary = []string{
-			fmt.Sprintf("This will put back the agent's files rein init moved out of %s, take the rein block out of .gitignore, forget the clone on this machine, and commit the put-back.", shortPath(target.clone.ClonePath)),
-			"The files come back from their snapshots in rein's store exactly as they were. The commit holds only the files that were tracked and .gitignore; pushing it is yours. The snapshots stay until rein reset machine.",
-		}
+		summary, explanation := wording.ResetProject(shortPath(target.clone.ClonePath))
+		view.Summary = []string{summary, explanation}
 		view.Options = []formOption{
 			{Name: "no-commit", Label: "Leave the put-back staged, not committed (--no-commit)"},
 			{Name: "force", Label: "Overwrite the files in the way of the put-back (--force)"},
@@ -314,58 +312,31 @@ func syncCommand(syncRequest orchestration.SyncRequest) string {
 	return command
 }
 
-// syncOutcome is what sync did to each clone, worded as the CLI prints it.
+// syncOutcome is what sync did, in the words the CLI prints (D60).
 func syncOutcome(result orchestration.SyncResult) outcome {
-	done := outcome{Headline: "done", Next: "a new session in the clone reads the harness, and /clear loads it in an open one; a change to it is proposed with rein distill and rein propose, never edited in the clone"}
+	done := outcome{Headline: "done", Next: wording.SyncNext}
 	for _, synced := range result.Clones {
 		if synced.Skipped != "" {
 			done.Lines = append(done.Lines, outcomeLine{Text: "skipped " + shortPath(synced.Folder) + ": " + synced.Skipped, Warning: true})
 			continue
 		}
 		done.Lines = append(done.Lines, outcomeLine{Text: fmt.Sprintf("synced %s for %s: %d written, %d unchanged, %d removed", synced.Address, synced.Agent, len(synced.Written), len(synced.Unchanged), len(synced.Removed))})
-		if synced.SnapshotPath != "" && len(synced.Modified) > 0 {
-			done.Lines = append(done.Lines, outcomeLine{Text: fmt.Sprintf("your edits to %s were kept in the snapshot %s before being overwritten", strings.Join(synced.Modified, ", "), filepath.Base(synced.SnapshotPath))})
-		}
-		if len(synced.Foreign) > 0 {
-			done.Lines = append(done.Lines, outcomeLine{Text: "not written by rein, so in no other clone and not in the organisation's repository: " + strings.Join(synced.Foreign, ", "), Warning: true})
-		}
-		for _, note := range synced.Notes {
-			done.Lines = append(done.Lines, outcomeLine{Text: "note: " + note})
-		}
-		if len(synced.UnsetVariables) > 0 {
-			done.Lines = append(done.Lines, outcomeLine{Text: fmt.Sprintf("the tool servers of %s need %s in your shell, not set", synced.Address, strings.Join(synced.UnsetVariables, ", ")), Warning: true})
-		}
-		for _, untrusted := range synced.Untrusted {
-			done.Lines = append(done.Lines, outcomeLine{Text: fmt.Sprintf("%s has not trusted this folder yet, so rein's tool server stays pending; start it there once and accept the trust dialog: cd %s && %s", untrusted.Agent, synced.Folder, untrusted.Command), Warning: true})
-		}
+		done.Lines = append(done.Lines, linesOf(wording.SyncedNotes(synced))...)
 	}
 	return done
 }
 
-// restoreOutcome is what reset project did, worded as the CLI prints it.
+// linesOf are the sentences of what a command did, as the page lists them.
+func linesOf(lines []wording.Line) []outcomeLine {
+	var listed []outcomeLine
+	for _, line := range lines {
+		listed = append(listed, outcomeLine{Text: line.Text, Warning: line.Warning})
+	}
+	return listed
+}
+
+// restoreOutcome is what reset project did, in the words the CLI prints.
 func restoreOutcome(result orchestration.RestoreResult) outcome {
-	done := outcome{Headline: fmt.Sprintf("restored %s, formerly %s", shortPath(result.Folder), result.Address), Next: "the clone is as before rein init; rein init puts it under rein again, rein org destroy and rein reset machine take the rest off this machine"}
-	if len(result.Restored) > 0 {
-		done.Lines = append(done.Lines, outcomeLine{Text: "put back: " + strings.Join(result.Restored, ", ")})
-	} else {
-		done.Lines = append(done.Lines, outcomeLine{Text: "nothing to put back: init had moved nothing out"})
-	}
-	if len(result.InsertsRemoved) > 0 {
-		done.Lines = append(done.Lines, outcomeLine{Text: "removed sync's files: " + strings.Join(result.InsertsRemoved, ", ")})
-	}
-	if len(result.InsertsKept) > 0 {
-		done.Lines = append(done.Lines, outcomeLine{Text: "kept, edited by hand since sync wrote them: " + strings.Join(result.InsertsKept, ", "), Warning: true})
-	}
-	if result.IgnoreRemoved {
-		done.Lines = append(done.Lines, outcomeLine{Text: ".gitignore: rein block removed"})
-	}
-	switch {
-	case result.Commit != "":
-		done.Lines = append(done.Lines, outcomeLine{Text: "committed " + result.Commit[:min(7, len(result.Commit))] + ": restore agent settings from rein (rein reset project)"})
-	case result.CommitError != "":
-		done.Lines = append(done.Lines, outcomeLine{Text: "the put-back is staged but not committed: " + result.CommitError, Warning: true})
-	default:
-		done.Lines = append(done.Lines, outcomeLine{Text: "the put-back is staged, not committed"})
-	}
-	return done
+	done := wording.Restored(result)
+	return outcome{Headline: done.Headline, Lines: linesOf(done.Lines), Next: done.Next}
 }

@@ -120,14 +120,19 @@ func (actions *runner) cancel() string {
 		current.leftLine = true
 		current.mutex.Unlock()
 		current.stop()
-	case actions.interrupt.Running != nil && actions.interrupt.Running():
+	case actions.interrupt.Running == nil || !actions.interrupt.Running():
+		// a wait the action is in, such as for an approval on GitHub, ends
+		message = "nothing to stop right now but a wait, such as for an approval on GitHub, which ends; the steps between programs are quick, so the action finishes on its own"
+		current.mutex.Lock()
+		current.cancelAsked = true
+		current.mutex.Unlock()
+		current.stop()
+	default:
 		message = "stopping the running program; the steps already done are undone"
 		current.mutex.Lock()
 		current.cancelAsked = true
 		current.mutex.Unlock()
 		actions.interrupt.Stop()
-	default:
-		message = "nothing to stop right now: no program is running, and the steps between programs are quick, so the action finishes on its own"
 	}
 	current.mutex.Lock()
 	current.cancelMessage = message
@@ -237,7 +242,14 @@ type stepLine struct {
 	Kind    string
 	Text    string
 	Note    string
-	Details []string
+	Details []detailLine
+}
+
+// detailLine is what a running step says once, with the address it points
+// to, which the page shows as a button.
+type detailLine struct {
+	Text string
+	Link string
 }
 
 // streamedEvent is one progress event as the page's script receives it.
@@ -246,6 +258,7 @@ type streamedEvent struct {
 	Kind   string `json:"kind"`
 	Text   string `json:"text"`
 	Detail string `json:"detail,omitempty"`
+	Link   string `json:"link,omitempty"`
 	Note   string `json:"note,omitempty"`
 }
 
@@ -263,7 +276,7 @@ func streamedEventOf(event orchestration.ProgressEvent) streamedEvent {
 	case orchestration.ProgressUndone:
 		return streamedEvent{Key: "undo " + event.Step, Kind: "undone", Text: "↩ undone " + event.Step + " (" + elapsed + ")"}
 	case orchestration.ProgressDetail:
-		return streamedEvent{Key: event.Step, Kind: "detail", Detail: event.Note}
+		return streamedEvent{Key: event.Step, Kind: "detail", Detail: event.Note, Link: event.Link}
 	case orchestration.ProgressNote:
 		return streamedEvent{Key: event.Step, Kind: "note", Note: event.Note}
 	}
@@ -285,7 +298,7 @@ func stepsOf(events []orchestration.ProgressEvent) []stepLine {
 		}
 		switch streamed.Kind {
 		case "detail":
-			lines[position].Details = append(lines[position].Details, streamed.Detail)
+			lines[position].Details = append(lines[position].Details, detailLine{Text: streamed.Detail, Link: streamed.Link})
 		case "note":
 			lines[position].Note = streamed.Note
 		default:

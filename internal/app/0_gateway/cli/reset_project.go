@@ -2,10 +2,10 @@ package cli
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/Danidani23/agents-rein/internal/app/0_gateway/wording"
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 )
 
@@ -43,9 +43,8 @@ func runResetProject(environment *commandEnvironment, request orchestration.Rest
 	if err != nil {
 		return err
 	}
-	summary := fmt.Sprintf("This will put back the agent's files rein init moved out of %s, take the rein block out of\n.gitignore, forget the clone on this machine, and commit the put-back.", request.Directory)
+	summary, explanation := wording.ResetProject(request.Directory)
 	fmt.Fprintf(environment.out, "%s\n", summary)
-	explanation := "The files come back from their snapshots in rein's store exactly as they were. The commit holds only the files that were tracked and .gitignore; pushing it is yours. The snapshots stay until rein reset machine."
 	err = environment.confirmChange([]string{summary, explanation}, "Continue?", explanation, yes)
 	if err != nil {
 		return err
@@ -59,28 +58,27 @@ func runResetProject(environment *commandEnvironment, request orchestration.Rest
 }
 
 func printRestored(environment *commandEnvironment, result orchestration.RestoreResult) {
-	fmt.Fprintf(environment.out, "restored %s, formerly %s\n", result.Folder, result.Address)
-	if len(result.Restored) > 0 {
-		fmt.Fprintf(environment.out, "put back: %s\n", strings.Join(result.Restored, ", "))
-	} else {
-		fmt.Fprintf(environment.out, "nothing to put back: init had moved nothing out\n")
+	printOutcome(environment, wording.Restored(result))
+}
+
+// printOutcome prints what a command did, as its page shows it too: the
+// headline, each line, a warning on the error stream, and the next step.
+func printOutcome(environment *commandEnvironment, done wording.Outcome) {
+	fmt.Fprintf(environment.out, "%s\n", done.Headline)
+	for _, line := range done.Lines {
+		printLine(environment, line, "")
 	}
-	if len(result.InsertsRemoved) > 0 {
-		fmt.Fprintf(environment.out, "removed sync's files: %s\n", strings.Join(result.InsertsRemoved, ", "))
+	if done.Next != "" {
+		printNext(environment, done.Next)
 	}
-	if len(result.InsertsKept) > 0 {
-		fmt.Fprintf(environment.errOut, "kept, edited by hand since sync wrote them: %s\n", strings.Join(result.InsertsKept, ", "))
+}
+
+// printLine prints one sentence of what a command did, a warning in yellow
+// on the error stream.
+func printLine(environment *commandEnvironment, line wording.Line, indent string) {
+	if line.Warning {
+		fmt.Fprintf(environment.errOut, "%s%s\n", indent, environment.style().Yellow("warning: "+line.Text))
+		return
 	}
-	if result.IgnoreRemoved {
-		fmt.Fprintf(environment.out, ".gitignore: rein block removed\n")
-	}
-	switch {
-	case result.Commit != "":
-		fmt.Fprintf(environment.out, "committed %s: %s\n", result.Commit[:7], "restore agent settings from rein (rein reset project)")
-	case result.CommitError != "":
-		fmt.Fprintf(environment.errOut, "%s\n", environment.style().Yellow(fmt.Sprintf("warning: the put-back is staged but not committed: %s", result.CommitError)))
-	default:
-		fmt.Fprintf(environment.out, "the put-back is staged, not committed\n")
-	}
-	printNext(environment, "the clone is as before rein init; rein init puts it under rein again, rein org destroy and rein reset machine take the rest off this machine")
+	fmt.Fprintf(environment.out, "%s%s\n", indent, line.Text)
 }

@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -143,7 +144,7 @@ func TestAnActionIsRefusedOutsideWhatThisMachineHas(t *testing.T) {
 		page, orchestrator := serveProjects(t)
 		client, root := signIn(t, page)
 		response, body := post(t, client, root, "actions/sync", url.Values{"folder": {cloneOf(t, orchestrator)}})
-		if response.StatusCode != http.StatusForbidden || !strings.Contains(body, "rein login") || page.actions.latest() != nil {
+		if response.StatusCode != http.StatusForbidden || !strings.Contains(body, "Log in on This machine") || page.actions.latest() != nil {
 			t.Fatalf("status %d body %q", response.StatusCode, body)
 		}
 	})
@@ -192,6 +193,45 @@ func TestTheCheckInThePages(t *testing.T) {
 		response, _ = post(t, client, root, "actions/auto-sync", url.Values{"folder": {t.TempDir()}, "on": {"on"}})
 		if response.StatusCode != http.StatusNotFound {
 			t.Fatalf("a folder that is no clone: status %d", response.StatusCode)
+		}
+	})
+}
+
+func TestLoginAndLogoutFromThePage(t *testing.T) {
+	t.Run("log in shows GitHub's code with a button to its page, and ends logged in", func(t *testing.T) {
+		page, orchestrator := serveProjects(t)
+		client, root := signIn(t, page)
+		body := runAction(t, page, client, root, "actions/login", url.Values{})
+		containsAll(t, body, "asking GitHub for a code", "enter the code ABCD-1234", `data-open-link>Open</a>`, "logged in as Danidani23; the token is in your keychain")
+		logins, _ := orchestrator.Credentials.Logins()
+		if len(logins) != 1 {
+			t.Fatalf("logins %v", logins)
+		}
+	})
+	t.Run("log out says what it does first, then forgets the account", func(t *testing.T) {
+		page, orchestrator := serveProjects(t, "Danidani23", "Second")
+		client, root := signIn(t, page)
+		_, body := get(t, client, root+"actions/logout?login=Danidani23")
+		containsAll(t, body, "This will forget Danidani23 on this machine and delete its token from your keychain", `value="Danidani23"`)
+		body = runAction(t, page, client, root, "actions/logout", url.Values{"login": {"Danidani23"}})
+		containsAll(t, body, "logged out Danidani23")
+		logins, _ := orchestrator.Credentials.Logins()
+		if slices.Contains(logins, "Danidani23") {
+			t.Fatalf("logins %v", logins)
+		}
+		_, body = get(t, client, root+"actions/logout?login=Nobody")
+		containsAll(t, body, "Nobody is not logged in on this machine")
+	})
+	t.Run("the window opens a link out in the browser, an https one only", func(t *testing.T) {
+		var opened []string
+		handler, _ := windowWith(t, func(link string) error {
+			opened = append(opened, link)
+			return nil
+		})
+		answer := visit(handler, http.MethodPost, "/open-link", url.Values{"link": {"https://github.com/login/device"}})
+		refused := visit(handler, http.MethodPost, "/open-link", url.Values{"link": {"file:///etc/passwd"}})
+		if answer.Code != http.StatusNoContent || refused.Code != http.StatusBadRequest || len(opened) != 1 || opened[0] != "https://github.com/login/device" {
+			t.Fatalf("codes %d %d opened %v", answer.Code, refused.Code, opened)
 		}
 	})
 }

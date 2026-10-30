@@ -21,6 +21,7 @@ import (
 	"html/template"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
@@ -56,16 +57,28 @@ func Open(orchestrator orchestration.Orchestrator, version string, interrupt Int
 	return &Page{listener: listener, token: token, handler: guard(routes, listener.Addr().String(), token), actions: actions}, nil
 }
 
+// WindowParts are what only the app's window has: the confirmations
+// commands wait on (D53), and the way a link out opens in the browser.
+type WindowParts struct {
+	Confirmations *Confirmations
+	OpenLink      func(link string) error
+}
+
 // Window is the pages for the app's own window, which reaches them through
 // its webview and never over a port, so no other page or machine can, and
-// no token guards them (D50). Only they show the confirmations commands
-// wait on (D53).
-func Window(orchestrator orchestration.Orchestrator, version string, interrupt Interrupt, confirmations *Confirmations) (http.Handler, error) {
-	routes, _, err := routesOf(orchestrator, version, interrupt, confirmations)
+// no token guards them (D50).
+func Window(orchestrator orchestration.Orchestrator, version string, interrupt Interrupt, parts WindowParts) (http.Handler, error) {
+	if parts.Confirmations == nil {
+		parts.Confirmations = &Confirmations{}
+	}
+	routes, _, err := routesOf(orchestrator, version, interrupt, parts.Confirmations)
 	if err != nil {
 		return nil, err
 	}
-	return withoutRedirects(routes), nil
+	window := http.NewServeMux()
+	window.Handle("/", withoutRedirects(routes))
+	window.Handle("POST /open-link", openLink(parts.OpenLink))
+	return window, nil
 }
 
 // withoutRedirects answers a redirect with a page that leads on by itself:
@@ -118,6 +131,24 @@ func (writer *leadingOn) Unwrap() http.ResponseWriter {
 	return writer.ResponseWriter
 }
 
+// openLink opens a link out in the browser, an https address only, since
+// a page of the window cannot leave it.
+func openLink(open func(link string) error) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		link, err := url.Parse(request.FormValue("link"))
+		if err != nil || link.Scheme != "https" || open == nil {
+			http.Error(writer, "only an https link opens in the browser", http.StatusBadRequest)
+			return
+		}
+		err = open(link.String())
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	})
+}
+
 // routesOf is every page and action, with the runner of the actions; the
 // window's routes, when confirmations is set, also the confirmations.
 func routesOf(orchestrator orchestration.Orchestrator, version string, interrupt Interrupt, confirmations *Confirmations) (http.Handler, *runner, error) {
@@ -146,7 +177,7 @@ func routesOf(orchestrator orchestration.Orchestrator, version string, interrupt
 			return nil, nil, err
 		}
 		routes.Handle("GET /confirmations", confirmationsPage(orchestrator, version, actions, confirmationsTemplate))
-		routes.Handle("POST /confirmations/answer", answerConfirmation(actions))
+		routes.Handle("POST /confirmations/answer", answerConfirmation(orchestrator, version, actions, confirmationsTemplate))
 	}
 	routes.Handle("GET /{$}", machinePage(orchestrator, version, actions, machineTemplate))
 	routes.Handle("GET /projects", projectsPage(orchestrator, version, actions, projectsTemplate))
@@ -155,6 +186,9 @@ func routesOf(orchestrator orchestration.Orchestrator, version string, interrupt
 	routes.Handle("GET /actions/reset-project", resetPreview(orchestrator, version, actions, actionTemplate))
 	routes.Handle("POST /actions/reset-project", resetAction(orchestrator, version, actions, actionTemplate))
 	routes.Handle("POST /actions/auto-sync", autoSyncAction(orchestrator))
+	routes.Handle("POST /actions/login", loginAction(orchestrator, version, actions, actionTemplate))
+	routes.Handle("GET /actions/logout", logoutPreview(orchestrator, version, actions, actionTemplate))
+	routes.Handle("POST /actions/logout", logoutAction(orchestrator, version, actions, actionTemplate))
 	routes.Handle("GET /run", runPage(orchestrator, version, actions, runTemplate))
 	routes.Handle("GET /run/events", runEvents(actions))
 	routes.Handle("POST /run/cancel", cancelRun(actions))

@@ -447,6 +447,21 @@ committed instead of gitignored (D4).
   down: gRPC, which needs a code generator outside Go, a module that lists 22 direct
   requirements, and its own way to reach a Unix socket on Windows, while every client is rein
   itself. Same ADR. P6.1.
+- ✅ **D58 — A command the page offers is the CLI's workflow, its progress the shared view.**
+  Decided 2026-10-29 by the user (Q46 a), asking that the page and the CLI call the same thing.
+  Login is a workflow whose first step reports GitHub's code and page as a detail, which the
+  terminal prints and the run page shows with a button; the page adds only the button that
+  starts it. Turned down: a login page of its own, which repeats the glue, and the page
+  running `rein login` and showing its terminal output. P4.8.
+- ✅ **D59 — A command that waits for the developer waits without the machine lock.** Decided
+  2026-10-29 by the user (Q47 a). The wait for GitHub's approval at login takes minutes and,
+  since D56, every change would queue behind it; the lock is taken only to keep the token.
+  P4.8.
+- ✅ **D60 — Every page follows one rule, and what both sides say lives in one package.**
+  Decided 2026-10-29 by the user (Q48 a). What a command will do is a query returning data,
+  the run a workflow reporting through progress, and every sentence the CLI and the page both
+  show lives in `internal/app/0_gateway/wording`; the reset's and the sync's moved there
+  first. [architecture.md](../architecture.md) rule 15. P4.4 to P4.9.
 - ✅ **D46 — The page offers every command a person runs, through one pattern.** Decided
   2026-10-27 by the user (Q14 R1, Q15, Q16 G2). Each command becomes a form asking what the
   CLI asks, a preview of what will change, a confirmation, its steps as they run with a
@@ -2162,11 +2177,18 @@ between P4.3 and P4.6 (Q21 a). P4.9, split from P4.3, follows P4.3 directly.
 - 🟢 **P4.7 — The Organisation page.** [PENDING] Added 2026-10-27 (D46). Through the pattern of
   P4.3: `org create`, `connect`, `use`, `disconnect` and `destroy`; `team create`, `list` and
   `edit`; `project create`, `list` and `edit`; `label list`, `add`, `remove` and `set`.
-- 🟢 **P4.8 — The machine's actions on This machine.** [PENDING] Added 2026-10-27 (D46, Q14
+- 🔨 **P4.8 — The machine's actions on This machine.** [IN PROGRESS] Added 2026-10-27 (D46, Q14
   R1). `login`, its device flow's code shown on the page, and `logout`; `update`, which then
   asks for `rein ui` to be restarted, since it replaces the program serving the page;
   `reset machine`; `key remove`. `key set` stays in the terminal: the key goes from standard
   input to the keychain and never into a page.
+
+  Login and logout built 2026-10-29 (D58, D59), waiting for your check in the app: Log in on
+  This machine runs the `Login` workflow, which reports GitHub's code with a button to its page
+  that the window opens in your browser, waits for the approval without the lock, and keeps
+  the token under it; Cancel ends the wait. Log out has its preview. `rein login` runs the same
+  workflow and prints its steps. The rest of the item, update, reset machine and key remove,
+  is to come.
 
 ## P5 — The scheduled check
 
@@ -2360,7 +2382,8 @@ keychain and the signing, is checked by you on your machine before the commit.
   calls `RequestVerificationForWindowAsync` of `IUserConsentVerifierInterop` with its window's
   handle ([Microsoft](https://learn.microsoft.com/en-us/uwp/api/windows.security.credentials.ui.userconsentverifier)).
   Both stand behind a click in the window; not built here, P6.8 holds the choice.
-- 🟢 **P6.5 — The app's release.** [PENDING] Built on GitHub's macOS, Windows and Linux
+- 🟢 **P6.5 — The app's release.** [PENDING] Waiting for you (Q44, 2026-10-29): the Apple
+  Developer Program and a company for Windows' signing come later. Built on GitHub's macOS, Windows and Linux
   runners; signed and notarised on macOS, signed through Artifact Signing on Windows, packaged
   as `.deb`, `.rpm` and AppImage on Linux; released together with `rein`. Needs from you
   (you): enrolling in the Apple Developer Program, 99 USD a year, and an Azure subscription
@@ -2394,13 +2417,19 @@ keychain and the signing, is checked by you on your machine before the commit.
   the first in line asks for it. The waiting has no time limit: Ctrl-C, Cancel on the page,
   or Claude Code ending a hook it waited too long for, leaves the line.
 
-- 💬 **P6.8 — The confirmation passes the system's own authentication.** [PENDING] Added
+- 🔨 **P6.8 — The confirmation passes the system's own authentication.** [IN PROGRESS] Added
   2026-10-29 from what P6.4 looked into. Confirm in the window asks for Touch ID on macOS and
   Windows Hello on Windows before the command runs, so a program that clicks for the developer
   cannot confirm either. Options: (a) both, through cgo on macOS and Windows' COM interface
   from Go, which the app's Wails already links (`go-ole`); (b) macOS only, the platform
   checked by you; (c) neither, the click stays enough. Recommended: (b), then Windows with
   P6.5's signing. Blocks nothing.
+
+  Chosen 2026-10-29 by the user (Q43 b): macOS only. Built 2026-10-29, waiting for your check
+  in the app: `web.Confirmations.Verify`, which the app sets to LocalAuthentication's policy of
+  the device's owner through cgo (`cmd/rein/verify_darwin.go`); a Confirm counts once it
+  passes, a refused one leaves the question waiting and says why, a Decline needs no check.
+  Windows Hello waits for P6.5's signing.
 
 ## Open points
 
@@ -3076,6 +3105,12 @@ writes is read from the next session on, not in the same one.
   rein:check` green; tests over the fakes for the workflow, the service, the commands and the
   pages, and an end-to-end test over real git in which a push leaves the clone behind and
   automatic sync then syncs it.
+- (2026-10-29) D58 to D60 decided (Q46 a, Q47 a, Q48 a), P6.8 chosen (Q43 b), P6.5 waits for
+  you (Q44). Built, waiting for your check in the app: login and logout from This machine
+  through the `Login` workflow, which `rein login` runs too; the shared wording package, with
+  the reset's and the sync's sentences; Touch ID before a Confirm counts. `task rein:check`
+  green with the app vetted for macOS and Windows; tests over the fakes for the workflow, the
+  service's wait, the page's actions, the window's links and the check before a Confirm.
 - (2026-10-30) P6.3 checked by you on macOS: the window, the menu bar icon and Log in through
   the window, after the fix for the white window. `task rein:check` green. Left for you: the
   commit.

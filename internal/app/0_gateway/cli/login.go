@@ -7,6 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Danidani23/agents-rein/internal/app/0_gateway/wording"
+	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 )
 
@@ -22,21 +24,17 @@ func newLoginCommand(environment *commandEnvironment) *cobra.Command {
 		Example: "  rein login",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			orchestrator, release, err := environment.orchestrateLocked()
+			// the login takes the machine lock only to keep the token, not while you approve (D59)
+			orchestrator, err := environment.orchestrate()
 			if err != nil {
 				return err
 			}
-			defer release()
-			code, err := orchestrator.Credentials.BeginLogin()
+			orchestrator.Progress = environment.printProgress
+			result, err := orchestrator.Login(orchestration.LoginRequest{Context: environment.ctx, Holder: environment.lockHolder()})
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(environment.out, "Open %s and enter the code %s\nWaiting for the approval on GitHub; the code is valid until %s.\n", code.VerificationURI, code.UserCode, code.ExpiresAt.Local().Format("15:04"))
-			identity, err := orchestrator.Credentials.CompleteLogin(code)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintf(environment.out, "logged in as %s; the token is in your keychain\n", identity.Login)
+			fmt.Fprintf(environment.out, "%s\n", wording.LoggedIn(result.Login))
 			return nil
 		},
 	}
@@ -57,7 +55,7 @@ func newLogoutCommand(environment *commandEnvironment) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(environment.out, "logged out %s; organisations connected with it need another login to act\n", arguments[0])
+			fmt.Fprintf(environment.out, "%s\n", wording.LoggedOut(arguments[0]))
 			return nil
 		},
 	}

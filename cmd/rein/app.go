@@ -72,8 +72,12 @@ func runApp(arguments []string, errOut io.Writer) int {
 		fmt.Fprintf(logFile, "rein app: %v\n", err)
 		return cli.ExitCrashed
 	}
-	confirmations := &web.Confirmations{}
-	pages, err := web.Window(orchestrator, version.String(), web.Interrupt{Stop: execute.Interrupt, Running: execute.Running}, confirmations)
+	confirmations := &web.Confirmations{Verify: verifyOwner}
+	var app *application.App
+	pages, err := web.Window(orchestrator, version.String(), web.Interrupt{Stop: execute.Interrupt, Running: execute.Running}, web.WindowParts{
+		Confirmations: confirmations,
+		OpenLink:      func(link string) error { return app.Browser.OpenURL(link) },
+	})
 	if err != nil {
 		fmt.Fprintf(logFile, "rein app: %v\n", err)
 		return cli.ExitCrashed
@@ -98,7 +102,7 @@ func runApp(arguments []string, errOut io.Writer) int {
 		window.Show()
 		window.Focus()
 	}
-	app := application.New(application.Options{
+	app = application.New(application.Options{
 		Name:        "rein",
 		Description: "Agents Rein: the settings of your AI coding agents, from your organisation's repository",
 		Mac:         application.MacOptions{ActivationPolicy: application.ActivationPolicyAccessory},

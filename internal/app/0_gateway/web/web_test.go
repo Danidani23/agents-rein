@@ -194,7 +194,7 @@ func TestTheAppWindowServesThePagesWithoutAToken(t *testing.T) {
 	state := fake.NewState()
 	state.Current.Logins = []string{"Danidani23"}
 	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, &fake.Repository{}, state, fake.NewDocuments(), []ports.Agent{&fake.Agent{Present: true, HomePath: t.TempDir()}}, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, &fake.Keychain{}, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
-	handler, err := Window(orchestration.New(services), "v0.1.0", Interrupt{}, &Confirmations{})
+	handler, err := Window(orchestration.New(services), "v0.1.0", Interrupt{}, WindowParts{})
 	if err != nil {
 		t.Fatalf("window: %v", err)
 	}
@@ -210,12 +210,18 @@ func TestTheAppWindowServesThePagesWithoutAToken(t *testing.T) {
 // confirmations.
 func windowOf(t *testing.T) (http.Handler, *Confirmations) {
 	t.Helper()
+	return windowWith(t, func(string) error { return nil })
+}
+
+// windowWith is windowOf with the way it opens a link out.
+func windowWith(t *testing.T, openLink func(link string) error) (http.Handler, *Confirmations) {
+	t.Helper()
 	home := t.TempDir()
 	state := fake.NewState()
 	state.Current.Logins = []string{"Danidani23"}
 	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, &fake.Repository{}, state, fake.NewDocuments(), []ports.Agent{&fake.Agent{Present: true, HomePath: t.TempDir()}}, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, &fake.Keychain{}, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
 	asked := &Confirmations{}
-	handler, err := Window(orchestration.New(services), "v0.1.0", Interrupt{}, asked)
+	handler, err := Window(orchestration.New(services), "v0.1.0", Interrupt{}, WindowParts{Confirmations: asked, OpenLink: openLink})
 	if err != nil {
 		t.Fatalf("window: %v", err)
 	}
@@ -271,6 +277,46 @@ func TestTheAppWindowAsksForConfirmations(t *testing.T) {
 			if page := visit(handler, http.MethodGet, "/confirmations", nil).Body.String(); !strings.Contains(page, "Nothing waits for your confirmation") {
 				t.Fatalf("the answered question stayed: %s", page)
 			}
+		}
+	})
+	t.Run("a Confirm counts only once the system's check of who you are passes; a Decline needs none", func(t *testing.T) {
+		handler, confirmations := windowOf(t)
+		var reasons []string
+		passes := false
+		confirmations.Verify = func(reason string) error {
+			reasons = append(reasons, reason)
+			if !passes {
+				return errors.New("Touch ID was cancelled")
+			}
+			return nil
+		}
+		answers := make(chan bool, 1)
+		go func() {
+			confirmed, _ := confirmations.Confirm(context.Background(), asked)
+			answers <- confirmed
+		}()
+		for len(confirmations.list()) == 0 {
+			time.Sleep(time.Millisecond)
+		}
+		refused := visit(handler, http.MethodPost, "/confirmations/answer", url.Values{"identifier": {"1"}, "decision": {"confirm"}})
+		if refused.Code != http.StatusForbidden || !strings.Contains(refused.Body.String(), "not confirmed, the check of who you are did not pass: Touch ID was cancelled") || len(confirmations.list()) != 1 {
+			t.Fatalf("refused: code %d body %s", refused.Code, refused.Body.String())
+		}
+		passes = true
+		passed := visit(handler, http.MethodPost, "/confirmations/answer", url.Values{"identifier": {"1"}, "decision": {"confirm"}})
+		if passed.Code != http.StatusOK || !strings.Contains(passed.Body.String(), `url=/confirmations`) || !<-answers || len(reasons) != 2 || reasons[1] != "confirm rein reset project" {
+			t.Fatalf("passed: code %d reasons %v", passed.Code, reasons)
+		}
+		go func() {
+			confirmed, _ := confirmations.Confirm(context.Background(), asked)
+			answers <- confirmed
+		}()
+		for len(confirmations.list()) == 0 {
+			time.Sleep(time.Millisecond)
+		}
+		_ = visit(handler, http.MethodPost, "/confirmations/answer", url.Values{"identifier": {"2"}, "decision": {"decline"}})
+		if <-answers || len(reasons) != 2 {
+			t.Fatalf("a decline was checked: %v", reasons)
 		}
 	})
 	t.Run("a caller that gives up takes its question off the page", func(t *testing.T) {
@@ -330,8 +376,8 @@ func TestTheMachinePageWithoutALoginNamesTheWayIn(t *testing.T) {
 	page := servePage(t, false)
 	client, root := signIn(t, page)
 	_, body := get(t, client, root)
-	if !strings.Contains(body, "rein login") {
-		t.Fatalf("the page without a login does not name rein login: %q", body)
+	if !strings.Contains(body, `<form method="post" action="/actions/login" class="notice inline">Not logged in. <button type="submit">Log in with GitHub</button></form>`) {
+		t.Fatalf("the page without a login offers no way in: %q", body)
 	}
 }
 

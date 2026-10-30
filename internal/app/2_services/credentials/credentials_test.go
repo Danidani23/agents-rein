@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -36,6 +37,23 @@ func TestLogin(t *testing.T) {
 		logins, _ := service.Logins()
 		if err != nil || len(logins) != 1 {
 			t.Fatalf("a second login of the same account duplicated it: %v %v", logins, err)
+		}
+	})
+	t.Run("the wait for the approval ends with its context and keeps nothing", func(t *testing.T) {
+		host := &fake.Host{Login: "Danidani23", Pending: 1000}
+		service, state, keychain := newService(host)
+		code, _ := service.BeginLogin()
+		ctx, cancel := context.WithCancel(context.Background())
+		polls := 0
+		service.Sleep = func(time.Duration) {
+			polls++
+			if polls == 3 {
+				cancel()
+			}
+		}
+		_, _, err := service.AwaitApproval(ctx, code)
+		if !errors.Is(err, context.Canceled) || len(state.Current.Logins) != 0 || len(keychain.Tokens) != 0 {
+			t.Fatalf("err %v logins %v tokens %v", err, state.Current.Logins, keychain.Tokens)
 		}
 	})
 	t.Run("a declined flow and a missing keychain are refusals", func(t *testing.T) {

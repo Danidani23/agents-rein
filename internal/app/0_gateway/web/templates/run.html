@@ -3,7 +3,7 @@
 <section class="run" data-running="{{if .Finished}}false{{else}}true{{end}}" data-from="{{.From}}">
   {{if or .Steps (not .Finished)}}<h2>Steps</h2>{{end}}
   <ul class="steps">
-    {{range .Steps}}<li class="{{.Kind}}" data-key="{{.Key}}"><span class="text">{{.Text}}</span><span class="note muted">{{.Note}}</span>{{range .Details}}<div class="detail muted">{{.}}</div>{{end}}</li>
+    {{range .Steps}}<li class="{{.Kind}}" data-key="{{.Key}}"><span class="text">{{.Text}}</span><span class="note muted">{{.Note}}</span>{{range .Details}}<div class="detail muted">{{.Text}}{{if .Link}} <a class="button" href="{{.Link}}" target="_blank" rel="noopener" data-open-link>Open</a>{{end}}</div>{{end}}</li>
     {{end}}
   </ul>
   {{if .Finished}}

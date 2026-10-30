@@ -1,6 +1,6 @@
 {{define "content"}}
 {{if not .Logins}}
-<p class="notice">Not logged in. Run <code>rein login</code> in a terminal; it opens the GitHub device flow.</p>
+<form method="post" action="/actions/login" class="notice inline">Not logged in. <button type="submit">Log in with GitHub</button></form>
 {{end}}
 
 <section>
@@ -27,7 +27,8 @@
   <h2>Logins and agents</h2>
   <dl class="facts">
     <dt>Logins</dt>
-    <dd>{{range $index, $login := .Logins}}{{if $index}}, {{end}}{{$login}}{{else}}<span class="muted">none</span>{{end}}</dd>
+    <dd>{{range $index, $login := .Logins}}{{if $index}}, {{end}}{{$login}} <a href="/actions/logout?login={{$login}}" class="muted">log out</a>{{else}}<span class="muted">none</span>{{end}}
+      <form method="post" action="/actions/login" class="inline"><button type="submit" class="secondary">Log in{{if .Logins}} another account{{end}}</button></form></dd>
     <dt>Agents</dt>
     <dd>{{range $index, $agent := .Agents}}{{if $index}}, {{end}}{{$agent}}{{else}}<span class="muted">none found; this build writes for claude-code</span>{{end}}</dd>
     <dt>rein's home</dt>

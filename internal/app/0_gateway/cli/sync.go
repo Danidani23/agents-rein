@@ -3,11 +3,11 @@ package cli
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/Danidani23/agents-rein/internal/app/0_gateway/wording"
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 )
 
@@ -72,7 +72,7 @@ func runSync(environment *commandEnvironment, request orchestration.SyncRequest,
 		printSynced(environment, synced, hook)
 	}
 	if err == nil && !hook {
-		printNext(environment, "a new session in the clone reads the harness; a change to it is proposed with rein distill and rein propose, never edited here")
+		printNext(environment, wording.SyncNext)
 		printNudge(environment, orchestrator)
 	}
 	return hookOrError(environment, hook, err)
@@ -118,39 +118,25 @@ func printSynced(environment *commandEnvironment, synced orchestration.CloneSync
 		if len(synced.Foreign) > 0 {
 			fmt.Fprintf(environment.out, "rein: not written by rein, so in no other clone and not in the organisation's repository: %s; settings change through rein, as the rein skill says\n", strings.Join(synced.Foreign, ", "))
 		}
-	} else {
-		fmt.Fprintf(environment.out, "synced %s for %s\n", synced.Address, synced.Agent)
-		for _, written := range synced.Written {
-			fmt.Fprintf(environment.out, "  written    %s\n", written)
+		for _, note := range synced.Notes {
+			fmt.Fprintf(environment.out, "  note: %s\n", note)
 		}
-		for _, unchanged := range synced.Unchanged {
-			fmt.Fprintf(environment.out, "  unchanged  %s\n", unchanged)
+		if len(synced.UnsetVariables) > 0 {
+			fmt.Fprintf(environment.errOut, "%s\n", environment.style().Yellow(fmt.Sprintf("warning: the tool servers of %s need %s in your shell, not set", synced.Address, strings.Join(synced.UnsetVariables, ", "))))
 		}
-		for _, removed := range synced.Removed {
-			fmt.Fprintf(environment.out, "  removed    %s\n", removed)
-		}
-		if synced.SnapshotPath != "" && len(synced.Modified) > 0 {
-			fmt.Fprintf(environment.out, "  your edits to %s were kept in the snapshot %s before being overwritten\n", strings.Join(synced.Modified, ", "), filepath.Base(synced.SnapshotPath))
-		}
-		for _, foreign := range synced.Foreign {
-			fmt.Fprintf(environment.out, "  not from rein  %s\n", foreign)
-		}
-		switch {
-		case len(synced.Foreign) > 0 && synced.SnapshotPath != "":
-			fmt.Fprintf(environment.out, "  the files not from rein are in the snapshot %s; rein distill --snapshot %s turns them into a proposal\n", filepath.Base(synced.SnapshotPath), filepath.Base(synced.SnapshotPath))
-		case len(synced.Foreign) > 0:
-			fmt.Fprintf(environment.out, "  the files not from rein reach no other clone and not the organisation's repository; rein sync --force keeps them in a snapshot for rein distill\n")
-		}
+		return
 	}
-	for _, note := range synced.Notes {
-		fmt.Fprintf(environment.out, "  note: %s\n", note)
+	fmt.Fprintf(environment.out, "synced %s for %s\n", synced.Address, synced.Agent)
+	for _, written := range synced.Written {
+		fmt.Fprintf(environment.out, "  written    %s\n", written)
 	}
-	if len(synced.UnsetVariables) > 0 {
-		fmt.Fprintf(environment.errOut, "%s\n", environment.style().Yellow(fmt.Sprintf("warning: the tool servers of %s need %s in your shell, not set", synced.Address, strings.Join(synced.UnsetVariables, ", "))))
+	for _, unchanged := range synced.Unchanged {
+		fmt.Fprintf(environment.out, "  unchanged  %s\n", unchanged)
 	}
-	if !hook {
-		for _, untrusted := range synced.Untrusted {
-			fmt.Fprintf(environment.errOut, "%s\n  %s\n", environment.style().Red(fmt.Sprintf("warning: %s has not trusted this folder yet, so rein's tool server stays pending; start it here once and accept the trust dialog:", untrusted.Agent)), fmt.Sprintf("cd %s && %s", synced.Folder, untrusted.Command))
-		}
+	for _, removed := range synced.Removed {
+		fmt.Fprintf(environment.out, "  removed    %s\n", removed)
+	}
+	for _, line := range wording.SyncedNotes(synced) {
+		printLine(environment, line, "  ")
 	}
 }

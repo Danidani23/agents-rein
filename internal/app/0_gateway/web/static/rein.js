@@ -39,6 +39,17 @@
       var detail = document.createElement("div");
       detail.className = "detail muted";
       detail.textContent = event.detail;
+      if (event.link) {
+        var open = document.createElement("a");
+        open.className = "button";
+        open.href = event.link;
+        open.target = "_blank";
+        open.rel = "noopener";
+        open.dataset.openLink = "";
+        open.textContent = "Open";
+        detail.appendChild(document.createTextNode(" "));
+        detail.appendChild(open);
+      }
       line.appendChild(detail);
       return;
     }
@@ -62,3 +73,13 @@
     }, 2000);
   });
 })();
+
+// in the app's window a link out opens in the browser, never in the window
+document.addEventListener("click", function (event) {
+  var link = event.target.closest ? event.target.closest("a[data-open-link]") : null;
+  if (!link || document.body.dataset.window !== "true") {
+    return;
+  }
+  event.preventDefault();
+  fetch("/open-link", { method: "POST", body: new URLSearchParams({ link: link.href }) });
+});

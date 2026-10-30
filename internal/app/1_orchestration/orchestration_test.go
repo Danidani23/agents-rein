@@ -1,6 +1,7 @@
 package orchestration
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -2055,6 +2056,45 @@ func TestCheck(t *testing.T) {
 			if finding.Kind == machine.FindingBehind {
 				t.Fatalf("the synced clone is still behind: %+v", result.Findings)
 			}
+		}
+	})
+}
+
+func TestLogin(t *testing.T) {
+	t.Run("the code arrives as a detail with its address, and only keeping the token takes the lock", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.state.Current.Logins = nil
+		fixture.keychain.Tokens = nil
+		orchestrator := fixture.orchestrator()
+		var events []ProgressEvent
+		orchestrator.Progress = func(event ProgressEvent) { events = append(events, event) }
+		result, err := orchestrator.Login(LoginRequest{Holder: ports.LockHolder{Command: "rein login", Caller: "the page"}})
+		if err != nil || result.Login != "Danidani23" || strings.Join(fixture.state.Current.Logins, ",") != "Danidani23" {
+			t.Fatalf("result %+v err %v logins %v", result, err, fixture.state.Current.Logins)
+		}
+		var detail ProgressEvent
+		for _, event := range events {
+			if event.Kind == ProgressDetail {
+				detail = event
+			}
+		}
+		if detail.Step != "asking GitHub for a code" || !strings.Contains(detail.Note, "enter the code ABCD-1234") || detail.Link == "" {
+			t.Fatalf("detail %+v", detail)
+		}
+		if len(fixture.lock.Holders) != 1 || fixture.lock.Holders[0].Command != "rein login, keeping the token of Danidani23" || fixture.lock.Released != 1 {
+			t.Fatalf("holders %+v released %d", fixture.lock.Holders, fixture.lock.Released)
+		}
+	})
+	t.Run("a cancelled wait for the approval keeps nothing and takes no lock", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.state.Current.Logins = nil
+		fixture.keychain.Tokens = nil
+		fixture.host.Pending = 1000
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := fixture.orchestrator().Login(LoginRequest{Context: ctx})
+		if !errors.Is(err, context.Canceled) || len(fixture.state.Current.Logins) != 0 || len(fixture.lock.Holders) != 0 {
+			t.Fatalf("err %v logins %v holders %v", err, fixture.state.Current.Logins, fixture.lock.Holders)
 		}
 	})
 }

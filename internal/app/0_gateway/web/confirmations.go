@@ -19,9 +19,12 @@ import (
 // up. Only the window has the page: a browser's rein ui does not, since
 // its token is printed where an agent can read it. Asked, when set, is
 // told of each new question, so the app can show its window and a
-// notification.
+// notification. Verify, when set, is the system's own check of the
+// developer, such as Touch ID, that a Confirm must pass (P6.8); a Decline
+// needs none.
 type Confirmations struct {
-	Asked func(identifier string, asked ports.Confirmation)
+	Asked  func(identifier string, asked ports.Confirmation)
+	Verify func(reason string) error
 
 	mutex   sync.Mutex
 	waiting []*waitingConfirmation
@@ -116,15 +119,37 @@ func confirmationsPage(orchestrator orchestration.Orchestrator, version string, 
 }
 
 // answerConfirmation takes the developer's answer and leads back to the
-// page.
-func answerConfirmation(actions *runner) http.Handler {
+// page; a Confirm the system's check refuses leaves the question waiting
+// and says why.
+func answerConfirmation(orchestrator orchestration.Orchestrator, version string, actions *runner, page *template.Template) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		decision := request.FormValue("decision")
 		if decision != "confirm" && decision != "decline" {
 			http.Error(writer, "the answer is confirm or decline", http.StatusBadRequest)
 			return
 		}
-		actions.confirmations.answer(request.FormValue("identifier"), decision == "confirm")
+		identifier := request.FormValue("identifier")
+		if decision == "confirm" && actions.confirmations.Verify != nil {
+			reason := "confirm what a command waits for"
+			for _, waiting := range actions.confirmations.list() {
+				if waiting.Identifier == identifier {
+					reason = "confirm " + waiting.Command
+				}
+			}
+			err := actions.confirmations.Verify(reason)
+			if err != nil {
+				report, statusErr := orchestrator.Status()
+				if statusErr != nil {
+					http.Error(writer, statusErr.Error(), http.StatusInternalServerError)
+					return
+				}
+				view := confirmationsView{frame: frameOf(request, report, version, "Confirmations", "confirmations", actions), Questions: actions.confirmations.list()}
+				view.Problem = "not confirmed, the check of who you are did not pass: " + err.Error()
+				render(writer, page, view, http.StatusForbidden)
+				return
+			}
+		}
+		actions.confirmations.answer(identifier, decision == "confirm")
 		http.Redirect(writer, request, "/confirmations", http.StatusSeeOther)
 	})
 }
