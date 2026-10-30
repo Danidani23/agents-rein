@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -33,6 +34,16 @@ func machinePage(orchestrator orchestration.Orchestrator, version string, action
 		if !record.CheckedAt.IsZero() {
 			view.CheckedAt = record.CheckedAt.Local().Format(timeLayout)
 		}
+		// the keys the organisations' distillers name that are in the keychain
+		for _, organization := range report.Organizations {
+			name, err := orchestrator.DistillerKeyName(organization.Slug)
+			if err != nil || name == "" || slices.Contains(view.Keys, name) {
+				continue
+			}
+			if _, found := orchestrator.Credentials.Key(name); found {
+				view.Keys = append(view.Keys, name)
+			}
+		}
 		for _, finding := range record.Findings {
 			view.Findings = append(view.Findings, findingRow{Kind: finding.Kind, Subject: shortPath(finding.Subject), Detail: finding.Detail, Since: finding.Since.Local().Format(timeLayout), Link: finding.Page})
 		}
@@ -55,6 +66,8 @@ type machineView struct {
 	// CheckedAt is when the check last ran, Findings what it found.
 	CheckedAt string
 	Findings  []findingRow
+	// Keys are the providers' keys in the keychain that a distiller names.
+	Keys []string
 }
 
 // findingRow is one thing the check found, with the page that shows it.

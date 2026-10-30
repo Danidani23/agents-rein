@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Danidani23/agents-rein/internal/app/0_gateway/wording"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 )
 
@@ -34,45 +35,31 @@ func runUpdate(environment *commandEnvironment, check bool, yes bool) error {
 	if err != nil {
 		return err
 	}
-	service := orchestrator.Updates
-	checked, err := service.CheckNow()
+	plan, err := orchestrator.PlanUpdate()
 	if err != nil {
-		return refusal.New("the latest release could not be read: " + err.Error())
+		return err
 	}
-	if !checked.Newer {
-		if checked.Latest != checked.Current {
-			fmt.Fprintf(environment.out, "rein %s is the latest release; this build, %s, is newer than it\n", checked.Latest, checked.Current)
-			return nil
-		}
-		fmt.Fprintf(environment.out, "rein %s is the latest release, and this is it\n", checked.Latest)
+	lines, summary, explanation, refused := wording.Update(plan)
+	if !plan.Newer || check {
+		fmt.Fprintf(environment.out, "%s\n", lines[0])
 		return nil
 	}
-	fmt.Fprintf(environment.out, "rein %s is available; this is %s\n", checked.Latest, checked.Current)
-	if check {
+	for _, line := range lines {
+		fmt.Fprintf(environment.out, "%s\n", line)
+	}
+	if refused != "" {
+		return refusal.New(refused)
+	}
+	if summary == "" {
 		return nil
 	}
-	install := service.HowInstalled()
-	if install.Command != "" {
-		fmt.Fprintf(environment.out, "this rein was installed by %s, which updates it:\n\n  %s\n", install.Kind, install.Command)
-		return nil
-	}
-	if install.Advice != "" {
-		fmt.Fprintf(environment.out, "this rein at %s came from %s; %s\n", service.Executable, install.Kind, install.Advice)
-		return nil
-	}
-	if !install.Self {
-		return refusal.New(fmt.Sprintf("this rein at %s was not installed by a package manager or the install script, so rein does not replace it; install the new release the way this one was installed", service.Executable))
-	}
-	if !service.Writable() {
-		return refusal.New(fmt.Sprintf("%s cannot be replaced: its folder is not writable", service.Executable))
-	}
-	fmt.Fprintf(environment.out, "This will download rein %s for this machine, verify it against the release's checksum file, and put it in place of %s.\n", checked.Latest, service.Executable)
+	fmt.Fprintf(environment.out, "%s\n", summary)
 	if !yes {
 		prompter := environment.prompter()
 		if !prompter.CanAsk() {
 			return refusal.New("no terminal to confirm on; pass --yes")
 		}
-		confirmed, err := prompter.Confirm("Continue?", "The archive comes from the GitHub release of Danidani23/agents-rein. A build that fails the checksum is not installed. The running command finishes; the next rein is the new one.")
+		confirmed, err := prompter.Confirm("Continue?", explanation)
 		if err != nil {
 			return refusal.New(err.Error())
 		}
@@ -80,14 +67,10 @@ func runUpdate(environment *commandEnvironment, check bool, yes bool) error {
 			return refusal.New("nothing changed")
 		}
 	}
-	latest, err := service.Releases.Latest()
+	replaced, version, err := orchestrator.Update()
 	if err != nil {
-		return refusal.New(err.Error())
+		return err
 	}
-	replaced, err := service.SelfUpdate(latest)
-	if err != nil {
-		return refusal.New(err.Error())
-	}
-	fmt.Fprintf(environment.out, "updated %s to rein %s\n", replaced, latest.Version)
+	fmt.Fprintf(environment.out, "%s\n", wording.Updated(replaced, version))
 	return nil
 }

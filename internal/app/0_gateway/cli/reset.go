@@ -2,22 +2,15 @@ package cli
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/Danidani23/agents-rein/internal/app/0_gateway/wording"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 )
 
-const resetExplanation = "reset machine is reset project for everything, then forgetting. Every initialised project is put\n" +
-	"back as rein reset project does: the files init moved out return from their snapshots, the rein block\n" +
-	"leaves .gitignore, and the put-back is committed. Every link or copy rein made in an agent's\n" +
-	"home is removed, dangling ones included; one that points somewhere rein did not record is\n" +
-	"left alone and reported. Then the organisations are forgotten and their clones deleted, the\n" +
-	"proposals removed, and rein's store, with the ledger and the snapshots, is erased with its key;\n" +
-	"your logins stay, their tokens in the keychain. The remotes on\n" +
-	"GitHub are never touched. A project whose restore fails stops the reset before anything is\n" +
-	"wiped, so no snapshot is ever lost."
+// resetExplanation stands behind reset machine's question, as on its page.
+const resetExplanation = wording.ResetMachineExplanation
 
 // newResetCommand takes rein back, always with a scope: a destructive
 // command has no silent default (D36).
@@ -69,19 +62,7 @@ func runReset(environment *commandEnvironment, yes bool) error {
 	if err != nil {
 		return err
 	}
-	summary := []string{"This will:", fmt.Sprintf("- put back %d initialised projects and commit the put-back in each:", len(plan.ProjectClones))}
-	for _, project := range plan.ProjectClones {
-		summary = append(summary, fmt.Sprintf("    %s  (%s)", project.ClonePath, project.Address))
-	}
-	summary = append(summary, fmt.Sprintf("- remove %d placements rein made in your agent's home; your own files are untouched", len(plan.Placements)))
-	for _, placed := range plan.Placements {
-		summary = append(summary, "    "+placed.Path)
-	}
-	if len(plan.Imports) > 0 {
-		summary = append(summary, fmt.Sprintf("- remove %d imports under %s", len(plan.Imports), plan.ImportsFolder))
-	}
-	summary = append(summary, fmt.Sprintf("- forget %d organisations and delete their clones under %s; the remotes stay", len(plan.Organizations), plan.OrgClonesFolder))
-	summary = append(summary, fmt.Sprintf("- remove the proposals under %s, and erase rein's store %s, with the ledger and the snapshots, and its key; your logins stay", plan.ProposalsFolder, plan.Store))
+	summary := wording.ResetMachine(plan)
 	for _, line := range summary {
 		fmt.Fprintf(environment.out, "%s\n", line)
 	}
@@ -91,33 +72,24 @@ func runReset(environment *commandEnvironment, yes bool) error {
 	}
 	result, err := orchestrator.ResetMachine(plan)
 	for _, project := range result.ProjectClones {
-		switch {
-		case project.Failed:
-			fmt.Fprintf(environment.errOut, "failed   %s: %s\n", project.Folder, project.Skipped)
-		case project.Skipped != "":
-			fmt.Fprintf(environment.errOut, "skipped  %s: %s\n", project.Folder, project.Skipped)
-		default:
-			printRestored(environment, project.Restore)
+		if project.Skipped != "" {
+			fmt.Fprintf(environment.errOut, "%s\n", wording.ProjectReset(project).Text)
+			continue
 		}
+		printRestored(environment, project.Restore)
 	}
 	if err != nil {
 		return err
 	}
-	for _, unplaced := range result.Placements {
-		switch {
-		case unplaced.Removed:
-			fmt.Fprintf(environment.out, "removed  %s\n", unplaced.Path)
-		case unplaced.Reason != "":
-			fmt.Fprintf(environment.errOut, "skipped  %s: %s\n", unplaced.Path, unplaced.Reason)
-		default:
-			fmt.Fprintf(environment.out, "gone     %s\n", unplaced.Path)
+	done := wording.MachineReset(result)
+	for _, line := range done.Lines {
+		if line.Warning {
+			fmt.Fprintf(environment.errOut, "%s\n", line.Text)
+			continue
 		}
+		fmt.Fprintf(environment.out, "%s\n", line.Text)
 	}
-	for _, organizationID := range result.RemovedOrgClones {
-		fmt.Fprintf(environment.out, "removed  clone %s\n", organizationID)
-	}
-	fmt.Fprintf(environment.out, "removed  %s\n", strings.Join(result.Wiped, ", "))
-	fmt.Fprintf(environment.out, "reset done; %d placements kept because they were not rein's\n", result.Kept)
+	fmt.Fprintf(environment.out, "%s\n", done.Headline)
 	if result.Kept > 0 {
 		return refusal.New(fmt.Sprintf("%d placements skipped", result.Kept))
 	}

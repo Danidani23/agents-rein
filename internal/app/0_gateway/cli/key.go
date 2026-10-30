@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Danidani23/agents-rein/internal/app/0_gateway/wording"
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 )
@@ -76,7 +77,7 @@ func newKeyCommand(environment *commandEnvironment) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(environment.out, "removed %s from your keychain\n", name)
+			fmt.Fprintf(environment.out, "%s\n", wording.KeyRemoved(name))
 			return nil
 		},
 	}

@@ -186,6 +186,15 @@ func routesOf(orchestrator orchestration.Orchestrator, version string, interrupt
 	routes.Handle("GET /actions/reset-project", resetPreview(orchestrator, version, actions, actionTemplate))
 	routes.Handle("POST /actions/reset-project", resetAction(orchestrator, version, actions, actionTemplate))
 	routes.Handle("POST /actions/auto-sync", autoSyncAction(orchestrator))
+	routes.Handle("GET /actions/reset-machine", resetMachinePreview(orchestrator, version, actions, actionTemplate))
+	routes.Handle("POST /actions/reset-machine", resetMachineAction(orchestrator, version, actions, actionTemplate))
+	routes.Handle("GET /actions/key-remove", keyRemovePreview(orchestrator, version, actions, actionTemplate))
+	routes.Handle("POST /actions/key-remove", keyRemoveAction(orchestrator, version, actions, actionTemplate))
+	if confirmations == nil {
+		// the app's window is a build of its own, which a release of rein does not replace
+		routes.Handle("GET /actions/update", updatePreview(orchestrator, version, actions, actionTemplate))
+		routes.Handle("POST /actions/update", updateAction(orchestrator, version, actions, actionTemplate))
+	}
 	routes.Handle("POST /actions/login", loginAction(orchestrator, version, actions, actionTemplate))
 	routes.Handle("GET /actions/logout", logoutPreview(orchestrator, version, actions, actionTemplate))
 	routes.Handle("POST /actions/logout", logoutAction(orchestrator, version, actions, actionTemplate))

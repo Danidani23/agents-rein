@@ -35,7 +35,13 @@
     <dd><code>{{.Home}}</code></dd>
     <dt>In your agent's home</dt>
     <dd>{{.PlacedFiles}} {{if eq .PlacedFiles 1}}file{{else}}files{{end}} placed by rein</dd>
+    <dt>Providers' keys</dt>
+    <dd>{{range $index, $key := .Keys}}{{if $index}}, {{end}}<code>{{$key}}</code> <a href="/actions/key-remove?name={{$key}}" class="muted">remove</a>{{else}}<span class="muted">none in your keychain; <code>rein key set</code> keeps one, from standard input, never through a page</span>{{end}}</dd>
   </dl>
+  <div class="buttons">
+    {{if not .InWindow}}<a class="button secondary" href="/actions/update">Update rein</a>{{end}}
+    <a class="button secondary" href="/actions/reset-machine">Reset this machine</a>
+  </div>
   {{if .MissingPlacements}}
   <div class="table-scroll">
     <table>

@@ -2177,18 +2177,23 @@ between P4.3 and P4.6 (Q21 a). P4.9, split from P4.3, follows P4.3 directly.
 - 🟢 **P4.7 — The Organisation page.** [PENDING] Added 2026-10-27 (D46). Through the pattern of
   P4.3: `org create`, `connect`, `use`, `disconnect` and `destroy`; `team create`, `list` and
   `edit`; `project create`, `list` and `edit`; `label list`, `add`, `remove` and `set`.
-- 🔨 **P4.8 — The machine's actions on This machine.** [IN PROGRESS] Added 2026-10-27 (D46, Q14
+- ✅ **P4.8 — The machine's actions on This machine.** [EXECUTED] Added 2026-10-27 (D46, Q14
   R1). `login`, its device flow's code shown on the page, and `logout`; `update`, which then
   asks for `rein ui` to be restarted, since it replaces the program serving the page;
   `reset machine`; `key remove`. `key set` stays in the terminal: the key goes from standard
   input to the keychain and never into a page.
 
-  Login and logout built 2026-10-29 (D58, D59), waiting for your check in the app: Log in on
+  Login and logout built 2026-10-29 (D58, D59), accepted by you on 2026-10-30: Log in on
   This machine runs the `Login` workflow, which reports GitHub's code with a button to its page
   that the window opens in your browser, waits for the approval without the lock, and keeps
   the token under it; Cancel ends the wait. Log out has its preview. `rein login` runs the same
-  workflow and prints its steps. The rest of the item, update, reset machine and key remove,
-  is to come.
+  workflow and prints its steps. Update, reset machine and key remove built the same day, the
+  plans as queries (`PlanUpdate`, `PlanReset`) and every sentence from `wording` (D60), so the
+  CLI's update and reset machine print what the page shows. Deviations: update is offered by
+  `rein ui` in a browser only, since the app's window is a build of its own that a release of
+  rein does not replace, and the app's own release is P6.5; the keys listed are those an
+  organisation's distiller names and the keychain holds; reset machine from the window is
+  confirmed in its preview, the window's own click.
 
 ## P5 — The scheduled check
 
@@ -3111,6 +3116,9 @@ writes is read from the next session on, not in the same one.
   the reset's and the sync's sentences; Touch ID before a Confirm counts. `task rein:check`
   green with the app vetted for macOS and Windows; tests over the fakes for the workflow, the
   service's wait, the page's actions, the window's links and the check before a Confirm.
+- (2026-10-29) P4.8 built, waiting for your check in the app: update, reset machine and key
+  remove on This machine, beside login and logout; `rein update` and `rein reset machine` now
+  take their plans from queries and their sentences from `wording`. `task rein:check` green.
 - (2026-10-30) P6.3 checked by you on macOS: the window, the menu bar icon and Log in through
   the window, after the fix for the white window. `task rein:check` green. Left for you: the
   commit.

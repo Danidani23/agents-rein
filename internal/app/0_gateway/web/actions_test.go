@@ -235,3 +235,42 @@ func TestLoginAndLogoutFromThePage(t *testing.T) {
 		}
 	})
 }
+
+func TestTheMachinesActions(t *testing.T) {
+	t.Run("reset this machine shows what it does as the CLI says it, then resets", func(t *testing.T) {
+		page, orchestrator := serveProjects(t)
+		client, root := signIn(t, page)
+		_, body := get(t, client, root+"actions/reset-machine")
+		containsAll(t, body, "reset machine is reset project for everything", "- forget 1 organisations and delete their clones under", "Reset this machine")
+		body = runAction(t, page, client, root, "actions/reset-machine", url.Values{})
+		containsAll(t, body, "reset done; 0 placements kept because they were not rein&#39;s", "removed  ")
+		connected, _, _ := orchestrator.Organizations.List()
+		if len(connected) != 0 {
+			t.Fatalf("organisations %+v", connected)
+		}
+	})
+	t.Run("a provider's key is removed after its preview; one not kept is said so", func(t *testing.T) {
+		page, orchestrator := serveProjects(t)
+		client, root := signIn(t, page)
+		err := orchestrator.Credentials.StoreKey("DEEPSEEK_API_KEY", "sk-test")
+		if err != nil {
+			t.Fatalf("store: %v", err)
+		}
+		_, body := get(t, client, root+"actions/key-remove?name=DEEPSEEK_API_KEY")
+		containsAll(t, body, "This will remove DEEPSEEK_API_KEY from your keychain")
+		body = runAction(t, page, client, root, "actions/key-remove", url.Values{"name": {"DEEPSEEK_API_KEY"}})
+		containsAll(t, body, "removed DEEPSEEK_API_KEY from your keychain")
+		_, body = get(t, client, root+"actions/key-remove?name=DEEPSEEK_API_KEY")
+		containsAll(t, body, "DEEPSEEK_API_KEY is not in your keychain")
+	})
+	t.Run("update is offered in a browser, never in the app's window", func(t *testing.T) {
+		page, _ := serveProjects(t)
+		client, root := signIn(t, page)
+		_, body := get(t, client, root)
+		containsAll(t, body, `href="/actions/update">Update rein</a>`)
+		handler, _ := windowOf(t)
+		if visit(handler, http.MethodGet, "/actions/update", nil).Code != http.StatusNotFound || strings.Contains(visit(handler, http.MethodGet, "/", nil).Body.String(), "Update rein") {
+			t.Fatalf("the window offers an update")
+		}
+	})
+}

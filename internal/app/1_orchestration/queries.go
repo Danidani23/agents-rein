@@ -358,6 +358,50 @@ func (orchestrator Orchestrator) CheckLine(folder string) (string, error) {
 	return "rein: " + strings.Join(said, " · "), nil
 }
 
+// UpdatePlan is what rein update would do: the releases compared, how
+// this rein was installed and so how it is updated, and whether rein can
+// put the new one in place itself.
+type UpdatePlan struct {
+	Current    string
+	Latest     string
+	Newer      bool
+	Executable string
+	// InstalledBy is the install's kind; Command updates a managed one,
+	// Advice says how to update one no command updates.
+	InstalledBy string
+	Command     string
+	Advice      string
+	// Self says rein replaces itself, Writable that its folder lets it.
+	Self     bool
+	Writable bool
+}
+
+// PlanUpdate asks for the latest release and says what an update would do;
+// it changes nothing.
+func (orchestrator Orchestrator) PlanUpdate() (UpdatePlan, error) {
+	service := orchestrator.Updates
+	checked, err := service.CheckNow()
+	if err != nil {
+		return UpdatePlan{}, refusal.New("the latest release could not be read: " + err.Error())
+	}
+	install := service.HowInstalled()
+	return UpdatePlan{Current: checked.Current, Latest: checked.Latest, Newer: checked.Newer, Executable: service.Executable, InstalledBy: install.Kind, Command: install.Command, Advice: install.Advice, Self: install.Self, Writable: service.Writable()}, nil
+}
+
+// Update puts the latest release in place of this rein, verified against
+// the release's checksum file, and returns the path it replaced.
+func (orchestrator Orchestrator) Update() (replaced string, version string, err error) {
+	latest, err := orchestrator.Updates.Releases.Latest()
+	if err != nil {
+		return "", "", refusal.New(err.Error())
+	}
+	replaced, err = orchestrator.Updates.SelfUpdate(latest)
+	if err != nil {
+		return "", "", refusal.New(err.Error())
+	}
+	return replaced, latest.Version, nil
+}
+
 // StoredDocument is one document of rein's store, by its name and size.
 type StoredDocument struct {
 	Name  string
