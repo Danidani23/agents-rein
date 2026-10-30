@@ -189,6 +189,9 @@ type cloneFiles struct {
 	ClonePath string
 	AutoSync  bool
 	Findings  []string
+	// DistillLink leads to distill while the clone's snapshot is not
+	// distilled yet.
+	DistillLink string
 }
 
 // fileRow is one file sync wrote; Changed marks one edited by hand or
@@ -322,6 +325,9 @@ func levelNameOf(level string) string {
 // declaration each came from named within the organisation.
 func cloneFilesOf(clone orchestration.CloneStatus, files []orchestration.SyncedFile, organizationSlug string) cloneFiles {
 	listed := cloneFiles{Folder: shortPath(clone.ClonePath), LastSync: localTimeOf(clone.LastSync), SyncLink: "/actions/sync?folder=" + url.QueryEscape(clone.ClonePath), ResetLink: "/actions/reset-project?folder=" + url.QueryEscape(clone.ClonePath), ClonePath: clone.ClonePath, AutoSync: clone.AutoSync}
+	if strings.HasPrefix(clone.Snapshot, "snapshot not distilled") {
+		listed.DistillLink = "/actions/distill?folder=" + url.QueryEscape(clone.ClonePath)
+	}
 	for _, file := range files {
 		listed.Files = append(listed.Files, fileRow{Path: file.Path, From: strings.TrimPrefix(file.Address, address.Organizations+"."+organizationSlug+"."), Written: file.WrittenAt.Local().Format(timeLayout), State: file.State, Changed: file.State != orchestration.SyncedAsWritten})
 	}

@@ -9,9 +9,12 @@ package wording
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/proposal"
 )
 
 // Line is one sentence of what a command did; Warning marks what needs the
@@ -21,12 +24,13 @@ type Line struct {
 	Warning bool
 }
 
-// Outcome is what a command did: its headline, its lines, and the next
-// step.
+// Outcome is what a command did: its headline, its lines, the next step,
+// and the lines that close it after the next step.
 type Outcome struct {
 	Headline string
 	Lines    []Line
 	Next     string
+	Closing  []Line
 }
 
 // ResetProject is what reset project says before it asks: what it will do
@@ -203,4 +207,123 @@ func KeyRemove(name string) string {
 
 func KeyRemoved(name string) string {
 	return "removed " + name + " from your keychain"
+}
+
+// Distilled is what distill did: each candidate with its verdict, notes,
+// the distiller's judgement and whom it reaches; the distiller's line; the
+// counts; the proposal written; what is in conflict or fails the lint; the
+// next step; and, last, the distiller's conversation (Q49). A blank line
+// parts the groups.
+func Distilled(result orchestration.DistillResult) Outcome {
+	document := result.Proposal
+	done := Outcome{Headline: fmt.Sprintf("distilled %d candidates for %s from the snapshot %s", len(document.Candidates), result.Level, filepath.Base(document.Snapshot.Path))}
+	counts := map[string]int{}
+	var conflicts, failing []proposal.Candidate
+	for _, candidate := range document.Candidates {
+		counts[candidate.Compared.Verdict]++
+		line := fmt.Sprintf("  %-10s %-24s %s", candidate.Compared.Verdict, candidate.Kind+"/"+candidate.ID, strings.Join(candidate.Sources, ", "))
+		if len(candidate.Compared.Related) > 0 {
+			line += "  = " + strings.Join(candidate.Compared.Related, ", ")
+		}
+		done.Lines = append(done.Lines, Line{Text: line})
+		for _, note := range candidate.Notes {
+			done.Lines = append(done.Lines, Line{Text: "             note: " + note})
+		}
+		if candidate.Judge != nil {
+			done.Lines = append(done.Lines, Line{Text: "             distiller: " + judgementLine(candidate)})
+		}
+		// whom a declaration for the organisation or a team reaches (D40)
+		if reached, found := result.Reaches[candidate.Kind+"/"+candidate.ID]; found {
+			projects := "no project yet"
+			if len(reached) > 0 {
+				projects = strings.Join(reached, ", ")
+			}
+			done.Lines = append(done.Lines, Line{Text: "             reaches: " + projects})
+		}
+		if candidate.Conflict != nil {
+			conflicts = append(conflicts, candidate)
+		}
+		if len(result.LintErrors[candidate.Kind+"/"+candidate.ID]) > 0 {
+			failing = append(failing, candidate)
+		}
+	}
+	distiller := fmt.Sprintf("distiller: %s %s", document.Judge.Backend, document.Judge.Status)
+	// an answer sent back is said after the fact, not only by the spinner (P2.58)
+	if len(document.Judge.Rejected) > 0 {
+		distiller += ", after its first answer was sent back for: " + strings.Join(document.Judge.Rejected, "; ")
+	}
+	if len(document.Judge.Problems) > 0 {
+		distiller += ": " + strings.Join(document.Judge.Problems, "; ")
+	}
+	done.Lines = append(done.Lines, Line{Text: distiller})
+	for _, skipped := range document.Skipped {
+		done.Lines = append(done.Lines, Line{Text: "  skipped    " + skipped})
+	}
+	done.Lines = append(done.Lines, Line{Text: fmt.Sprintf("%d new, %d identical to an existing declaration, %d sharing an id with another level", counts[distill.VerdictNew], counts[distill.VerdictIdentical], counts[distill.VerdictSameID])})
+	done.Lines = append(done.Lines, Line{}, Line{Text: "written to " + result.File})
+	// the files in conflict or failing the lint close the output, each a full path the terminal opens
+	if len(conflicts) > 0 {
+		done.Lines = append(done.Lines, Line{}, Line{Text: fmt.Sprintf("%d in conflict, which rein propose waits for: drop, override or amend each", len(conflicts)), Warning: true})
+		for _, candidate := range conflicts {
+			done.Lines = append(done.Lines, Line{Text: fmt.Sprintf("  %s  with %s", filepath.Join(result.File, proposal.CandidateFileName(candidate)), strings.Join(candidate.Conflict.With, ", "))})
+		}
+	}
+	if len(failing) > 0 {
+		done.Lines = append(done.Lines, Line{}, Line{Text: fmt.Sprintf("%d failing the lint, which rein propose refuses: mend the text under files in each", len(failing)), Warning: true})
+		for _, candidate := range failing {
+			for _, message := range result.LintErrors[candidate.Kind+"/"+candidate.ID] {
+				done.Lines = append(done.Lines, Line{Text: fmt.Sprintf("  %s  %s", filepath.Join(result.File, proposal.CandidateFileName(candidate)), message)})
+			}
+		}
+	}
+	switch {
+	case len(conflicts) > 0 && len(failing) > 0:
+		done.Next = "set conflict.resolution in each file in conflict, mend the files that fail the lint, review the rest, then rein propose opens the pull request"
+	case len(conflicts) > 0:
+		done.Next = "set conflict.resolution in each file in conflict, review the rest, then rein propose opens the pull request"
+	case len(failing) > 0:
+		done.Next = "mend the files that fail the lint, review the rest, then rein propose opens the pull request"
+	default:
+		done.Next = "review and edit it, then rein propose opens the pull request"
+	}
+	// the last line opens the distiller's conversation, which claude keeps out of its picker (Q49)
+	if result.Conversation != "" {
+		done.Closing = []Line{{}, {Text: "the distiller's conversation, to read or go on with it: " + result.Conversation}}
+	}
+	return done
+}
+
+// judgementLine renders a judgement on one line, with the level
+// the candidate goes to and its labels.
+func judgementLine(candidate proposal.Candidate) string {
+	judgement := candidate.Judge
+	line := judgement.Verdict
+	// the distiller may quote one declaration twice; it is named once
+	var named []string
+	for _, quote := range judgement.Quotes {
+		if slices.Contains(named, quote.Address) {
+			continue
+		}
+		named = append(named, quote.Address)
+		line += " with " + quote.Address
+	}
+	switch judgement.Suggestion {
+	case "lift":
+		line += "; lift to " + candidate.Level
+		if len(candidate.ApplyIf) > 0 {
+			line += ", applyIf " + strings.Join(candidate.ApplyIf, " ")
+		} else if judgement.Everywhere != "" {
+			line += ", every project: " + judgement.Everywhere
+		}
+	case "drop":
+		line += "; drop, left out"
+	default:
+		line += "; " + judgement.Suggestion + " at " + candidate.Level
+	}
+	return line + ": " + judgement.Reason
+}
+
+// Distill is what distill from a clone says before it runs.
+func Distill(folder string) string {
+	return fmt.Sprintf("This will turn the agent's files rein took from %s into candidate declarations of its project, compare each with what the organisation declares, ask the distiller where each belongs, which usually takes 5 to 10 minutes, and write them as one proposal in the clone's .rein/proposals/, to review before propose. Nothing goes into the organisation's repository.", folder)
 }

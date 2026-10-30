@@ -326,13 +326,70 @@ func syncOutcome(result orchestration.SyncResult) outcome {
 	return done
 }
 
-// linesOf are the sentences of what a command did, as the page lists them.
+// linesOf are the sentences of what a command did, as the page lists them,
+// without the blank lines that part them in a terminal.
 func linesOf(lines []wording.Line) []outcomeLine {
 	var listed []outcomeLine
 	for _, line := range lines {
+		if line.Text == "" {
+			continue
+		}
 		listed = append(listed, outcomeLine{Text: line.Text, Warning: line.Warning})
 	}
 	return listed
+}
+
+// distillPreview says what distill from a clone does.
+func distillPreview(orchestrator orchestration.Orchestrator, version string, actions *runner, page *template.Template) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		target, problem, status, err := targetOf(orchestrator, request, false)
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		view := previewView{frame: frameOf(request, target.report, version, "Distill", "projects", actions), Action: "/actions/distill", Confirm: "Distill", Back: "/projects", Busy: actions.runningName()}
+		if problem != "" {
+			view.Problem = problem
+			render(writer, page, view, status)
+			return
+		}
+		view.Title = "Distill " + projectOf(target.clone)
+		view.Back = "/projects?project=" + projectOf(target.clone)
+		view.Hidden = []formField{{Name: "folder", Value: target.clone.ClonePath}}
+		view.Summary = []string{wording.Distill(shortPath(target.clone.ClonePath))}
+		render(writer, page, view, http.StatusOK)
+	})
+}
+
+// distillAction runs distill for a clone, as rein distill does in it, the
+// distiller's progress on the run page, under the machine lock for the
+// whole run as the CLI holds it (P4.4).
+func distillAction(orchestrator orchestration.Orchestrator, version string, actions *runner, page *template.Template) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		target, problem, status, err := targetOf(orchestrator, request, false)
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		name := "Distill " + projectOf(target.clone)
+		begin(writer, request, actions, problem, status, name, func(current *run) (done outcome, err error) {
+			acting := orchestrator
+			acting.Progress = current.record
+			release, err := lockFor(current, acting, "rein distill", target.clone.ClonePath)
+			if err != nil {
+				return joinedOutcome(err)
+			}
+			defer func() { release(err) }()
+			result, err := acting.DistillHarness(orchestration.DistillRequest{Directory: target.clone.ClonePath})
+			if err != nil {
+				return outcome{}, err
+			}
+			distilled := wording.Distilled(result)
+			return outcome{Headline: distilled.Headline, Lines: linesOf(append(distilled.Lines, distilled.Closing...)), Next: distilled.Next}, nil
+		}, func() previewView {
+			return previewView{frame: frameOf(request, target.report, version, name, "projects", actions)}
+		}, page)
+	})
 }
 
 // restoreOutcome is what reset project did, in the words the CLI prints.

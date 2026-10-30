@@ -2160,9 +2160,14 @@ between P4.3 and P4.6 (Q21 a). P4.9, split from P4.3, follows P4.3 directly.
   For the chosen repository, a form picks its project record or creates one, as `rein init`
   asks; then `InitializeProject` moves the harness into a snapshot and commits the move-out
   as it does from the terminal.
-- 🟢 **P4.4 — Distill from the page.** [PENDING] `DistillHarness`, offered on the Projects page
+- ✅ **P4.4 — Distill from the page.** [EXECUTED] `DistillHarness`, offered on the Projects page
   when the project's snapshot is not distilled yet, with the distiller's progress shown on
   the page over its 5 to 10 minutes. The lock is held for the run, as the CLI holds it.
+
+  Built 2026-10-29 by D60, accepted by you on 2026-10-30: a Distill button on a clone whose
+  snapshot is not distilled, its preview, and the run with the distiller's progress; what
+  distill did, from the candidates to the distiller's conversation, is `wording.Distilled`,
+  which `rein distill` prints too, the conversation still its last line (Q49).
 - 🟢 **P4.5 — The organisation's declarations, their reach and its proposals in the page.**
   [PENDING] Split from P4.2 on 2026-10-27; extended the same day (D46) with
   `declaration edit` and `remove` and with `lint`. Reads behind the login gate where the
@@ -3119,6 +3124,8 @@ writes is read from the next session on, not in the same one.
 - (2026-10-29) P4.8 built, waiting for your check in the app: update, reset machine and key
   remove on This machine, beside login and logout; `rein update` and `rein reset machine` now
   take their plans from queries and their sentences from `wording`. `task rein:check` green.
+- (2026-10-29) P4.4 built, waiting for your check in the app: distill from the Projects page;
+  `rein distill` now prints its result from `wording`. `task rein:check` green.
 - (2026-10-30) P6.3 checked by you on macOS: the window, the menu bar icon and Log in through
   the window, after the fix for the white window. `task rein:check` green. Left for you: the
   commit.

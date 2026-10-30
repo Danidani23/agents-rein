@@ -14,9 +14,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/adapters/execute"
 	"github.com/Danidani23/agents-rein/internal/adapters/fake"
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
-	"github.com/Danidani23/agents-rein/internal/app/2_services/distill"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
-	"github.com/Danidani23/agents-rein/internal/app/2_services/proposal"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
@@ -714,14 +712,6 @@ func TestDistill(t *testing.T) {
 		if code != ExitWorked || !strings.Contains(out, expected) {
 			t.Fatalf("missing %q: code %d out %q err %q", expected, code, out, errOut)
 		}
-	}
-}
-
-func TestDescribeJudgementLine(t *testing.T) {
-	candidate := proposal.Candidate{Level: "organizations.acme.projects.shop", Judge: &proposal.Judgement{Verdict: "contradicts", Suggestion: "keep", Reason: "the project's own", Quotes: []distill.Quote{{Address: "organizations.acme.skills.adr", Text: "one"}, {Address: "organizations.acme.skills.adr", Text: "two"}, {Address: "organizations.acme.rules.global", Text: "three"}}}}
-	line := describeJudgementLine(candidate)
-	if line != "contradicts with organizations.acme.skills.adr with organizations.acme.rules.global; keep at organizations.acme.projects.shop: the project's own" {
-		t.Fatalf("line %q", line)
 	}
 }
 

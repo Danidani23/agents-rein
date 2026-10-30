@@ -4,6 +4,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -273,4 +275,27 @@ func TestTheMachinesActions(t *testing.T) {
 			t.Fatalf("the window offers an update")
 		}
 	})
+}
+
+func TestDistillFromThePage(t *testing.T) {
+	page, orchestrator := serveProjects(t, "Danidani23")
+	client, root := signIn(t, page)
+	_, body := get(t, client, root+"projects?org=dani&project=shop")
+	if strings.Contains(body, `/actions/distill?folder=`) {
+		t.Fatalf("Distill is offered without a snapshot")
+	}
+	// the clone's harness as init would have snapshotted it
+	folder := cloneOf(t, orchestrator)
+	_ = os.WriteFile(filepath.Join(folder, "CLAUDE.md"), []byte("## Style\n\nBe brief.\n"), 0o644)
+	_, _, err := orchestrator.Snapshots.Take("claude-code", "organizations.dani.projects.shop", folder, []string{"CLAUDE.md"})
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	_, body = get(t, client, root+"projects?org=dani&project=shop")
+	containsAll(t, body, `/actions/distill?folder=`)
+	_, body = get(t, client, root+"actions/distill?folder="+url.QueryEscape(cloneOf(t, orchestrator)))
+	containsAll(t, body, "This will turn the agent&#39;s files rein took from", "usually takes 5 to 10 minutes")
+	body = runAction(t, page, client, root, "actions/distill", url.Values{"folder": {cloneOf(t, orchestrator)}})
+	// the fixture's distiller is not there, which the run says, as the CLI does
+	containsAll(t, body, "reading the snapshot", "the distiller")
 }

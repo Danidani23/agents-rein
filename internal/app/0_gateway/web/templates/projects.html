@@ -99,6 +99,7 @@
     <div class="buttons">
       <a class="button" href="{{.SyncLink}}">Sync</a>
       <a class="button secondary" href="/actions/sync?all=on">Sync every clone</a>
+      {{if .DistillLink}}<a class="button secondary" href="{{.DistillLink}}">Distill</a>{{end}}
       <a class="button secondary" href="{{.ResetLink}}">Reset project</a>
     </div>
   </div>
