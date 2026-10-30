@@ -19,10 +19,11 @@ type frame struct {
 	Title   string
 	Current string
 	Version string
-	// MachineLink and ProjectsLink are the menu's entries, the choice
-	// carried.
+	// MachineLink, ProjectsLink and AccountsLink are the menu's entries, the
+	// choice carried.
 	MachineLink         string
 	ProjectsLink        string
+	AccountsLink        string
 	OrganizationChoices []choice
 	ChosenOrganization  string
 	UserChoices         []choice
@@ -89,6 +90,7 @@ func frameOf(request *http.Request, report orchestration.StatusReport, version s
 	carried := carry(query, "org", "user")
 	shown.MachineLink = link("/", carried)
 	shown.ProjectsLink = link("/projects", carried)
+	shown.AccountsLink = link("/accounts", carried)
 	named := query.Get("org")
 	for _, organization := range report.Organizations {
 		if organization.Slug == named || (named == "" && organization.Slug == report.Active) {
@@ -109,7 +111,7 @@ func frameOf(request *http.Request, report orchestration.StatusReport, version s
 		shown.userLogin = shown.organization.Login
 	}
 	if query.Get("user") != "" && !slices.Contains(report.Logins, shown.userLogin) {
-		shown.Problem = shown.userLogin + " is not logged in on this machine"
+		shown.Problem = shown.userLogin + " is not an account on this machine"
 	}
 	shown.ChosenUser = shown.userLogin
 	for _, login := range report.Logins {

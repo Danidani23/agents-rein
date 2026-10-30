@@ -91,7 +91,7 @@ holds this table as its `allowed` map and fails on any import outside it.
    `clones` the folders under `~/.rein/orgs/`, `snapshots` the snapshots in rein's store,
    `hosting` the repositories on the host, `records` the record files in an org clone and
    their publication, `workingcopy` a project's working copy, `ledger` the removals and
-   inserts in rein's store, `credentials` the logins and their tokens in the keychain. The
+   inserts in rein's store, `credentials` the accounts and their tokens in the keychain. The
    store is the `Documents` port, which the `vault` adapter keeps encrypted in one bbolt file,
    `store.db`, its key in the keychain (D51); the state, through `localstate.Store`, is a
    document of it too.

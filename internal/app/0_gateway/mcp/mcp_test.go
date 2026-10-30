@@ -31,7 +31,7 @@ func connectIn(t *testing.T, loggedIn bool, folder string) *mcp.ClientSession {
 	home := t.TempDir()
 	state := fake.NewState()
 	if loggedIn {
-		state.Current.Logins = []string{"Danidani23"}
+		state.Current.Accounts = fake.Accounts("Danidani23")
 	}
 	keychain := &fake.Keychain{Tokens: map[string]ports.Token{"Danidani23": {Login: "Danidani23", AccessToken: "token", ExpiresAt: time.Now().Add(time.Hour)}}}
 	agents := []ports.Agent{&fake.Agent{Present: true, HomePath: t.TempDir()}}

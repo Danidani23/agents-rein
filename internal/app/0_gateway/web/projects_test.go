@@ -23,7 +23,7 @@ func serveProjects(t *testing.T, logins ...string) (*Page, orchestration.Orchest
 	t.Helper()
 	home := t.TempDir()
 	state := fake.NewState()
-	state.Current.Logins = []string{"Danidani23"}
+	state.Current.Accounts = fake.Accounts("Danidani23")
 	tokens := map[string]ports.Token{}
 	for _, login := range append([]string{"Danidani23"}, logins...) {
 		tokens[login] = ports.Token{Login: login, AccessToken: "token-of-" + login, ExpiresAt: time.Now().Add(time.Hour)}
@@ -81,7 +81,7 @@ func serveProjects(t *testing.T, logins ...string) (*Page, orchestration.Orchest
 		t.Fatalf("sync: %v", err)
 	}
 	_ = os.WriteFile(filepath.Join(folder, ".claude", "rules", "go.md"), []byte("edited"), 0o644)
-	state.Current.Logins = logins
+	state.Current.Accounts = fake.Accounts(logins...)
 	page, err := Open(orchestrator, "v0.1.0", Interrupt{})
 	if err != nil {
 		t.Fatalf("open: %v", err)
@@ -166,7 +166,7 @@ func TestTheProjectsPageNamesWhatItCannotShow(t *testing.T) {
 	}{
 		{"projects?project=nope", "nope is not a project of dani"},
 		{"projects?org=nope", "nope is not an organisation connected here"},
-		{"projects?user=nobody", "nobody is not logged in on this machine"},
+		{"projects?user=nobody", "nobody is not an account on this machine"},
 	} {
 		t.Run(unknown.query, func(t *testing.T) {
 			page, _ := serveProjects(t, "Danidani23")

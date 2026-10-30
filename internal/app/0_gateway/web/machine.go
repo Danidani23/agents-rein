@@ -54,7 +54,7 @@ func machinePage(orchestrator orchestration.Orchestrator, version string, action
 // machineView is what the machine's page shows in its frame.
 type machineView struct {
 	frame
-	Logins            []string
+	Accounts          []accountRow
 	Agents            []string
 	Home              string
 	PlacedFiles       int
@@ -129,7 +129,10 @@ const timeLayout = "2006-01-02 15:04"
 const proposedPrefix = "snapshot distilled and proposed, "
 
 func machineViewOf(report orchestration.StatusReport, shown frame) machineView {
-	view := machineView{frame: shown, Logins: report.Logins, Agents: report.Agents, Home: shortPath(report.Home), PlacedFiles: len(report.Placements)}
+	view := machineView{frame: shown, Agents: report.Agents, Home: shortPath(report.Home), PlacedFiles: len(report.Placements)}
+	for _, account := range report.Accounts {
+		view.Accounts = append(view.Accounts, accountRow{Login: account.Login, Host: account.Host, LoggedIn: account.LoggedIn, Reason: account.Reason})
+	}
 	for _, placed := range report.Placements {
 		if !placed.TargetExists {
 			view.MissingPlacements = append(view.MissingPlacements, placed.Placement)

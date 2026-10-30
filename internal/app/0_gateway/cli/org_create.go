@@ -54,7 +54,7 @@ func newOrgCreateCommand(environment *commandEnvironment) *cobra.Command {
 		},
 	}
 	command.Flags().StringVar(&answers.host, "host", "", "the version control host: github (default)")
-	command.Flags().StringVar(&answers.login, "login", "", "the account to act with (default: the only one logged in)")
+	command.Flags().StringVar(&answers.login, "account", "", "the account to act with (default: the only one, else asked)")
 	command.Flags().StringVar(&answers.name, "name", "", "the organisation's name; its slug is derived from it")
 	command.Flags().StringVar(&answers.description, "description", "", "one line about the organisation")
 	command.Flags().StringVar(&answers.owner, "owner", "", "the account or organisation on the host that owns the repository (default: the login)")
@@ -86,7 +86,7 @@ func runOrgCreate(environment *commandEnvironment, answers orgCreateAnswers) err
 	prompter := environment.prompter()
 	if !prompter.CanAsk() {
 		if answers.name == "" || !answers.yes {
-			return refusal.New("no terminal to ask on; pass --name and --yes, and --host, --login, --owner, --repository, --visibility, --description to change the defaults")
+			return refusal.New("no terminal to ask on; pass --name and --yes, and --host, --account, --owner, --repository, --visibility, --description to change the defaults")
 		}
 	} else {
 		answers, err = askOrgCreateHost(prompter, answers)
@@ -220,11 +220,8 @@ func askOrgCreateHost(prompter ports.Prompter, answers orgCreateAnswers) (orgCre
 		Title:       "Version control host",
 		Description: "Where the organisation keeps its repositories: " + hostPhrase + ".",
 		Explanation: "The org repository lives on the host, next to the organisation's code; rein creates it there, opens pull requests on it, and reads it on every machine. Your identity is your account on that host.",
-		Choices: []ports.Choice{
-			{Name: "github", Description: "GitHub, github.com"},
-			{Name: "gitlab", Description: "GitLab", Unavailable: "planned, not yet supported"},
-		},
-		Default: "github",
+		Choices:     hostChoices,
+		Default:     "github",
 	})
 	return answers, err
 }

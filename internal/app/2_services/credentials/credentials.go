@@ -1,6 +1,7 @@
-// Package credentials is the service that owns who is logged in on this
-// machine: the logins in the state, their tokens in the keychain, the
-// device flow that obtains one, and the renewal of an expired one (D25).
+// Package credentials is the service that owns who rein acts as on this
+// machine: the accounts in the state, their tokens in the keychain, the
+// device flow that obtains one, and the renewal of an expired one (D25,
+// D61).
 // In a GitHub Actions job it hands out the job's own token instead, the
 // one exception to the keychain (D22).
 package credentials
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
@@ -42,13 +44,27 @@ func (ErrNotLoggedIn) Is(target error) bool {
 	return target == refusal.ErrRefused
 }
 
-// ErrUnknownLogin is the refusal for a login this machine does not have.
+// ErrUnknownLogin is the refusal for an account this machine does not have.
 type ErrUnknownLogin struct {
 	Login string
 }
 
 func (err ErrUnknownLogin) Error() string {
-	return fmt.Sprintf("%s is not logged in on this machine; run rein login", err.Login)
+	return fmt.Sprintf("%s is not an account on this machine; rein account add adds one", err.Login)
+}
+
+// ErrLoggedOut is the refusal for an account whose token is gone.
+type ErrLoggedOut struct {
+	Login string
+}
+
+func (err ErrLoggedOut) Error() string {
+	return fmt.Sprintf("%s is logged out on this machine; rein login %s logs it in again", err.Login, err.Login)
+}
+
+// Is makes it a refusal.
+func (ErrLoggedOut) Is(target error) bool {
+	return target == refusal.ErrRefused
 }
 
 // Is makes it a refusal.
@@ -71,15 +87,52 @@ func (service Service) sleep(duration time.Duration) {
 	service.Sleep(duration)
 }
 
-// Logins lists the accounts logged in on this machine, sorted.
-func (service Service) Logins() ([]string, error) {
+// Accounts lists the accounts on this machine, logged in or not, sorted by
+// login.
+func (service Service) Accounts() ([]machine.Account, error) {
 	state, err := service.State.Load()
 	if err != nil {
 		return nil, err
 	}
-	logins := append([]string(nil), state.Logins...)
-	sort.Strings(logins)
+	accounts := append([]machine.Account(nil), state.Accounts...)
+	sort.Slice(accounts, func(left int, right int) bool { return accounts[left].Login < accounts[right].Login })
+	return accounts, nil
+}
+
+// Logins lists the logins of the accounts on this machine, sorted.
+func (service Service) Logins() ([]string, error) {
+	accounts, err := service.Accounts()
+	if err != nil {
+		return nil, err
+	}
+	var logins []string
+	for _, account := range accounts {
+		logins = append(logins, account.Login)
+	}
 	return logins, nil
+}
+
+// Standing says whether an account is logged in: its token is in the
+// keychain and is current or can be renewed. Otherwise reason says why
+// not. It asks no host, so a token the host refuses still stands here.
+func (service Service) Standing(login string) (loggedIn bool, reason string, err error) {
+	token, found, err := service.Keychain.Load(login)
+	if err != nil {
+		return false, "", err
+	}
+	switch {
+	case !found:
+		return false, "no token in the keychain", nil
+	case token.Expired(service.now()) && (token.RefreshToken == "" || (!token.RefreshExpiresAt.IsZero() && token.RefreshExpiresAt.Before(service.now()))):
+		return false, "its token expired and cannot be renewed", nil
+	}
+	return true, "", nil
+}
+
+// Token is an account's token as the keychain holds it, for a workflow
+// that deletes it to put back.
+func (service Service) Token(login string) (token ports.Token, found bool, err error) {
+	return service.Keychain.Load(login)
 }
 
 // BeginLogin starts the device flow and returns the code to show; without
@@ -132,41 +185,57 @@ func (service Service) AwaitApproval(ctx context.Context, code ports.DeviceCode)
 }
 
 // KeepLogin stores the token under its login in the keychain and
-// remembers the login.
+// remembers the account on the host the token came from.
 func (service Service) KeepLogin(token ports.Token) error {
 	err := service.Keychain.Store(token)
 	if err != nil {
 		return err
 	}
-	return service.Remember(token.Login)
+	return service.Remember(machine.Account{Host: service.Host.Name(), Login: token.Login, AddedAt: service.now()})
 }
 
-// Remember adds a login to the state once: at a login, and when a reset
-// of the machine keeps the logins in a new store.
-func (service Service) Remember(login string) error {
+// Remember adds an account to the state once: at a login, and when a
+// reset of the machine keeps the accounts in a new store. An account known
+// already keeps when it was added.
+func (service Service) Remember(account machine.Account) error {
 	state, err := service.State.Load()
 	if err != nil {
 		return err
 	}
-	for _, known := range state.Logins {
-		if known == login {
+	for _, known := range state.Accounts {
+		if known.Login == account.Login {
 			return nil
 		}
 	}
-	state.Logins = append(state.Logins, login)
+	state.Accounts = append(state.Accounts, account)
 	return service.State.Save(state)
 }
 
-// Logout forgets a login and deletes its token.
+// Logout deletes an account's token from the keychain; the account stays,
+// logged out, until it is removed (D61). An account logged out already
+// stays so.
 func (service Service) Logout(login string) error {
+	_, err := service.Account(login)
+	if err != nil {
+		return err
+	}
+	_, found, err := service.Keychain.Load(login)
+	if err != nil || !found {
+		return err
+	}
+	return service.Keychain.Delete(login)
+}
+
+// Forget removes an account from the state; its token is the caller's.
+func (service Service) Forget(login string) error {
 	state, err := service.State.Load()
 	if err != nil {
 		return err
 	}
-	var kept []string
+	var kept []machine.Account
 	found := false
-	for _, known := range state.Logins {
-		if known == login {
+	for _, known := range state.Accounts {
+		if known.Login == login {
 			found = true
 			continue
 		}
@@ -175,12 +244,23 @@ func (service Service) Logout(login string) error {
 	if !found {
 		return ErrUnknownLogin{Login: login}
 	}
-	state.Logins = kept
-	err = service.State.Save(state)
+	state.Accounts = kept
+	return service.State.Save(state)
+}
+
+// Account is the account with login on this machine, or the refusal that
+// names it unknown.
+func (service Service) Account(login string) (machine.Account, error) {
+	accounts, err := service.Accounts()
 	if err != nil {
-		return err
+		return machine.Account{}, err
 	}
-	return service.Keychain.Delete(login)
+	for _, account := range accounts {
+		if account.Login == login {
+			return account, nil
+		}
+	}
+	return machine.Account{}, ErrUnknownLogin{Login: login}
 }
 
 // AccessToken is the token of a login, renewed when expired. An empty login
@@ -200,15 +280,19 @@ func (service Service) AccessToken(login string) (string, error) {
 		case 1:
 			login = logins[0]
 		default:
-			return "", refusal.New(fmt.Sprintf("several accounts are logged in, %v; say which with --login", logins))
+			return "", refusal.New(fmt.Sprintf("several accounts are logged in, %v; say which with --account", logins))
 		}
+	}
+	_, err := service.Account(login)
+	if err != nil {
+		return "", err
 	}
 	token, found, err := service.Keychain.Load(login)
 	if err != nil {
 		return "", err
 	}
 	if !found {
-		return "", ErrUnknownLogin{Login: login}
+		return "", ErrLoggedOut{Login: login}
 	}
 	if !token.Expired(service.now()) {
 		return token.AccessToken, nil
@@ -242,7 +326,7 @@ func (service Service) Resolve(login string) (ports.Identity, error) {
 		case 1:
 			login = logins[0]
 		default:
-			return ports.Identity{}, refusal.New(fmt.Sprintf("several accounts are logged in, %v; say which with --login", logins))
+			return ports.Identity{}, refusal.New(fmt.Sprintf("several accounts are logged in, %v; say which with --account", logins))
 		}
 	}
 	logins, err := service.Logins()

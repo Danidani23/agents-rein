@@ -83,7 +83,7 @@ func newHarness(t *testing.T) *harness {
 		documents:  fake.NewDocuments(),
 		keychain:   &fake.Keychain{Tokens: map[string]ports.Token{"Danidani23": {Login: "Danidani23", AccessToken: "token-of-Danidani23", ExpiresAt: time.Now().Add(time.Hour)}}},
 	}
-	fixture.state.Current.Logins = []string{"Danidani23"}
+	fixture.state.Current.Accounts = fake.Accounts("Danidani23")
 	return fixture
 }
 
@@ -140,7 +140,7 @@ func writeFile(t *testing.T, root string, relative string, content string) {
 func TestExitCodes(t *testing.T) {
 	t.Run("a refusal exits 1", func(t *testing.T) {
 		fixture := newHarness(t)
-		fixture.state.Current.Logins = nil
+		fixture.state.Current.Accounts = nil
 		code, _, errOut := fixture.run("org", "list")
 		if code != ExitRefused || !strings.Contains(errOut, "rein: not logged in") {
 			t.Fatalf("code %d err %q", code, errOut)
@@ -204,7 +204,7 @@ func TestLint(t *testing.T) {
 func TestOrg(t *testing.T) {
 	t.Run("every org command passes the login gate first", func(t *testing.T) {
 		fixture := newHarness(t)
-		fixture.state.Current.Logins = nil
+		fixture.state.Current.Accounts = nil
 		for _, arguments := range [][]string{{"org", "connect", "x"}, {"org", "list"}, {"org", "use", "acme"}, {"org", "disconnect", "acme"}, {"org", "destroy", "acme", "--yes"}} {
 			code, _, errOut := fixture.run(arguments...)
 			if code != ExitRefused || !strings.Contains(errOut, "rein login") {
@@ -333,7 +333,7 @@ func TestStatus(t *testing.T) {
 		fixture.state.Current.Organizations = []machine.OrganizationRef{{Slug: "acme", Remote: "r"}}
 		fixture.state.Current.Active = "acme"
 		code, out, _ := fixture.run("status", "--path", t.TempDir())
-		for _, expected := range []string{"this folder is not a rein project; rein init puts it under rein", "\nmachine\n  login        Danidani23 · agents fake-agent · home ", " · 1 file in your agent's home", "  missing      /a -> ", "rein reset machine removes the dangling links", "\norganisations\n  * acme        r"} {
+		for _, expected := range []string{"this folder is not a rein project; rein init puts it under rein", "\nmachine\n  accounts     Danidani23 · agents fake-agent · home ", " · 1 file in your agent's home", "  missing      /a -> ", "rein reset machine removes the dangling links", "\norganisations\n  * acme        r"} {
 			if code != ExitWorked || !strings.Contains(out, expected) {
 				t.Fatalf("missing %q: code %d out %q", expected, code, out)
 			}
@@ -341,10 +341,10 @@ func TestStatus(t *testing.T) {
 	})
 	t.Run("a machine without a login is shown, not refused", func(t *testing.T) {
 		fixture := newHarness(t)
-		fixture.state.Current.Logins = nil
+		fixture.state.Current.Accounts = nil
 		fixture.agent.Present = false
 		code, out, _ := fixture.run("status", "--path", t.TempDir())
-		if code != ExitWorked || !strings.Contains(out, "  login        none; run rein login · agents none found") {
+		if code != ExitWorked || !strings.Contains(out, "  accounts     none; run rein account add · agents none found") {
 			t.Fatalf("code %d out %q", code, out)
 		}
 	})
@@ -366,6 +366,70 @@ func TestStatus(t *testing.T) {
 		}
 		if !strings.HasPrefix(out, "this project") || strings.Contains(out, "other projects") {
 			t.Fatalf("the project is not first, or listed twice: %q", out)
+		}
+	})
+}
+
+func TestAccount(t *testing.T) {
+	t.Run("an account is added on its host; a planned host is refused", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.state.Current.Accounts = nil
+		fixture.keychain.Tokens = map[string]ports.Token{}
+		code, _, errOut := fixture.run("account", "add", "--host", "gitlab")
+		if code != ExitRefused || !strings.Contains(errOut, "gitlab is planned, not yet supported") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+		code, out, errOut := fixture.run("account", "add")
+		if code != ExitWorked || !strings.Contains(out, "enter the code ABCD-1234") || !strings.Contains(out, "added Danidani23 on GitHub; the token is in your keychain") {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+	})
+	t.Run("the list says which account is logged out and what acts with each", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.seedConnectedOrganization(t, 0)
+		fixture.state.Current.Organizations[0].Login = "Danidani23"
+		fixture.state.Current.Accounts = fake.Accounts("Danidani23", "octocat")
+		code, out, _ := fixture.run("account", "list")
+		if code != ExitWorked || !strings.Contains(out, "Danidani23  GitHub · logged in · acts for acme\n") || !strings.Contains(out, "octocat     GitHub · logged out, no token in the keychain\n") {
+			t.Fatalf("code %d out %q", code, out)
+		}
+		_, out, _ = fixture.run("status")
+		if !strings.Contains(out, "  accounts     Danidani23, octocat (logged out) · agents") {
+			t.Fatalf("status %q", out)
+		}
+	})
+	t.Run("a logout keeps the account; a login renews it", func(t *testing.T) {
+		fixture := newHarness(t)
+		code, out, _ := fixture.run("logout")
+		if code != ExitWorked || !strings.Contains(out, "logged out Danidani23; the account stays") || len(fixture.keychain.Tokens) != 0 || len(fixture.state.Current.Accounts) != 1 {
+			t.Fatalf("code %d out %q tokens %v", code, out, fixture.keychain.Tokens)
+		}
+		code, out, _ = fixture.run("login")
+		if code != ExitWorked || !strings.Contains(out, "logged in as Danidani23") || fixture.keychain.Tokens["Danidani23"].AccessToken == "" {
+			t.Fatalf("code %d out %q", code, out)
+		}
+		fixture.state.Current.Accounts = fake.Accounts("Danidani23", "octocat")
+		code, _, errOut := fixture.run("logout")
+		if code != ExitRefused || !strings.Contains(errOut, "name the one to log out: rein logout <account>") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+	})
+	t.Run("an account an organisation acts with is not removed; another one is", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.seedConnectedOrganization(t, 0)
+		fixture.state.Current.Organizations[0].Login = "Danidani23"
+		fixture.state.Current.Accounts = fake.Accounts("Danidani23", "octocat")
+		code, _, errOut := fixture.run("account", "remove", "Danidani23", "--yes")
+		if code != ExitRefused || !strings.Contains(errOut, "Danidani23 acts for acme. Disconnect each first, with rein org disconnect acme") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+		code, _, errOut = fixture.run("account", "remove", "octocat")
+		if code != ExitRefused || !strings.Contains(errOut, "pass --yes") {
+			t.Fatalf("without a terminal or --yes: code %d err %q", code, errOut)
+		}
+		code, out, errOut := fixture.run("account", "remove", "octocat", "--yes")
+		if code != ExitWorked || !strings.Contains(out, "removed the account octocat and its token") || strings.Join(fixture.state.Current.Logins(), ",") != "Danidani23" {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
 	})
 }
@@ -549,7 +613,7 @@ func TestOrgCreate(t *testing.T) {
 	})
 	t.Run("the login gate holds without a terminal", func(t *testing.T) {
 		fixture := newHarness(t)
-		fixture.state.Current.Logins = nil
+		fixture.state.Current.Accounts = nil
 		code, _, errOut := fixture.run("org", "create", "--name", "Acme", "--yes")
 		if code != ExitRefused || !strings.Contains(errOut, "rein login") {
 			t.Fatalf("code %d err %q", code, errOut)

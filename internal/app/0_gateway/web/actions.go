@@ -30,6 +30,7 @@ type previewView struct {
 	Items        []string
 	Hidden       []formField
 	Options      []formOption
+	Choices      []formChoice
 	Confirm      string
 	Back         string
 	Busy         string
@@ -45,6 +46,17 @@ type formField struct {
 type formOption struct {
 	Name  string
 	Label string
+}
+
+// formChoice is one answer to a question the CLI asks on a terminal, of
+// which the form sends the one chosen; a disabled one is shown and refused.
+type formChoice struct {
+	Name     string
+	Value    string
+	Label    string
+	Note     string
+	Checked  bool
+	Disabled bool
 }
 
 // lockFor waits for the action's turn at the machine lock, as the CLI's

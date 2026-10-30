@@ -2493,12 +2493,28 @@ at login, checked by you in the app.
   `~/Applications/Rein.app`, registers (`startsAtLogin`), so `task app:try` never adds a dev
   build to your login items; Linux and Windows register nothing until P6.5 fixes where their
   packages install the app; on macOS the login item still opens the window, as P6.3 notes.
-- 🟢 **P7.2 — Accounts.** [PENDING] The state keeps accounts, its version raised so an earlier
-  rein refuses it, today's logins moved in as GitHub accounts (D19, D61). `rein account add`,
-  `account list` and `account remove`, `rein login [account]` and `rein logout [account]`, an
-  Accounts page with Add account, Log in, Log out and Remove; adding and removing are
-  workflows that the CLI and the page both run. `--login` becomes `--account`. With no account,
-  the window opens on Accounts.
+- ✅ **P7.2 — Accounts.** [EXECUTED] The state keeps accounts, its version raised so an
+  earlier rein refuses it, today's logins moved in as GitHub accounts (D19, D61). `rein account
+  add`, `account list` and `account remove`, `rein login [account]` and `rein logout
+  [account]`, an Accounts page with Add account, Log in, Log out and Remove; adding and
+  removing are workflows that the CLI and the page both run. `--login` becomes `--account`.
+  With no account, the window opens on Accounts.
+
+  Built 2026-10-30, accepted by you on 2026-10-30. The state is version 2, `accounts` with
+  host, login and the time added; a version 1 file's logins become GitHub accounts as it is
+  read (`localstate.migrate`). The workflows are `AddAccount`, `Login`, which logs a named
+  account in again, and `RemoveAccount`, with `PlanRemoveAccount` as its query; adding and
+  logging in share the device flow's three steps (`deviceFlow`), and a code approved as
+  another account than the one named keeps nothing. `credentials.Standing` tells a logged-in
+  account from one whose token is gone or cannot be renewed, which `rein status`, `account
+  list` and the pages show. Deviations: the keychain keeps a token under the login alone
+  until a second host makes the host part of its name; `rein account remove` asks for a
+  confirmation, in the app's window when the app runs (D53), as a removal does; `rein login`
+  with several accounts and none named is refused and names them; the top bar's User choice
+  stays until P7.3 makes it the account filter. Checked here: the gate, and the built binary
+  on a scratch home whose `state.yaml` of version 1 moved into the store as an account, then
+  logout, list, status and remove. Not checked: the device flow against GitHub and the
+  Accounts page in the window, which you accepted on 2026-10-30.
 - 🟢 **P7.3 — Notifications.** [PENDING] The query of what needs you (D63), the Notifications
   page and `rein notifications`, both filtered by `--account` or the page's account choice;
   the check finds an account whose token GitHub refuses and a new release of rein. The

@@ -108,13 +108,47 @@ func LoggedIn(login string) string {
 }
 
 // LogOut is what a logout says before it asks, and LoggedOut what it ends
-// with.
+// with: the account stays, logged out (D61).
 func LogOut(login string) string {
-	return "This will forget " + login + " on this machine and delete its token from your keychain; organisations connected with it need another login to act."
+	return "This will delete the token of " + login + " from your keychain. The account stays on this machine, logged out, and the organisations that act with it wait until it logs in again."
 }
 
 func LoggedOut(login string) string {
-	return "logged out " + login + "; organisations connected with it need another login to act"
+	return "logged out " + login + "; the account stays, and rein login " + login + " logs it in again"
+}
+
+// HostName is how a host is named to a person.
+func HostName(host string) string {
+	switch host {
+	case "github":
+		return "GitHub"
+	case "gitlab":
+		return "GitLab"
+	}
+	return host
+}
+
+// AccountAdded is what adding an account ends with.
+func AccountAdded(result orchestration.AddAccountResult) string {
+	if result.Known {
+		return result.Login + " is an account on this machine already; its token is renewed and in your keychain"
+	}
+	return "added " + result.Login + " on " + HostName(result.Host) + "; the token is in your keychain"
+}
+
+// RemoveAccount is what removing an account says before it asks: what goes,
+// or, while organisations act with it, why it cannot go yet.
+func RemoveAccount(plan orchestration.RemoveAccountPlan) (summary string, refused string) {
+	login := plan.Account.Login
+	if len(plan.Acting) > 0 {
+		return "", login + " acts for " + strings.Join(plan.Acting, ", ") + ". Disconnect each first, with rein org disconnect " + plan.Acting[0] + ", then remove the account."
+	}
+	return "This will delete the token of " + login + " from your keychain and forget the account on this machine.", ""
+}
+
+// AccountRemoved is what removing an account ends with.
+func AccountRemoved(login string) string {
+	return "removed the account " + login + " and its token"
 }
 
 // Update is what rein update says of its plan: where this rein stands, and

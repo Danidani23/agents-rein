@@ -98,10 +98,10 @@ The `.deb`, `.rpm` and `.apk` packages and every other way are in
 
 ## Quick start
 
-Sign in to GitHub through the Agents Rein app:
+Add your GitHub account through the Agents Rein app:
 
 ```sh
-rein login
+rein account add
 ```
 
 Create the organisation's repository, a team, and put a project clone under rein:

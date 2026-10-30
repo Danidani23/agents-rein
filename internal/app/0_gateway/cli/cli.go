@@ -452,8 +452,8 @@ func newRootCommand(environment *commandEnvironment) *cobra.Command {
 			"works out which apply to a project, and writes them into each clone in the form your\n" +
 			"agent reads. It is a compiler and a linter that runs on this machine, never a hosted\n" +
 			"service.\n\n" +
-			"Your identity is your GitHub account: rein login signs you in through the Agents Rein app and\n" +
-			"keeps the token in your keychain. Start with rein org create, or rein org connect for an\n" +
+			"Your identity is your account on GitHub: rein account add signs you in through the Agents Rein\n" +
+			"app and keeps the token in your keychain. Then rein org create, or rein org connect for an\n" +
 			"organisation that exists. rein status shows what has been set up, rein update keeps rein\n" +
 			"current. Every\n" +
 			"command explains itself with --help.",
@@ -463,6 +463,6 @@ func newRootCommand(environment *commandEnvironment) *cobra.Command {
 	root.SetOut(environment.out)
 	root.SetErr(environment.errOut)
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newStatusCommand(environment), newLoginCommand(environment), newLogoutCommand(environment), newGitCredentialCommand(environment), newOrgCommand(environment), newTeamCommand(environment), newProjectCommand(environment), newLabelCommand(environment), newDeclarationCommand(environment), newUpdateCommand(environment), newInitCommand(environment), newSyncCommand(environment), newCheckCommand(environment), newAutoSyncCommand(environment), newStatusLineCommand(environment), newDistillCommand(environment), newProposeCommand(environment), newResolveCommand(environment), newStoreCommand(environment), newKeyCommand(environment), newLintCommand(environment), newMCPCommand(environment), newUICommand(environment), newResetCommand(environment), newVersionCommand(environment))
+	root.AddCommand(newStatusCommand(environment), newAccountCommand(environment), newLoginCommand(environment), newLogoutCommand(environment), newGitCredentialCommand(environment), newOrgCommand(environment), newTeamCommand(environment), newProjectCommand(environment), newLabelCommand(environment), newDeclarationCommand(environment), newUpdateCommand(environment), newInitCommand(environment), newSyncCommand(environment), newCheckCommand(environment), newAutoSyncCommand(environment), newStatusLineCommand(environment), newDistillCommand(environment), newProposeCommand(environment), newResolveCommand(environment), newStoreCommand(environment), newKeyCommand(environment), newLintCommand(environment), newMCPCommand(environment), newUICommand(environment), newResetCommand(environment), newVersionCommand(environment))
 	return root
 }

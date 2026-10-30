@@ -608,6 +608,15 @@ type State struct {
 	FailSaves int
 }
 
+// Accounts are GitHub accounts of logins, for a state's Accounts.
+func Accounts(logins ...string) []machine.Account {
+	var accounts []machine.Account
+	for _, login := range logins {
+		accounts = append(accounts, machine.Account{Host: "github", Login: login})
+	}
+	return accounts
+}
+
 // NewState is an empty state.
 func NewState() *State {
 	return &State{Current: machine.Empty()}

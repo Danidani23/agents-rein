@@ -62,15 +62,23 @@ func printStatus(environment *commandEnvironment, report orchestration.StatusRep
 	} else {
 		fmt.Fprintf(out, "this folder is not a rein project; rein init puts it under rein\n")
 	}
-	logins := "none; run rein login"
-	if len(report.Logins) > 0 {
-		logins = strings.Join(report.Logins, ", ")
+	logins := "none; run rein account add"
+	if len(report.Accounts) > 0 {
+		var named []string
+		for _, account := range report.Accounts {
+			if account.LoggedIn {
+				named = append(named, account.Login)
+				continue
+			}
+			named = append(named, account.Login+" (logged out)")
+		}
+		logins = strings.Join(named, ", ")
 	}
 	agents := "none found; this build writes for claude-code"
 	if len(report.Agents) > 0 {
 		agents = strings.Join(report.Agents, ", ")
 	}
-	fmt.Fprintf(out, "\nmachine\n  login        %s · agents %s · home %s · %s in your agent's home\n", logins, agents, shortPath(report.Home), counted(len(report.Placements), "file", "files"))
+	fmt.Fprintf(out, "\nmachine\n  accounts     %s · agents %s · home %s · %s in your agent's home\n", logins, agents, shortPath(report.Home), counted(len(report.Placements), "file", "files"))
 	for _, placed := range report.Placements {
 		if !placed.TargetExists {
 			fmt.Fprintf(out, "  missing      %s -> %s\n", placed.Path, placed.Target)

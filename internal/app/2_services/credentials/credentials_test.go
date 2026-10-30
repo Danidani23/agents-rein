@@ -30,8 +30,8 @@ func TestLogin(t *testing.T) {
 		if err != nil || identity.Login != "Danidani23" || identity.Slug != "danidani23" {
 			t.Fatalf("identity %+v err %v", identity, err)
 		}
-		if strings.Join(state.Current.Logins, ",") != "Danidani23" || keychain.Tokens["Danidani23"].AccessToken != "token-of-Danidani23" {
-			t.Fatalf("state %v keychain %v", state.Current.Logins, keychain.Tokens)
+		if strings.Join(state.Current.Logins(), ",") != "Danidani23" || state.Current.Accounts[0].Host != "github" || state.Current.Accounts[0].AddedAt.IsZero() || keychain.Tokens["Danidani23"].AccessToken != "token-of-Danidani23" {
+			t.Fatalf("state %v keychain %v", state.Current.Logins(), keychain.Tokens)
 		}
 		_, err = service.CompleteLogin(code)
 		logins, _ := service.Logins()
@@ -52,8 +52,8 @@ func TestLogin(t *testing.T) {
 			}
 		}
 		_, _, err := service.AwaitApproval(ctx, code)
-		if !errors.Is(err, context.Canceled) || len(state.Current.Logins) != 0 || len(keychain.Tokens) != 0 {
-			t.Fatalf("err %v logins %v tokens %v", err, state.Current.Logins, keychain.Tokens)
+		if !errors.Is(err, context.Canceled) || len(state.Current.Accounts) != 0 || len(keychain.Tokens) != 0 {
+			t.Fatalf("err %v logins %v tokens %v", err, state.Current.Logins(), keychain.Tokens)
 		}
 	})
 	t.Run("a declined flow and a missing keychain are refusals", func(t *testing.T) {
@@ -79,7 +79,7 @@ func TestAccessToken(t *testing.T) {
 	if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "not logged in") {
 		t.Fatalf("err %v", err)
 	}
-	state.Current.Logins = []string{"Danidani23"}
+	state.Current.Accounts = fake.Accounts("Danidani23")
 	_ = keychain.Store(ports.Token{Login: "Danidani23", AccessToken: "fresh", ExpiresAt: time.Date(2026, 10, 21, 20, 0, 0, 0, time.UTC)})
 	token, err := service.AccessToken("")
 	if err != nil || token != "fresh" || host.Refreshed != 0 {
@@ -95,13 +95,17 @@ func TestAccessToken(t *testing.T) {
 	if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "cannot be renewed") {
 		t.Fatalf("err %v", err)
 	}
-	state.Current.Logins = []string{"Danidani23", "Other"}
+	loggedIn, reason, err := service.Standing("Danidani23")
+	if err != nil || loggedIn || reason != "its token expired and cannot be renewed" {
+		t.Fatalf("standing %v %q err %v", loggedIn, reason, err)
+	}
+	state.Current.Accounts = fake.Accounts("Danidani23", "Other")
 	_, err = service.AccessToken("")
 	if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "several accounts") {
 		t.Fatalf("err %v", err)
 	}
 	_, err = service.AccessToken("Nobody")
-	if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "Nobody is not logged in") {
+	if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "Nobody is not an account on this machine") {
 		t.Fatalf("err %v", err)
 	}
 	t.Setenv("GITHUB_ACTIONS", "true")
@@ -114,19 +118,41 @@ func TestAccessToken(t *testing.T) {
 
 func TestResolveAndLogout(t *testing.T) {
 	service, state, keychain := newService(&fake.Host{Login: "Danidani23"})
-	state.Current.Logins = []string{"Danidani23"}
+	state.Current.Accounts = fake.Accounts("Danidani23")
 	_ = keychain.Store(ports.Token{Login: "Danidani23", AccessToken: "t"})
 	identity, err := service.Resolve("")
 	if err != nil || identity.Slug != "danidani23" {
 		t.Fatalf("identity %+v err %v", identity, err)
 	}
+	loggedIn, _, err := service.Standing("Danidani23")
+	if err != nil || !loggedIn {
+		t.Fatalf("standing %v err %v", loggedIn, err)
+	}
+	// a logout deletes the token and keeps the account, logged out (D61)
 	err = service.Logout("Danidani23")
 	logins, _ := service.Logins()
-	if err != nil || len(logins) != 0 || len(keychain.Tokens) != 0 {
+	if err != nil || strings.Join(logins, ",") != "Danidani23" || len(keychain.Tokens) != 0 {
 		t.Fatalf("logout err %v logins %v tokens %v", err, logins, keychain.Tokens)
 	}
+	loggedIn, reason, err := service.Standing("Danidani23")
+	if err != nil || loggedIn || reason != "no token in the keychain" {
+		t.Fatalf("standing %v %q err %v", loggedIn, reason, err)
+	}
+	_, err = service.AccessToken("Danidani23")
+	if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "Danidani23 is logged out on this machine; rein login Danidani23") {
+		t.Fatalf("err %v", err)
+	}
 	err = service.Logout("Danidani23")
-	if !errors.Is(err, refusal.ErrRefused) {
+	if err != nil {
+		t.Fatalf("a second logout: %v", err)
+	}
+	err = service.Forget("Danidani23")
+	logins, _ = service.Logins()
+	if err != nil || len(logins) != 0 {
+		t.Fatalf("forget err %v logins %v", err, logins)
+	}
+	err = service.Logout("Danidani23")
+	if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "not an account on this machine") {
 		t.Fatalf("err %v", err)
 	}
 }

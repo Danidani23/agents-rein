@@ -7,6 +7,16 @@ package machine
 
 import "time"
 
+// Account is a host account rein acts as on this machine (D61): the host
+// it is on, its login there, and when it was added. Its token is in the
+// keychain under the login (D25); without one the account is logged out,
+// and stays until it is removed.
+type Account struct {
+	Host    string    `yaml:"host"`
+	Login   string    `yaml:"login"`
+	AddedAt time.Time `yaml:"added_at,omitempty"`
+}
+
 // OrganizationRef is a connected organisation. Host is the forge named in
 // its record, mirrored here so the right adapter is picked without reading
 // the clone.
@@ -105,15 +115,16 @@ type Import struct {
 }
 
 // StateVersion is the version of the state file this build writes and reads;
-// a file from a newer rein is refused (D19).
-const StateVersion = 1
+// a file from a newer rein is refused (D19). Version 2 keeps accounts where
+// version 1 kept logins (D61).
+const StateVersion = 2
 
 // State is everything rein remembers about this machine.
 type State struct {
 	Version int `yaml:"version"`
-	// Logins are the host accounts logged in on this machine; their tokens
-	// are in the keychain (D25).
-	Logins        []string          `yaml:"logins,omitempty"`
+	// Accounts are the host accounts rein acts as on this machine; their
+	// tokens are in the keychain (D25, D61).
+	Accounts      []Account         `yaml:"accounts,omitempty"`
 	Organizations []OrganizationRef `yaml:"organizations"`
 	Active        string            `yaml:"active,omitempty"`
 	OrgClonePaths map[string]string `yaml:"org_clone_paths"`
@@ -135,6 +146,15 @@ func (state State) Organization(slug string) (organization OrganizationRef, foun
 		}
 	}
 	return OrganizationRef{}, false
+}
+
+// Logins are the logins of the state's accounts, in their order.
+func (state State) Logins() []string {
+	var logins []string
+	for _, account := range state.Accounts {
+		logins = append(logins, account.Login)
+	}
+	return logins
 }
 
 // OwnedBy maps path to target for the placements of one owner from one source.

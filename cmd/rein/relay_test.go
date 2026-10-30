@@ -59,7 +59,7 @@ func TestTheBackgroundProcess(t *testing.T) {
 	})
 	t.Run("the first command starts the background process, which runs it for the caller", func(t *testing.T) {
 		code, out, errOut := runRelayed("", "status")
-		if code != cli.ExitWorked || !strings.Contains(out, "  login        Danidani23 · agents claude-code") {
+		if code != cli.ExitWorked || !strings.Contains(out, "  accounts     Danidani23 · agents claude-code") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
 		identity, err := owner.Identify(socket)
@@ -92,7 +92,7 @@ func TestTheApp(t *testing.T) {
 		// this test binary, started with --background, plays the app
 		t.Setenv("REIN_APP", executable)
 		code, out, errOut := runRelayed("", "status")
-		if code != cli.ExitWorked || !strings.Contains(out, "  login        Danidani23") {
+		if code != cli.ExitWorked || !strings.Contains(out, "  accounts     Danidani23") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
 		}
 	})

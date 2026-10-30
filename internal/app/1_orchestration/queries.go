@@ -39,8 +39,10 @@ type CloneStatus struct {
 
 // StatusReport is everything status shows.
 type StatusReport struct {
-	// Logins are the host accounts logged in on this machine (D25).
+	// Logins are the logins of the accounts on this machine, Accounts the
+	// accounts with whether each is logged in (D25, D61).
 	Logins        []string
+	Accounts      []AccountStatus
 	Agents        []string
 	Home          string
 	Placements    []PlacementStatus
@@ -52,6 +54,15 @@ type StatusReport struct {
 	Imports       []machine.Import
 	// Pending are the proposals waiting in the clones and the home.
 	Pending []PendingProposal
+}
+
+// AccountStatus is one account of this machine: whether it is logged in,
+// or why not, and the organisations that act with it.
+type AccountStatus struct {
+	machine.Account
+	LoggedIn      bool
+	Reason        string
+	Organizations []string
 }
 
 // Status reads across the services and changes nothing. It runs without a
@@ -79,6 +90,23 @@ func (orchestrator Orchestrator) Status() (StatusReport, error) {
 	report.Organizations, report.Active, err = services.Organizations.List()
 	if err != nil {
 		return StatusReport{}, err
+	}
+	accounts, err := services.Credentials.Accounts()
+	if err != nil {
+		return StatusReport{}, err
+	}
+	for _, account := range accounts {
+		status := AccountStatus{Account: account}
+		status.LoggedIn, status.Reason, err = services.Credentials.Standing(account.Login)
+		if err != nil {
+			return StatusReport{}, err
+		}
+		for _, organization := range report.Organizations {
+			if organization.Login == account.Login || (organization.Login == "" && len(accounts) == 1) {
+				status.Organizations = append(status.Organizations, organization.Slug)
+			}
+		}
+		report.Accounts = append(report.Accounts, status)
 	}
 	report.ProjectClones, err = services.Organizations.ProjectClones()
 	if err != nil {
@@ -374,6 +402,39 @@ type UpdatePlan struct {
 	// Self says rein replaces itself, Writable that its folder lets it.
 	Self     bool
 	Writable bool
+}
+
+// RemoveAccountPlan is what removing an account does: the account, and the
+// organisations that act with it, which hold the removal back.
+type RemoveAccountPlan struct {
+	Account machine.Account
+	Acting  []string
+}
+
+// PlanRemoveAccount says what removing an account does, changing nothing
+// (D60). An organisation connected before accounts were remembered acts
+// with the only account.
+func (orchestrator Orchestrator) PlanRemoveAccount(login string) (RemoveAccountPlan, error) {
+	services := orchestrator.Services
+	account, err := services.Credentials.Account(login)
+	if err != nil {
+		return RemoveAccountPlan{}, err
+	}
+	logins, err := services.Credentials.Logins()
+	if err != nil {
+		return RemoveAccountPlan{}, err
+	}
+	organizations, _, err := services.Organizations.List()
+	if err != nil {
+		return RemoveAccountPlan{}, err
+	}
+	plan := RemoveAccountPlan{Account: account}
+	for _, organization := range organizations {
+		if organization.Login == login || (organization.Login == "" && len(logins) == 1) {
+			plan.Acting = append(plan.Acting, organization.Slug)
+		}
+	}
+	return plan, nil
 }
 
 // PlanUpdate asks for the latest release and says what an update would do;

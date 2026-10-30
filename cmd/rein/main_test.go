@@ -228,7 +228,7 @@ func TestWiring(t *testing.T) {
 	t.Run("status shows the stubbed identity and agent", func(t *testing.T) {
 		isolate(t, "Danidani23")
 		code, out, _ := run("status")
-		if code != cli.ExitWorked || !strings.Contains(out, "  login        Danidani23 · agents claude-code") {
+		if code != cli.ExitWorked || !strings.Contains(out, "  accounts     Danidani23 · agents claude-code") {
 			t.Fatalf("code %d out %q", code, out)
 		}
 	})
@@ -239,7 +239,7 @@ func TestWiring(t *testing.T) {
 			t.Fatalf("code %d err %q", code, errOut)
 		}
 		code, out, _ := run("status")
-		if code != cli.ExitWorked || !strings.Contains(out, "  login        none; run rein login") {
+		if code != cli.ExitWorked || !strings.Contains(out, "  accounts     none; run rein account add") {
 			t.Fatalf("code %d out %q", code, out)
 		}
 	})
@@ -467,10 +467,10 @@ func TestWiring(t *testing.T) {
 				t.Fatalf("%s still there after reset", gone)
 			}
 		}
-		// the login survives, in a new store with a new key
+		// the account survives, in a new store with a new key
 		_, state, _ = run("store", "state.yaml")
 		_, listing, _ = run("store")
-		if !strings.HasPrefix(state, "# Written by rein") || !strings.Contains(state, "version: 1") || strings.Contains(state, "acme") || !strings.Contains(state, "- Danidani23") || strings.Contains(listing, "snapshots/") || strings.Contains(listing, "removals.yaml") {
+		if !strings.HasPrefix(state, "# Written by rein") || !strings.Contains(state, "version: 2") || strings.Contains(state, "acme") || !strings.Contains(state, "login: Danidani23") || strings.Contains(listing, "snapshots/") || strings.Contains(listing, "removals.yaml") {
 			t.Fatalf("state %q store %q", state, listing)
 		}
 	})

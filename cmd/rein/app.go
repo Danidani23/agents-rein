@@ -167,6 +167,11 @@ func runApp(arguments []string, errOut io.Writer) int {
 		_, _ = notifier.RequestNotificationAuthorization()
 		_ = notifier.RegisterNotificationCategory(notifications.NotificationCategory{ID: openCategory, Actions: []notifications.NotificationAction{{ID: "open", Title: "Open"}}})
 		registerLoginItem(app, orchestrator.Documents, executable, logFile)
+		// a machine without an account starts with adding one (D61)
+		logins, err := orchestrator.Credentials.Logins()
+		if err == nil && len(logins) == 0 {
+			show("/accounts")
+		}
 	})
 	go func() {
 		defer close(owned)

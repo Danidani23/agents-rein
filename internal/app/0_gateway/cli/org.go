@@ -55,7 +55,7 @@ func newOrgConnectCommand(environment *commandEnvironment) *cobra.Command {
 			return nil
 		},
 	}
-	command.Flags().StringVar(&login, "login", "", "the GitHub account to act with (default: the only one logged in)")
+	command.Flags().StringVar(&login, "account", "", "the account to act with (default: the only one on this machine)")
 	return command
 }
 

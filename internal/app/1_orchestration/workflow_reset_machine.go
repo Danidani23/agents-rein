@@ -114,7 +114,7 @@ func (orchestrator Orchestrator) ResetMachine(plan ResetPlan) (ResetResult, erro
 		}
 		result.RemovedOrgClones = append(result.RemovedOrgClones, organizationID)
 	}
-	logins, err := services.Credentials.Logins()
+	accounts, err := services.Credentials.Accounts()
 	if err != nil {
 		return ResetResult{}, err
 	}
@@ -133,8 +133,8 @@ func (orchestrator Orchestrator) ResetMachine(plan ResetPlan) (ResetResult, erro
 		}
 		result.Wiped = append(result.Wiped, wipe.name)
 	}
-	for _, login := range logins {
-		err = services.Credentials.Remember(login)
+	for _, account := range accounts {
+		err = services.Credentials.Remember(account)
 		if err != nil {
 			return ResetResult{}, err
 		}

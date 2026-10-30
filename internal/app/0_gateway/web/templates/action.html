@@ -18,6 +18,8 @@
     {{end}}
     {{range .Options}}<label class="option"><input type="checkbox" name="{{.Name}}"> {{.Label}}</label>
     {{end}}
+    {{range .Choices}}<label class="option"><input type="radio" name="{{.Name}}" value="{{.Value}}"{{if .Checked}} checked{{end}}{{if .Disabled}} disabled{{end}}> {{.Label}}{{if .Note}} <span class="muted">· {{.Note}}</span>{{end}}</label>
+    {{end}}
     <div class="buttons">
       <button type="submit">{{.Confirm}}</button>
       <a class="button secondary" href="{{.Back}}">Back</a>

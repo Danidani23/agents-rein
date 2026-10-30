@@ -32,7 +32,7 @@ func servePage(t *testing.T, loggedIn bool) *Page {
 	home := t.TempDir()
 	state := fake.NewState()
 	if loggedIn {
-		state.Current.Logins = []string{"Danidani23"}
+		state.Current.Accounts = fake.Accounts("Danidani23")
 	}
 	state.Current.Organizations = []machine.OrganizationRef{{ID: organizationID, Slug: "dani", Remote: "https://github.com/Danidani23/dani-agents.git", Login: "Danidani23"}}
 	state.Current.Active = "dani"
@@ -192,7 +192,7 @@ func TestAWriteFromAnotherOriginIsRefused(t *testing.T) {
 func TestTheAppWindowServesThePagesWithoutAToken(t *testing.T) {
 	home := t.TempDir()
 	state := fake.NewState()
-	state.Current.Logins = []string{"Danidani23"}
+	state.Current.Accounts = fake.Accounts("Danidani23")
 	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, &fake.Repository{}, state, fake.NewDocuments(), []ports.Agent{&fake.Agent{Present: true, HomePath: t.TempDir()}}, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, &fake.Keychain{}, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
 	handler, err := Window(orchestration.New(services), "v0.1.0", Interrupt{}, WindowParts{})
 	if err != nil {
@@ -218,7 +218,7 @@ func windowWith(t *testing.T, openLink func(link string) error) (http.Handler, *
 	t.Helper()
 	home := t.TempDir()
 	state := fake.NewState()
-	state.Current.Logins = []string{"Danidani23"}
+	state.Current.Accounts = fake.Accounts("Danidani23")
 	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, &fake.Repository{}, state, fake.NewDocuments(), []ports.Agent{&fake.Agent{Present: true, HomePath: t.TempDir()}}, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, &fake.Keychain{}, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
 	asked := &Confirmations{}
 	handler, err := Window(orchestration.New(services), "v0.1.0", Interrupt{}, WindowParts{Confirmations: asked, OpenLink: openLink})
@@ -376,7 +376,7 @@ func TestTheMachinePageWithoutALoginNamesTheWayIn(t *testing.T) {
 	page := servePage(t, false)
 	client, root := signIn(t, page)
 	_, body := get(t, client, root)
-	if !strings.Contains(body, `<form method="post" action="/actions/login" class="notice inline">Not logged in. <button type="submit">Log in with GitHub</button></form>`) {
+	if !strings.Contains(body, `No account on this machine yet. <a href="/accounts">Add your account</a> first`) {
 		t.Fatalf("the page without a login offers no way in: %q", body)
 	}
 }

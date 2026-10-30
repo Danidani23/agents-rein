@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -40,7 +41,7 @@ func TestStore(t *testing.T) {
 			t.Fatalf("save: %v", err)
 		}
 		content := string(documents.Content[stateDocument])
-		if !strings.HasPrefix(content, "# Written by rein") || !strings.Contains(content, "version: 1\n") {
+		if !strings.HasPrefix(content, "# Written by rein") || !strings.Contains(content, "version: 2\n") {
 			t.Fatalf("content %q", content)
 		}
 		loaded, err := store.Load()
@@ -58,11 +59,25 @@ func TestStore(t *testing.T) {
 			t.Fatalf("files left in the home: %v", entries)
 		}
 	})
+	t.Run("the logins of a version 1 state become GitHub accounts", func(t *testing.T) {
+		store, documents := newStore(t)
+		documents.Content[stateDocument] = []byte("version: 1\nlogins:\n  - Danidani23\n  - octocat\norganizations: []\n")
+		state, err := store.Load()
+		expected := []machine.Account{{Host: "github", Login: "Danidani23"}, {Host: "github", Login: "octocat"}}
+		if err != nil || state.Version != machine.StateVersion || !slices.Equal(state.Accounts, expected) {
+			t.Fatalf("state %+v err %v", state, err)
+		}
+		err = store.Save(state)
+		content := string(documents.Content[stateDocument])
+		if err != nil || strings.Contains(content, "logins:") || !strings.Contains(content, "login: octocat") {
+			t.Fatalf("rewritten %q err %v", content, err)
+		}
+	})
 	t.Run("a state without a version is the first version; a newer one and an unknown field are refused", func(t *testing.T) {
 		store, documents := newStore(t)
 		documents.Content[stateDocument] = []byte("organizations: []\nactive: x\n")
 		state, err := store.Load()
-		if err != nil || state.Version != 1 || state.Active != "x" {
+		if err != nil || state.Version != machine.StateVersion || state.Active != "x" {
 			t.Fatalf("state %+v err %v", state, err)
 		}
 		// the keys of the builds before 2026-10-19 are read and rewritten

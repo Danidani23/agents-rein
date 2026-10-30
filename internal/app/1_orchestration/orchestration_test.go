@@ -52,7 +52,7 @@ func newHarness(t *testing.T) *harness {
 		documents:  fake.NewDocuments(),
 		keychain:   &fake.Keychain{Tokens: map[string]ports.Token{"Danidani23": {Login: "Danidani23", AccessToken: "token-of-Danidani23", ExpiresAt: time.Now().Add(time.Hour)}}},
 	}
-	fixture.state.Current.Logins = []string{"Danidani23"}
+	fixture.state.Current.Accounts = fake.Accounts("Danidani23")
 	return fixture
 }
 
@@ -131,7 +131,7 @@ func TestConnectOrganization(t *testing.T) {
 	})
 	t.Run("without a login connecting refuses", func(t *testing.T) {
 		fixture := newHarness(t)
-		fixture.state.Current.Logins = nil
+		fixture.state.Current.Accounts = nil
 		_, err := fixture.orchestrator().ConnectOrganization("x", "")
 		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "rein login") {
 			t.Fatalf("err %v", err)
@@ -222,12 +222,12 @@ func TestProjectHere(t *testing.T) {
 func TestStatus(t *testing.T) {
 	t.Run("a machine without a login is reported, not refused", func(t *testing.T) {
 		fixture := newHarness(t)
-		fixture.state.Current.Logins = nil
+		fixture.state.Current.Accounts = nil
 		report, err := fixture.orchestrator().Status()
 		if err != nil || len(report.Logins) != 0 {
 			t.Fatalf("report %+v err %v", report, err)
 		}
-		fixture.state.Current.Logins = []string{"Danidani23"}
+		fixture.state.Current.Accounts = fake.Accounts("Danidani23")
 		report, _ = fixture.orchestrator().Status()
 		if strings.Join(report.Logins, ",") != "Danidani23" {
 			t.Fatalf("logins %v", report.Logins)
@@ -290,7 +290,7 @@ func TestReset(t *testing.T) {
 			t.Fatalf("the store was not erased: %v", fixture.documents.Content)
 		}
 		state := fixture.state.Current
-		if len(state.Placements) != 1 || state.Placements[0].Path != "/foreign" || state.Active != "" || len(state.Organizations) != 0 || len(state.ProjectClones) != 0 || len(state.Imports) != 0 || len(state.Logins) != 1 {
+		if len(state.Placements) != 1 || state.Placements[0].Path != "/foreign" || state.Active != "" || len(state.Organizations) != 0 || len(state.ProjectClones) != 0 || len(state.Imports) != 0 || len(state.Accounts) != 1 {
 			t.Fatalf("state %+v", state)
 		}
 		for _, gone := range []string{orgClonePath, filepath.Join(fixture.home, "imports"), filepath.Join(fixture.home, "proposals")} {
@@ -480,7 +480,7 @@ func TestCreateOrganization(t *testing.T) {
 		}
 		fixture.host.FailCreate = false
 		_, err = fixture.orchestrator().CreateOrganization(CreateOrganizationRequest{Name: "Acme", Login: "nobody", RepositoryName: "x"})
-		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "nobody is not logged in") {
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "nobody is not an account on this machine") {
 			t.Fatalf("err %v", err)
 		}
 	})
@@ -2063,14 +2063,14 @@ func TestCheck(t *testing.T) {
 func TestLogin(t *testing.T) {
 	t.Run("the code arrives as a detail with its address, and only keeping the token takes the lock", func(t *testing.T) {
 		fixture := newHarness(t)
-		fixture.state.Current.Logins = nil
+		fixture.state.Current.Accounts = nil
 		fixture.keychain.Tokens = nil
 		orchestrator := fixture.orchestrator()
 		var events []ProgressEvent
 		orchestrator.Progress = func(event ProgressEvent) { events = append(events, event) }
 		result, err := orchestrator.Login(LoginRequest{Holder: ports.LockHolder{Command: "rein login", Caller: "the page"}})
-		if err != nil || result.Login != "Danidani23" || strings.Join(fixture.state.Current.Logins, ",") != "Danidani23" {
-			t.Fatalf("result %+v err %v logins %v", result, err, fixture.state.Current.Logins)
+		if err != nil || result.Login != "Danidani23" || strings.Join(fixture.state.Current.Logins(), ",") != "Danidani23" {
+			t.Fatalf("result %+v err %v logins %v", result, err, fixture.state.Current.Logins())
 		}
 		var detail ProgressEvent
 		for _, event := range events {
@@ -2087,14 +2087,100 @@ func TestLogin(t *testing.T) {
 	})
 	t.Run("a cancelled wait for the approval keeps nothing and takes no lock", func(t *testing.T) {
 		fixture := newHarness(t)
-		fixture.state.Current.Logins = nil
+		fixture.state.Current.Accounts = nil
 		fixture.keychain.Tokens = nil
 		fixture.host.Pending = 1000
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		_, err := fixture.orchestrator().Login(LoginRequest{Context: ctx})
-		if !errors.Is(err, context.Canceled) || len(fixture.state.Current.Logins) != 0 || len(fixture.lock.Holders) != 0 {
-			t.Fatalf("err %v logins %v holders %v", err, fixture.state.Current.Logins, fixture.lock.Holders)
+		if !errors.Is(err, context.Canceled) || len(fixture.state.Current.Accounts) != 0 || len(fixture.lock.Holders) != 0 {
+			t.Fatalf("err %v logins %v holders %v", err, fixture.state.Current.Logins(), fixture.lock.Holders)
+		}
+	})
+	t.Run("an account logs in again, and an approval as another account keeps nothing", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.keychain.Tokens = map[string]ports.Token{}
+		result, err := fixture.orchestrator().Login(LoginRequest{})
+		if err != nil || result.Login != "Danidani23" || result.Added || fixture.keychain.Tokens["Danidani23"].AccessToken == "" {
+			t.Fatalf("result %+v err %v tokens %v", result, err, fixture.keychain.Tokens)
+		}
+		fixture.keychain.Tokens = map[string]ports.Token{}
+		fixture.state.Current.Accounts = fake.Accounts("Danidani23", "octocat")
+		_, err = fixture.orchestrator().Login(LoginRequest{})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "several accounts are on this machine, Danidani23, octocat") {
+			t.Fatalf("err %v", err)
+		}
+		_, err = fixture.orchestrator().Login(LoginRequest{Account: "octocat"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "GitHub approved the code as Danidani23, not octocat") || len(fixture.keychain.Tokens) != 0 {
+			t.Fatalf("err %v tokens %v", err, fixture.keychain.Tokens)
+		}
+		_, err = fixture.orchestrator().Login(LoginRequest{Account: "nobody"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "nobody is not an account on this machine") {
+			t.Fatalf("err %v", err)
+		}
+	})
+}
+
+func TestAccounts(t *testing.T) {
+	t.Run("an account is added on its host, and a planned host is refused", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.state.Current.Accounts = nil
+		fixture.keychain.Tokens = map[string]ports.Token{}
+		_, err := fixture.orchestrator().AddAccount(AddAccountRequest{Host: "gitlab"})
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "gitlab is planned, not yet supported") || len(fixture.state.Current.Accounts) != 0 {
+			t.Fatalf("err %v accounts %v", err, fixture.state.Current.Accounts)
+		}
+		result, err := fixture.orchestrator().AddAccount(AddAccountRequest{Host: "github", Holder: ports.LockHolder{Command: "rein account add"}})
+		accounts := fixture.state.Current.Accounts
+		if err != nil || result != (AddAccountResult{Login: "Danidani23", Host: "github"}) || len(accounts) != 1 || accounts[0].Host != "github" {
+			t.Fatalf("result %+v err %v accounts %+v", result, err, accounts)
+		}
+		if fixture.lock.Holders[0].Command != "rein account add, keeping the token of Danidani23" {
+			t.Fatalf("holders %+v", fixture.lock.Holders)
+		}
+		result, err = fixture.orchestrator().AddAccount(AddAccountRequest{Host: "github"})
+		if err != nil || !result.Known || len(fixture.state.Current.Accounts) != 1 {
+			t.Fatalf("a second add of the account: result %+v err %v", result, err)
+		}
+	})
+	t.Run("status tells a logged-out account and the organisations that act with it", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.state.Current.Accounts = fake.Accounts("Danidani23", "octocat")
+		fixture.state.Current.Organizations = []machine.OrganizationRef{{ID: "id-1", Slug: "dani", Login: "Danidani23"}}
+		report, err := fixture.orchestrator().Status()
+		if err != nil || len(report.Accounts) != 2 {
+			t.Fatalf("report %+v err %v", report.Accounts, err)
+		}
+		dani, octocat := report.Accounts[0], report.Accounts[1]
+		if !dani.LoggedIn || strings.Join(dani.Organizations, ",") != "dani" || octocat.LoggedIn || octocat.Reason != "no token in the keychain" || len(octocat.Organizations) != 0 {
+			t.Fatalf("accounts %+v", report.Accounts)
+		}
+	})
+	t.Run("an account an organisation acts with stays; another one goes with its token", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.state.Current.Accounts = fake.Accounts("Danidani23", "octocat")
+		fixture.keychain.Tokens["octocat"] = ports.Token{Login: "octocat", AccessToken: "token-of-octocat"}
+		fixture.state.Current.Organizations = []machine.OrganizationRef{{ID: "id-1", Slug: "dani", Login: "Danidani23"}}
+		_, err := fixture.orchestrator().RemoveAccount("Danidani23")
+		if !errors.Is(err, refusal.ErrRefused) || !strings.Contains(err.Error(), "Danidani23 acts for dani; disconnect each first, rein org disconnect dani") || fixture.keychain.Tokens["Danidani23"].AccessToken == "" {
+			t.Fatalf("err %v", err)
+		}
+		result, err := fixture.orchestrator().RemoveAccount("octocat")
+		if err != nil || result.Login != "octocat" || strings.Join(fixture.state.Current.Logins(), ",") != "Danidani23" {
+			t.Fatalf("result %+v err %v logins %v", result, err, fixture.state.Current.Logins())
+		}
+		if _, kept := fixture.keychain.Tokens["octocat"]; kept {
+			t.Fatalf("the token stayed: %v", fixture.keychain.Tokens)
+		}
+	})
+	t.Run("a removal that fails puts the token back", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.state.Current.Accounts = fake.Accounts("Danidani23", "octocat")
+		fixture.keychain.Tokens["octocat"] = ports.Token{Login: "octocat", AccessToken: "token-of-octocat"}
+		fixture.state.FailSaves = 1
+		_, err := fixture.orchestrator().RemoveAccount("octocat")
+		if err == nil || fixture.keychain.Tokens["octocat"].AccessToken != "token-of-octocat" || len(fixture.state.Current.Accounts) != 2 {
+			t.Fatalf("err %v tokens %v accounts %v", err, fixture.keychain.Tokens, fixture.state.Current.Accounts)
 		}
 	})
 }

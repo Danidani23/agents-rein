@@ -99,7 +99,9 @@ func (store Store) Load() (machine.State, error) {
 // the new names at the next save.
 var legacyKeys = map[string]string{"clones": "org_clone_paths", "projects": "project_clones"}
 
-// migrate renames the legacy keys of an old state file.
+// migrate renames the legacy keys of an old state file, and turns the
+// logins of a version 1 file into GitHub accounts, GitHub being the only
+// host before accounts had one (D61).
 func migrate(content []byte) ([]byte, error) {
 	var generic map[string]any
 	err := yaml.Unmarshal(content, &generic)
@@ -107,6 +109,18 @@ func migrate(content []byte) ([]byte, error) {
 		return content, nil
 	}
 	changed := false
+	if logins, present := generic["logins"].([]any); present {
+		var accounts []any
+		for _, login := range logins {
+			accounts = append(accounts, map[string]any{"host": "github", "login": login})
+		}
+		if _, taken := generic["accounts"]; !taken && len(accounts) > 0 {
+			generic["accounts"] = accounts
+		}
+		delete(generic, "logins")
+		generic["version"] = machine.StateVersion
+		changed = true
+	}
 	for old, current := range legacyKeys {
 		value, present := generic[old]
 		if !present {

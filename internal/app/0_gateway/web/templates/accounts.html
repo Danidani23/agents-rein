@@ -1,0 +1,28 @@
+{{define "content"}}
+<section>
+  {{if .Accounts}}
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Account</th><th>Host</th><th>Standing</th><th>Acts for</th><th></th></tr></thead>
+      <tbody>
+      {{range .Accounts}}
+      <tr>
+        <td>{{.Login}}</td>
+        <td>{{.Host}}</td>
+        <td>{{if .LoggedIn}}logged in{{else}}<span class="warning">logged out</span> <span class="muted">· {{.Reason}}</span>{{end}}</td>
+        <td>{{if .Organizations}}{{.Organizations}}{{else}}<span class="muted">no organisation</span>{{end}}</td>
+        <td class="nowrap">
+          {{if .LoggedIn}}<a href="/actions/logout?login={{.Login}}" class="muted">Log out</a>{{else}}<form method="post" action="/actions/login" class="inline"><input type="hidden" name="account" value="{{.Login}}"><button type="submit" class="secondary">Log in</button></form>{{end}}
+          · <a href="/actions/account-remove?login={{.Login}}" class="muted">Remove</a>
+        </td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">No account on this machine yet. Add your account first: rein acts as it for every organisation you create or connect, and keeps its token in your keychain.</p>
+  {{end}}
+  <div class="buttons"><a class="button" href="/actions/account-add">Add account</a></div>
+</section>
+{{end}}

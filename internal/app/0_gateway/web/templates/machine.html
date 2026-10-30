@@ -1,6 +1,6 @@
 {{define "content"}}
-{{if not .Logins}}
-<form method="post" action="/actions/login" class="notice inline">Not logged in. <button type="submit">Log in with GitHub</button></form>
+{{if not .Accounts}}
+<p class="notice">No account on this machine yet. <a href="{{.AccountsLink}}">Add your account</a> first: rein acts as it.</p>
 {{end}}
 
 <section>
@@ -24,11 +24,11 @@
 </section>
 
 <section>
-  <h2>Logins and agents</h2>
+  <h2>Accounts and agents</h2>
   <dl class="facts">
-    <dt>Logins</dt>
-    <dd>{{range $index, $login := .Logins}}{{if $index}}, {{end}}{{$login}} <a href="/actions/logout?login={{$login}}" class="muted">log out</a>{{else}}<span class="muted">none</span>{{end}}
-      <form method="post" action="/actions/login" class="inline"><button type="submit" class="secondary">Log in{{if .Logins}} another account{{end}}</button></form></dd>
+    <dt>Accounts</dt>
+    <dd>{{range $index, $account := .Accounts}}{{if $index}}, {{end}}{{$account.Login}}{{if not $account.LoggedIn}} <span class="warning">logged out</span>{{end}}{{else}}<span class="muted">none</span>{{end}}
+      <a href="{{.AccountsLink}}" class="muted">on Accounts</a></dd>
     <dt>Agents</dt>
     <dd>{{range $index, $agent := .Agents}}{{if $index}}, {{end}}{{$agent}}{{else}}<span class="muted">none found; this build writes for claude-code</span>{{end}}</dd>
     <dt>rein's home</dt>

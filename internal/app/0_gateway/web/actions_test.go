@@ -210,19 +210,55 @@ func TestLoginAndLogoutFromThePage(t *testing.T) {
 			t.Fatalf("logins %v", logins)
 		}
 	})
-	t.Run("log out says what it does first, then forgets the account", func(t *testing.T) {
+	t.Run("log out says what it does first, then deletes the token and keeps the account", func(t *testing.T) {
 		page, orchestrator := serveProjects(t, "Danidani23", "Second")
 		client, root := signIn(t, page)
 		_, body := get(t, client, root+"actions/logout?login=Danidani23")
-		containsAll(t, body, "This will forget Danidani23 on this machine and delete its token from your keychain", `value="Danidani23"`)
+		containsAll(t, body, "This will delete the token of Danidani23 from your keychain. The account stays on this machine, logged out", `value="Danidani23"`)
 		body = runAction(t, page, client, root, "actions/logout", url.Values{"login": {"Danidani23"}})
-		containsAll(t, body, "logged out Danidani23")
+		containsAll(t, body, "logged out Danidani23; the account stays")
 		logins, _ := orchestrator.Credentials.Logins()
-		if slices.Contains(logins, "Danidani23") {
+		loggedIn, _, _ := orchestrator.Credentials.Standing("Danidani23")
+		if !slices.Contains(logins, "Danidani23") || loggedIn {
+			t.Fatalf("logins %v logged in %v", logins, loggedIn)
+		}
+		_, body = get(t, client, root+"accounts")
+		containsAll(t, body, `<span class="warning">logged out</span> <span class="muted">· no token in the keychain</span>`, `<input type="hidden" name="account" value="Danidani23"><button type="submit" class="secondary">Log in</button>`)
+		_, body = get(t, client, root+"actions/logout?login=Nobody")
+		containsAll(t, body, "Nobody is not an account on this machine")
+	})
+	t.Run("an account is added on the host chosen, GitLab shown and refused", func(t *testing.T) {
+		page, orchestrator := serveProjects(t)
+		client, root := signIn(t, page)
+		_, body := get(t, client, root+"actions/account-add")
+		containsAll(t, body, `<input type="radio" name="host" value="github" checked> GitHub`, `<input type="radio" name="host" value="gitlab" disabled> GitLab <span class="muted">· planned, not yet supported</span>`)
+		body = runAction(t, page, client, root, "actions/account-add", url.Values{"host": {"gitlab"}})
+		containsAll(t, body, "gitlab is planned, not yet supported")
+		body = runAction(t, page, client, root, "actions/account-add", url.Values{"host": {"github"}})
+		containsAll(t, body, "enter the code ABCD-1234", "added Danidani23 on GitHub; the token is in your keychain")
+		logins, _ := orchestrator.Credentials.Logins()
+		if len(logins) != 1 {
 			t.Fatalf("logins %v", logins)
 		}
-		_, body = get(t, client, root+"actions/logout?login=Nobody")
-		containsAll(t, body, "Nobody is not logged in on this machine")
+	})
+	t.Run("an account an organisation acts with cannot be removed; another one can", func(t *testing.T) {
+		page, orchestrator := serveProjects(t, "Danidani23", "Second")
+		client, root := signIn(t, page)
+		_, body := get(t, client, root+"accounts")
+		containsAll(t, body, "<td>Danidani23</td>", "<td>dani</td>", "<td>Second</td>", `href="/actions/account-remove?login=Second"`)
+		response, body := get(t, client, root+"actions/account-remove?login=Danidani23")
+		if response.StatusCode != http.StatusConflict {
+			t.Fatalf("status %d", response.StatusCode)
+		}
+		containsAll(t, body, "Danidani23 acts for dani. Disconnect each first, with rein org disconnect dani")
+		_, body = get(t, client, root+"actions/account-remove?login=Second")
+		containsAll(t, body, "This will delete the token of Second from your keychain and forget the account on this machine.")
+		body = runAction(t, page, client, root, "actions/account-remove", url.Values{"login": {"Second"}})
+		containsAll(t, body, "removed the account Second and its token")
+		logins, _ := orchestrator.Credentials.Logins()
+		if slices.Contains(logins, "Second") {
+			t.Fatalf("logins %v", logins)
+		}
 	})
 	t.Run("the window opens a link out in the browser, an https one only", func(t *testing.T) {
 		var opened []string
