@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -72,6 +73,53 @@ func TestTheBackgroundProcess(t *testing.T) {
 		code, out, errOut := runRelayed("protocol=https\nhost=github.com\n\n", "git-credential", "get")
 		if code != cli.ExitWorked || !strings.Contains(out, "username=x-access-token\npassword=") || strings.HasSuffix(out, "password=\n") {
 			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+	})
+}
+
+// TestTheApp runs rein as a terminal does where the app is installed: the
+// app starts when no background process answers, and an app of another
+// version is reported, never replaced (D50).
+func TestTheApp(t *testing.T) {
+	t.Run("where the app is installed, the first command starts it", func(t *testing.T) {
+		reinHome := isolate(t, "Danidani23")
+		socket := owner.SocketPath(reinHome)
+		t.Cleanup(func() { stopOwner(t, socket) })
+		executable, err := os.Executable()
+		if err != nil {
+			t.Fatalf("executable: %v", err)
+		}
+		// this test binary, started with --background, plays the app
+		t.Setenv("REIN_APP", executable)
+		code, out, errOut := runRelayed("", "status")
+		if code != cli.ExitWorked || !strings.Contains(out, "  login        Danidani23") {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+	})
+	t.Run("an app of another version that stays is reported, and keeps running", func(t *testing.T) {
+		reinHome := isolate(t, "Danidani23")
+		socket := owner.SocketPath(reinHome)
+		listener, err := owner.Listen(socket)
+		if err != nil {
+			t.Fatalf("listen: %v", err)
+		}
+		app := &owner.Server{Identity: "v9.9.9 1 1", Stays: true, Run: func(owner.Session) (int, <-chan struct{}) { return 0, nil }}
+		served := make(chan struct{})
+		go func() {
+			defer close(served)
+			_ = app.Serve(listener)
+		}()
+		t.Cleanup(func() {
+			app.Stop()
+			<-served
+		})
+		code, _, errOut := runRelayed("", "status")
+		if code != cli.ExitRefused || !strings.Contains(errOut, "rein's app on this machine is v9.9.9 and this rein is ") {
+			t.Fatalf("code %d err %q", code, errOut)
+		}
+		identity, err := owner.Identify(socket)
+		if err != nil || identity != "v9.9.9 1 1" {
+			t.Fatalf("the app did not stay: %q %v", identity, err)
 		}
 	})
 }

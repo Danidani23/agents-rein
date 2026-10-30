@@ -188,6 +188,42 @@ func TestAWriteFromAnotherOriginIsRefused(t *testing.T) {
 	}
 }
 
+func TestTheAppWindowServesThePagesWithoutAToken(t *testing.T) {
+	home := t.TempDir()
+	state := fake.NewState()
+	state.Current.Logins = []string{"Danidani23"}
+	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, &fake.Repository{}, state, fake.NewDocuments(), []ports.Agent{&fake.Agent{Present: true, HomePath: t.TempDir()}}, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, &fake.Keychain{}, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
+	handler, err := Window(orchestration.New(services), "v0.1.0", Interrupt{})
+	if err != nil {
+		t.Fatalf("window: %v", err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "http://wails.localhost/", nil)
+	answer := httptest.NewRecorder()
+	handler.ServeHTTP(answer, request)
+	if answer.Code != http.StatusOK || !strings.Contains(answer.Body.String(), "Danidani23") {
+		t.Fatalf("code %d body %q", answer.Code, answer.Body.String())
+	}
+}
+
+func TestTheAppWindowLeadsOnWithoutAnHTTPRedirect(t *testing.T) {
+	// the window's webview shows a redirect as an empty page, so Log in turned it white
+	home := t.TempDir()
+	state := fake.NewState()
+	state.Current.Logins = []string{"Danidani23"}
+	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, &fake.Repository{}, state, fake.NewDocuments(), []ports.Agent{&fake.Agent{Present: true, HomePath: t.TempDir()}}, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, &fake.Keychain{}, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
+	handler, err := Window(orchestration.New(services), "v0.1.0", Interrupt{})
+	if err != nil {
+		t.Fatalf("window: %v", err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "http://wails.localhost/run/cancel", nil)
+	answer := httptest.NewRecorder()
+	handler.ServeHTTP(answer, request)
+	body := answer.Body.String()
+	if answer.Code != http.StatusOK || answer.Header().Get("Location") != "" || !strings.Contains(body, `<meta http-equiv="refresh" content="0; url=/run">`) || !strings.Contains(body, `<a href="/run">`) {
+		t.Fatalf("code %d location %q body %q", answer.Code, answer.Header().Get("Location"), body)
+	}
+}
+
 func TestTheMachinePageShowsWhatStatusReports(t *testing.T) {
 	page := servePage(t, true)
 	client, root := signIn(t, page)

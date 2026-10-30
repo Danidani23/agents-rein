@@ -68,6 +68,37 @@ tasks:
     cmds:
       - go run ./cmd/reinctl publish
 
+  app:vet:
+    desc: Vet rein built with the app (cgo, Wails), on the systems that build it without extra libraries
+    platforms: [darwin, windows]
+    cmds:
+      - go vet -tags app {{.PACKAGE}}
+
+  app:build:
+    desc: Build rein with the app (cgo, Wails) into .tmp/rein-app
+    cmds:
+      - mkdir -p .tmp
+      - CGO_ENABLED=1 MACOSX_DEPLOYMENT_TARGET=13.0 go build -tags app -o .tmp/rein-app {{.PACKAGE}}
+
+  app:bundle:
+    desc: Assemble the app as .tmp/Rein.app with an ad-hoc signature, for a local try on macOS
+    platforms: [darwin]
+    deps: [app:build]
+    cmds:
+      - rm -rf .tmp/Rein.app
+      - mkdir -p .tmp/Rein.app/Contents/MacOS
+      - cp .tmp/rein-app .tmp/Rein.app/Contents/MacOS/rein-app
+      - cp cmd/rein/Info.plist .tmp/Rein.app/Contents/Info.plist
+      - codesign --force --sign - .tmp/Rein.app
+
+  app:try:
+    desc: "Start .tmp/Rein.app on a scratch home, .tmp/app-home, with a file in place of the keychain: never this machine's ~/.rein or keychain"
+    platforms: [darwin]
+    deps: [app:bundle]
+    cmds:
+      - mkdir -p .tmp/app-home
+      - REIN_HOME="$PWD/.tmp/app-home" REIN_KEYCHAIN_FILE="$PWD/.tmp/app-home/keychain.json" .tmp/Rein.app/Contents/MacOS/rein-app
+
   rein:lint:
     desc: Run rein lint on this repository
     deps: [rein:build]
@@ -84,4 +115,5 @@ tasks:
           fi
         silent: true
       - task: rein:test
+      - task: app:vet
       - task: rein:lint

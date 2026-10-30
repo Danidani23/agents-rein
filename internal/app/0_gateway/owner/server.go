@@ -14,11 +14,18 @@ import (
 // Server is the owner's side. It runs each command a client sends, several
 // at once, until it is stopped, until a client of another build arrives,
 // or until it has had no command for Idle; then it takes no more and ends
-// once the running ones have.
+// once the running ones have. An owner that Stays, the app, makes way for
+// no client: one it does not accept is told so, and the owner goes on.
 type Server struct {
 	// Identity is the build that made this owner.
 	Identity string
-	Run      Run
+	// Accepts says whether a client's build may use this owner; nil
+	// accepts only this owner's own build.
+	Accepts func(identity string) bool
+	// Stays keeps the owner serving when a client it does not accept
+	// arrives.
+	Stays bool
+	Run   Run
 	// Idle is how long the owner waits without a command before it ends.
 	Idle time.Duration
 	// Log receives what the owner says about itself, such as a request it
@@ -35,9 +42,11 @@ type Server struct {
 	ended     chan struct{}
 }
 
-// identityAnswer is the owner's answer to who it is.
+// identityAnswer is the owner's answer to who it is, and whether it stays
+// for a client of another build.
 type identityAnswer struct {
 	Identity string `json:"identity"`
+	Stays    bool   `json:"stays,omitempty"`
 }
 
 // Serve takes commands on listener until the owner ends.
@@ -159,12 +168,21 @@ func (server *Server) finish() {
 
 func (server *Server) identify(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(writer).Encode(identityAnswer{Identity: server.Identity})
+	_ = json.NewEncoder(writer).Encode(identityAnswer{Identity: server.Identity, Stays: server.Stays})
+}
+
+// accepts says whether a client's build may use this owner.
+func (server *Server) accepts(identity string) bool {
+	if server.Accepts == nil {
+		return identity == server.Identity
+	}
+	return server.Accepts(identity)
 }
 
 // session runs one command. A client of another build is answered 409:
 // this owner makes way for it, taking no more commands and ending once its
-// running ones have, so the client starts an owner of its own build.
+// running ones have, so the client starts an owner of its own build; an
+// owner that stays says so instead and goes on.
 func (server *Server) session(writer http.ResponseWriter, request *http.Request) {
 	var sent Request
 	err := json.NewDecoder(io.LimitReader(request.Body, 16<<20)).Decode(&sent)
@@ -172,11 +190,15 @@ func (server *Server) session(writer http.ResponseWriter, request *http.Request)
 		http.Error(writer, "the command could not be read: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if sent.Identity != server.Identity {
-		server.Stop()
+	if !server.accepts(sent.Identity) {
 		writer.Header().Set("Content-Type", "application/json")
 		writer.WriteHeader(http.StatusConflict)
-		_ = json.NewEncoder(writer).Encode(identityAnswer{Identity: server.Identity})
+		_ = json.NewEncoder(writer).Encode(identityAnswer{Identity: server.Identity, Stays: server.Stays})
+		// the answer leaves before an idle owner ends and closes its connections
+		_ = http.NewResponseController(writer).Flush()
+		if !server.Stays {
+			server.Stop()
+		}
 		return
 	}
 	if !server.begin() {

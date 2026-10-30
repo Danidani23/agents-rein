@@ -34,6 +34,10 @@ func TestMain(tests *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == ownerCommand {
 		os.Exit(runRein(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 	}
+	// started as the app a test installed, it is that home's background process too
+	if len(os.Args) > 1 && os.Args[1] == backgroundFlag {
+		os.Exit(serveAsOwner(os.Stderr))
+	}
 	if strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe") == "claude" {
 		if len(os.Args) > 1 && os.Args[1] == "-p" {
 			_, _ = io.Copy(io.Discard, os.Stdin)
@@ -168,6 +172,8 @@ func isolate(t *testing.T, login string) (reinHome string) {
 	t.Setenv("REIN_HOME", reinHome)
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), ".claude"))
 	t.Setenv("REIN_KEYCHAIN_FILE", filepath.Join(reinHome, "keychain.json"))
+	// an app installed on the machine that runs the tests is never started
+	t.Setenv("REIN_APP", "none")
 	remotes := filepath.Join(reinHome, "stub-remotes")
 	_ = os.MkdirAll(remotes, 0o755)
 	server := gitHubServer(t, login, remotes)

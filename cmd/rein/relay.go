@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/Danidani23/agents-rein/internal/adapters/execute"
@@ -21,6 +22,17 @@ import (
 // command that needs one starts it.
 const ownerCommand = "owner"
 
+// appCommand starts the app of a build that carries it.
+const appCommand = "app"
+
+// backgroundFlag starts the app with its window closed, as the CLI and a
+// start at login do.
+const backgroundFlag = "--background"
+
+// appStartWait is how long a command waits for the app it started to
+// answer; a window takes longer to come up than rein owner.
+const appStartWait = 30 * time.Second
+
 // ownerIdle is how long the background process waits without a command
 // before it ends; the next command starts it again.
 const ownerIdle = 15 * time.Minute
@@ -31,11 +43,16 @@ const ownerStartWait = 10 * time.Second
 
 // runRein is rein for this process's caller (D52, D55). A command that
 // needs no machine state runs here; owner makes this process the
-// background process; every other command is relayed to it.
+// background process; every other command is relayed to it. A build with
+// the app is the app when started without a command, or with app.
 func runRein(arguments []string, in io.Reader, out io.Writer, errOut io.Writer) int {
 	switch {
 	case len(arguments) > 0 && arguments[0] == ownerCommand:
 		return serveAsOwner(errOut)
+	case len(arguments) > 0 && arguments[0] == appCommand:
+		return runApp(arguments[1:], errOut)
+	case appBuild && (len(arguments) == 0 || arguments[0] == backgroundFlag):
+		return runApp(arguments, errOut)
 	case runsHere(arguments):
 		return cli.Run(arguments, in, out, errOut, wire)
 	}
@@ -102,6 +119,10 @@ func relay(arguments []string, in io.Reader, out io.Writer, errOut io.Writer) in
 			return code
 		}
 		var otherBuild owner.ErrOtherBuild
+		if errors.As(err, &otherBuild) && otherBuild.Stays {
+			fmt.Fprintf(errOut, "rein: rein's app on this machine is %s and this rein is %s; they work together at one version only: rein update brings this rein up to date, the app updates from its release\n", owner.VersionOf(otherBuild.Identity), version.String())
+			return cli.ExitRefused
+		}
 		if attempt > 0 || !errors.Is(err, owner.ErrNoOwner) && !errors.As(err, &otherBuild) {
 			fmt.Fprintf(errOut, "rein: %v; the background process's log is %s\n", err, ownerLog(home))
 			return cli.ExitCrashed
@@ -114,24 +135,62 @@ func relay(arguments []string, in io.Reader, out io.Writer, errOut io.Writer) in
 	}
 }
 
-// startOwner starts the background process of home and waits until it
-// answers as this build.
+// startOwner starts the background process of home: the app, where it is
+// installed, with its window closed, else rein owner; and waits until it
+// answers, rein owner as this build.
 func startOwner(home string, socket string, executable string) error {
-	err := execute.Runner{}.StartDetached(home, ownerLog(home), executable, ownerCommand)
+	program, arguments, found := installedApp(execute.Runner{})
+	wait := appStartWait
+	var err error
+	if found {
+		err = execute.Runner{}.StartDetached(home, ownerLog(home), program, arguments...)
+	} else {
+		wait = ownerStartWait
+		err = execute.Runner{}.StartDetached(home, ownerLog(home), executable, ownerCommand)
+	}
 	if err != nil {
 		return err
 	}
-	deadline := time.Now().Add(ownerStartWait)
+	deadline := time.Now().Add(wait)
 	for {
 		identity, err := owner.Identify(socket)
-		if err == nil && identity == buildIdentity() {
+		if err == nil && (found || identity == buildIdentity()) {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("it did not answer within %s", ownerStartWait)
+			return fmt.Errorf("it did not answer within %s", wait)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// installedApp is how to start the app with its window closed, where it is
+// installed: REIN_APP names its program or, on macOS, its bundle, and none
+// leaves it out; else the bundle in the Applications folders on macOS.
+func installedApp(runner execute.Runner) (program string, arguments []string, found bool) {
+	chosen := runner.Getenv("REIN_APP")
+	if chosen == "none" {
+		return "", nil, false
+	}
+	candidates := []string{chosen}
+	if chosen == "" && runtime.GOOS == "darwin" {
+		userHome, _ := os.UserHomeDir()
+		candidates = []string{"/Applications/Rein.app", filepath.Join(userHome, "Applications", "Rein.app")}
+	}
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		info, err := os.Stat(candidate)
+		if err != nil {
+			continue
+		}
+		if info.IsDir() && filepath.Ext(candidate) == ".app" {
+			return "open", []string{"-g", "-a", candidate, "--args", backgroundFlag}, true
+		}
+		return candidate, []string{backgroundFlag}, true
+	}
+	return "", nil, false
 }
 
 // serveAsOwner makes this process the background process of rein's home

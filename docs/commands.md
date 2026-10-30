@@ -58,6 +58,25 @@ one and ends as it did, with its exit code. The `list` commands of teams, projec
 declarations pull the organisation's repository first, which changes its clone, so they wait
 like a change.
 
+## The app
+
+On a desktop, rein's app can be the background process instead (D50): a window showing the
+pages of `rein ui`, an icon in the menu bar or tray with Open rein, Start at login and Quit
+rein, and the system's notifications, whose Open button shows the page they concern. It is
+`rein` built with the app, cgo and Wails; started without a command, or with `rein app`, it is
+the app, and given a command it is `rein`. One runs at a time: starting it again opens its
+window. Closing the window leaves it in the menu bar, still the background process; Quit rein
+lets the commands running finish first. It never ends for being idle, and a `rein owner`
+already running makes way for it. Where the app is installed, in `/Applications` or
+`~/Applications` on macOS or where `REIN_APP` names it, the first command that finds no
+background process starts it with its window closed; `REIN_APP=none` leaves it out. It
+serves a `rein` of its own version only: one of another version says so and names the update,
+and the app goes on. Start at login, turned on from its menu, starts it with its window closed,
+except on macOS 13 and later, whose login items start an app without arguments, so the window
+opens there. `task app:try` runs a local build on a scratch home under `.tmp/`, never your
+`~/.rein` or your keychain. The release of the app is P6.5 on the
+[board](implementation_plans/2026-10-11_harness-distribution-tool.md).
+
 ## The MCP server
 
 `rein mcp` serves rein's queries to an agent as tools of the MCP (the Model Context Protocol)

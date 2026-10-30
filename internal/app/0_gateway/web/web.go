@@ -17,6 +17,7 @@ import (
 	"crypto/subtle"
 	"embed"
 	"errors"
+	"fmt"
 	"html/template"
 	"net"
 	"net/http"
@@ -43,19 +44,7 @@ type Page struct {
 // Open listens on a free port of 127.0.0.1 and makes the token of this run.
 // version is what rein version prints; interrupt is what Cancel does.
 func Open(orchestrator orchestration.Orchestrator, version string, interrupt Interrupt) (*Page, error) {
-	machineTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/machine.html")
-	if err != nil {
-		return nil, err
-	}
-	projectsTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/projects.html")
-	if err != nil {
-		return nil, err
-	}
-	actionTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/action.html")
-	if err != nil {
-		return nil, err
-	}
-	runTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/run.html")
+	routes, actions, err := routesOf(orchestrator, version, interrupt)
 	if err != nil {
 		return nil, err
 	}
@@ -64,6 +53,88 @@ func Open(orchestrator orchestration.Orchestrator, version string, interrupt Int
 		return nil, err
 	}
 	token := rand.Text()
+	return &Page{listener: listener, token: token, handler: guard(routes, listener.Addr().String(), token), actions: actions}, nil
+}
+
+// Window is the pages for the app's own window, which reaches them through
+// its webview and never over a port, so no other page or machine can, and
+// no token guards them (D50).
+func Window(orchestrator orchestration.Orchestrator, version string, interrupt Interrupt) (http.Handler, error) {
+	routes, _, err := routesOf(orchestrator, version, interrupt)
+	if err != nil {
+		return nil, err
+	}
+	return withoutRedirects(routes), nil
+}
+
+// withoutRedirects answers a redirect with a page that leads on by itself:
+// the window's webview shows an HTTP redirect from the app's own handler as
+// an empty page, since WebKit does not follow one there, as Wails' asset
+// server notes. Everything else passes through, a stream included.
+func withoutRedirects(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		next.ServeHTTP(&leadingOn{ResponseWriter: writer}, request)
+	})
+}
+
+// leadingOn turns a redirect into a page that leads to its address.
+type leadingOn struct {
+	http.ResponseWriter
+	redirected bool
+}
+
+func (writer *leadingOn) WriteHeader(code int) {
+	location := writer.Header().Get("Location")
+	if code < 300 || code >= 400 || location == "" {
+		writer.ResponseWriter.WriteHeader(code)
+		return
+	}
+	writer.redirected = true
+	writer.Header().Del("Location")
+	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+	writer.ResponseWriter.WriteHeader(http.StatusOK)
+	escaped := template.HTMLEscapeString(location)
+	_, _ = fmt.Fprintf(writer.ResponseWriter, `<!doctype html><meta http-equiv="refresh" content="0; url=%s"><a href="%s">Continue</a>`, escaped, escaped)
+}
+
+// Write drops the redirect's own body, which no one would see.
+func (writer *leadingOn) Write(content []byte) (int, error) {
+	if writer.redirected {
+		return len(content), nil
+	}
+	return writer.ResponseWriter.Write(content)
+}
+
+// Flush passes a stream on as it is written.
+func (writer *leadingOn) Flush() {
+	flusher, ok := writer.ResponseWriter.(http.Flusher)
+	if ok {
+		flusher.Flush()
+	}
+}
+
+func (writer *leadingOn) Unwrap() http.ResponseWriter {
+	return writer.ResponseWriter
+}
+
+// routesOf is every page and action, with the runner of the actions.
+func routesOf(orchestrator orchestration.Orchestrator, version string, interrupt Interrupt) (http.Handler, *runner, error) {
+	machineTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/machine.html")
+	if err != nil {
+		return nil, nil, err
+	}
+	projectsTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/projects.html")
+	if err != nil {
+		return nil, nil, err
+	}
+	actionTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/action.html")
+	if err != nil {
+		return nil, nil, err
+	}
+	runTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/run.html")
+	if err != nil {
+		return nil, nil, err
+	}
 	routes := http.NewServeMux()
 	routes.Handle("GET /static/", http.FileServerFS(assets))
 	actions := &runner{interrupt: interrupt}
@@ -76,7 +147,7 @@ func Open(orchestrator orchestration.Orchestrator, version string, interrupt Int
 	routes.Handle("GET /run", runPage(orchestrator, version, actions, runTemplate))
 	routes.Handle("GET /run/events", runEvents(actions))
 	routes.Handle("POST /run/cancel", cancelRun(actions))
-	return &Page{listener: listener, token: token, handler: guard(routes, listener.Addr().String(), token), actions: actions}, nil
+	return routes, actions, nil
 }
 
 // Address is what the browser opens: the page's root with the token, which

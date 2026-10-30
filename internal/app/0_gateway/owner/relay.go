@@ -18,13 +18,21 @@ var ErrNoOwner = errors.New("no background process answers")
 
 // ErrOtherBuild is the answer of an owner that another build made. It has
 // stopped taking commands and ends once its running ones have, so the
-// caller starts one of its own build.
+// caller starts one of its own build; unless it Stays, as the app does,
+// which leaves the caller to say so.
 type ErrOtherBuild struct {
 	Identity string
+	Stays    bool
 }
 
 func (err ErrOtherBuild) Error() string {
 	return "the background process is of another build, " + err.Identity
+}
+
+// VersionOf is the version an identity names, its first word.
+func VersionOf(identity string) string {
+	version, _, _ := strings.Cut(identity, " ")
+	return version
 }
 
 // Relay sends the command to the owner listening on socket and relays the
@@ -52,7 +60,7 @@ func Relay(socket string, sent Request, in io.Reader, out io.Writer, errOut io.W
 	case http.StatusConflict:
 		var answer identityAnswer
 		_ = json.NewDecoder(response.Body).Decode(&answer)
-		return 0, ErrOtherBuild{Identity: answer.Identity}
+		return 0, ErrOtherBuild{Identity: answer.Identity, Stays: answer.Stays}
 	default:
 		refusal, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
 		return 0, fmt.Errorf("the background process did not take the command: %s", strings.TrimSpace(string(refusal)))
@@ -105,6 +113,33 @@ func relayInput(sending *frames, in io.Reader) {
 		}
 	}
 	_ = sending.write(frameInputEnd, nil)
+}
+
+// Supersede asks the owner on socket to make way for identity, as a client
+// of another build does: an owner that makes way takes no more commands
+// and ends once its running ones have; stays is true for one that does
+// not, such as another app.
+func Supersede(socket string, identity string) (stays bool, err error) {
+	body, err := json.Marshal(Request{Identity: identity})
+	if err != nil {
+		return false, err
+	}
+	request, err := http.NewRequest(http.MethodPost, "http://rein/v1/sessions", bytes.NewReader(body))
+	if err != nil {
+		return false, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	connection, _, response, err := roundTrip(socket, request)
+	if err != nil {
+		return false, err
+	}
+	defer connection.Close()
+	if response.StatusCode != http.StatusConflict {
+		return false, fmt.Errorf("the background process accepted %s as its own build", identity)
+	}
+	var answer identityAnswer
+	_ = json.NewDecoder(response.Body).Decode(&answer)
+	return answer.Stays, nil
 }
 
 // Identify asks the owner on socket which build made it.

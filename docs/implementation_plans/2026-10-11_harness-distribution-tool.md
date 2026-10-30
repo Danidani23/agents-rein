@@ -2274,12 +2274,44 @@ keychain and the signing, is checked by you on your machine before the commit.
   `state.yaml.previous` copy lives on as a document; `Ledger.Delete`, `DeleteInserts` and
   `Snapshots.RemoveAll` went, the erase doing their work. Recorded in the store ADR's
   amendment.
-- 🟢 **P6.3 — The app.** [PENDING] A Wails v3 program in this module, built with cgo on each
+- ✅ **P6.3 — The app.** [EXECUTED] A Wails v3 program in this module, built with cgo on each
   operating system, that is the owner plus a window showing the pages of `rein ui` through
   their handler, an icon in the menu bar or tray, native notifications whose button opens the
   page concerned, one instance at a time, and a start at login the developer turns on. Where
   it is installed, the CLI starts it when no owner answers. Checked by you on macOS; Linux and
   Windows when a machine of each is at hand.
+
+  Built 2026-10-29, checked by you on macOS on 2026-10-30 with `task app:try`. The app is `rein`
+  built with the `app` tag (`cmd/rein/app.go`), one composition root for both, so `rein`
+  without the tag links no Wails and stays without cgo; started without a command, or with
+  `rein app`, it is the app. It is the background process of rein's home that never ends when
+  idle; a `rein owner` there makes way for it (`owner.Supersede`). It serves the CLI of its
+  own version, a different binary, and tells a CLI of another version that it stays, which the
+  CLI reports with the update to run (`owner.Server.Stays`, `Accepts`). The window serves the
+  routes of `rein ui` through Wails' asset handler without the token guard (`web.Window`),
+  since only the app's webview reaches it. Deviations: Wails v3.0.0 joins the module and
+  raises `golang.org/x/sys` to v0.48.0 and `golang.org/x/sync` to v0.23.0; the app is found in
+  `/Applications/Rein.app` or `~/Applications/Rein.app` on macOS, or where `REIN_APP` names it,
+  until P6.5 fixes where the packages install it on Linux and Windows; the icon is a ring drawn
+  by the program until the app has artwork; notifications are registered with an Open button
+  and their first sender is P6.4; on macOS 13 and later a start at login opens the window,
+  since the system's login item passes no arguments; the app's own pages run with the app's
+  environment, which an app started from the Finder has without the shell's PATH. Found while
+  building it, with its test first: an idle `rein owner` that made way for another build ended
+  before its answer left, so the client saw a broken connection; it now answers first. Checked
+  here: the gate with `go vet -tags app` on macOS, the build on macOS and a build for Windows
+  from this machine, and the built app on a scratch home serving a `rein` of its version
+  without a `rein owner`, and quitting on a signal. Not checked: the window, the tray, the
+  notifications and the start at login, which are yours; Linux, whose build needs WebKitGTK.
+
+  Found in your check on 2026-10-29, with its test first: Log in turned the window white. Every
+  action answers its form with a redirect, and WebKit does not follow a redirect from the app's
+  own handler, as Wails' asset server notes. The window's pages now answer a redirect with a
+  page that leads on by itself (`web.withoutRedirects`), while `rein ui` in a browser keeps
+  real redirects. The run page's script, where its stream of steps fails, now reloads the page
+  every two seconds until the action ends. Checked by you on 2026-10-30: the window, the menu
+  bar icon and its menu, and Log in through the window. Not checked: the notifications, whose
+  senders are P6.4 and P5, and the start at login.
 - 🟢 **P6.4 — Confirmation in the app.** [PENDING] A reset of a project or of the machine, or a
   sync with `--force`, asked from the command line waits for a confirmation in the app's
   window, and the CLI says where it waits (D53). Touch ID and Windows Hello are looked into
@@ -2973,4 +3005,13 @@ writes is read from the next session on, not in the same one.
   lost key and a lost store were each named with nothing made in their place, and a reset
   erased the store and its key and kept the login in a new store. Not checked by hand: the
   key in the macOS keychain, Linux and Windows, which CI covers at the push. Left for you: the
+  commit.
+- (2026-10-29) P6.3 built, waiting for your check: the app is `rein` built with the `app` tag,
+  the background process with a window, a menu bar icon, notifications, one instance and a
+  start at login; the CLI starts it where it is installed and reports one of another version.
+  `task rein:check` green, now with `go vet -tags app` on macOS and Windows; the owner's tests
+  five times under the race detector. Left for you: `task app:try`, then the window, the menu
+  bar icon and its three items; the commit after that.
+- (2026-10-30) P6.3 checked by you on macOS: the window, the menu bar icon and Log in through
+  the window, after the fix for the white window. `task rein:check` green. Left for you: the
   commit.

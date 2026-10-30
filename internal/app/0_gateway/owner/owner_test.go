@@ -224,6 +224,37 @@ func TestServer(t *testing.T) {
 		close(release)
 		waitFor(t, "the owner's end once the command finished", func() bool { return isClosed(busyEnded) })
 	})
+	t.Run("an owner that stays serves the builds it accepts, tells another it stays, and goes on", func(t *testing.T) {
+		socket, server, ended := serve(t, "v1.2.0 100 1", 0, runs(func(session Session) int { return 3 }))
+		server.Stays = true
+		server.Accepts = func(identity string) bool { return VersionOf(identity) == "v1.2.0" }
+		code, _, _, err := relay(t, socket, "v1.2.0 200 2", strings.NewReader(""), nil, "status")
+		if err != nil || code != 3 {
+			t.Fatalf("the same version: code %d err %v", code, err)
+		}
+		_, _, _, err = relay(t, socket, "v1.3.0 200 2", strings.NewReader(""), nil, "status")
+		var otherBuild ErrOtherBuild
+		if !errors.As(err, &otherBuild) || !otherBuild.Stays || VersionOf(otherBuild.Identity) != "v1.2.0" {
+			t.Fatalf("another version: %v", err)
+		}
+		stays, err := Supersede(socket, "v1.3.0 200 2")
+		if err != nil || !stays {
+			t.Fatalf("supersede: stays %v err %v", stays, err)
+		}
+		time.Sleep(100 * time.Millisecond)
+		code, _, _, err = relay(t, socket, "v1.2.0 100 1", strings.NewReader(""), nil, "status")
+		if err != nil || code != 3 || isClosed(ended) {
+			t.Fatalf("after another version: code %d err %v ended %v", code, err, isClosed(ended))
+		}
+	})
+	t.Run("an owner that makes way is superseded by another build, and ends", func(t *testing.T) {
+		socket, _, ended := serve(t, "rein v1.2.0 100 1", time.Minute, runs(func(Session) int { return 0 }))
+		stays, err := Supersede(socket, "app v1.2.0 300 3")
+		if err != nil || stays {
+			t.Fatalf("supersede: stays %v err %v", stays, err)
+		}
+		waitFor(t, "the superseded owner's end", func() bool { return isClosed(ended) })
+	})
 }
 
 func TestListen(t *testing.T) {

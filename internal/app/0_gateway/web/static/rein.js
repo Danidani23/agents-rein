@@ -1,7 +1,8 @@
 // The one script of rein ui. On the page of a running action it follows
 // the steps as the server sends them, one line per step, its outcome
 // replacing its start as the CLI's line does, and reloads the page once
-// the action has ended, which then shows the outcome. Everything else on
+// the action has ended, which then shows the outcome; where the stream
+// fails, it reloads the page every two seconds instead. Everything else on
 // the pages works without it.
 (function () {
   "use strict";
@@ -51,5 +52,13 @@
   source.addEventListener("end", function () {
     source.close();
     window.location.reload();
+  });
+  // where the stream cannot run, such as in a webview that does not carry it,
+  // the page shows the steps so far each time it loads, so it loads again
+  source.addEventListener("error", function () {
+    source.close();
+    window.setTimeout(function () {
+      window.location.reload();
+    }, 2000);
   });
 })();
