@@ -462,6 +462,40 @@ committed instead of gitignored (D4).
   the run a workflow reporting through progress, and every sentence the CLI and the page both
   show lives in `internal/app/0_gateway/wording`; the reset's and the sync's moved there
   first. [architecture.md](../architecture.md) rule 15. P4.4 to P4.9.
+- ✅ **D61 — An account is a host account rein acts as, and it stays when logged out.**
+  Decided 2026-10-30 by the user (Q52 a, Q54 a), from the first start of the app: before
+  anything else, a developer adds an account, choosing its host and logging in. "Account",
+  not "user", since a user is a level of an organisation's declarations (D27). The state
+  keeps each account with its host, its login there and when it was added; its token stays in
+  the keychain under the login (D25). Logging out deletes the token and keeps the account,
+  shown as logged out; logging in again renews it. Removing an account is refused while an
+  organisation acts with it, naming each one and `rein org disconnect`. The host is chosen
+  from the list `org create` shows: GitHub, and GitLab listed as planned and refused. The
+  flag that names one becomes `--account`. P7.2.
+- ✅ **D62 — Every account is shown at once, and the account is a filter.** Decided 2026-10-30
+  by the user, replacing the profile of Q55 b after Q56 a, Q57 a and Q58 a. There is no
+  active account: the window and the commands show every account's organisations and
+  projects, and each list can be narrowed to one account, the choice travelling in the
+  page's address as the organisation's does. The folder or the organisation decides which
+  account acts (D25); where nothing decides, as at `org create` and `org connect`, the only
+  account acts or rein asks which. The app's check covers every account. Turned down: a
+  profile that hides the other accounts, which the CLI has no counterpart of and which would
+  leave the session hook of another account's projects refused. P7.2, P7.3.
+- ✅ **D63 — What needs you is one list, and the red count is its length.** Decided 2026-10-30
+  by the user (Q53 a). An account logged out, a confirmation waiting, a new release of rein
+  and each open finding of the check; each item names its account, or none for the machine,
+  and leaves the list once resolved. One query feeds the Notifications page and `rein
+  notifications`; the menu bar shows the count in red, and the window's menu beside
+  Notifications. Turned down: counting unread notifications, which stay counted after the
+  thing is fixed. P7.3, P7.4.
+- ✅ **D64 — rein starts at login, always, and its menu bar menu is Open and Quit.** Decided
+  2026-10-30 by the user. The app registers itself as a login item at its first start;
+  macOS lists it under System Settings, General, Login Items, where it is turned off
+  ([SMAppService](https://developer.apple.com/documentation/servicemanagement/smappservice)).
+  P7.1.
+- ✅ **D65 — Every page has an Actions menu.** Decided 2026-10-30 by the user. It lists what
+  can be done on the page as a whole, each entry the workflow or service method the CLI calls
+  (D58, D60); what concerns one row, such as Sync on one project, stays on the row. P7.5.
 - ✅ **D46 — The page offers every command a person runs, through one pattern.** Decided
   2026-10-27 by the user (Q14 R1, Q15, Q16 G2). Each command becomes a form asking what the
   CLI asks, a preview of what will change, a confirmation, its steps as they run with a
@@ -1097,6 +1131,7 @@ flowchart TD
   P2 --> P4[P4 rein ui in the browser]
   P4 --> P6[P6 the app that owns the machine]
   P6 --> P5[P5 the check, inside the app]
+  P6 --> P7[P7 accounts and what needs you]
 ```
 
 ## How the tool works
@@ -2441,6 +2476,38 @@ keychain and the signing, is checked by you on your machine before the commit.
   passes, a refused one leaves the question waiting and says why, a Decline needs no check.
   Windows Hello waits for P6.5's signing.
 
+## P7 — Accounts and what needs you
+
+D61 to D65, decided 2026-10-30 after the first look at the app. Built after P6.3, in the order
+P7.1, P7.2, P7.3, P7.4, P7.5: the red count is the length of P7.3's list, so it follows it.
+Gate per item: `task rein:check` green; what a test cannot reach, the menu bar and the start
+at login, checked by you in the app.
+
+- ✅ **P7.1 — rein starts at login.** [EXECUTED] The app registers its login item at its
+  first start; the menu bar menu holds Open rein and Quit rein (D64).
+
+  Built 2026-10-30, accepted by you on 2026-10-30. Deviations: Wails tells a login item never
+  registered from one turned off in System Settings apart from neither, so the store records
+  that the app registered it, `login-item.yaml`, and a reset of the machine lets it register
+  again; only an app installed where the CLI finds it, `/Applications/Rein.app` or
+  `~/Applications/Rein.app`, registers (`startsAtLogin`), so `task app:try` never adds a dev
+  build to your login items; Linux and Windows register nothing until P6.5 fixes where their
+  packages install the app; on macOS the login item still opens the window, as P6.3 notes.
+- 🟢 **P7.2 — Accounts.** [PENDING] The state keeps accounts, its version raised so an earlier
+  rein refuses it, today's logins moved in as GitHub accounts (D19, D61). `rein account add`,
+  `account list` and `account remove`, `rein login [account]` and `rein logout [account]`, an
+  Accounts page with Add account, Log in, Log out and Remove; adding and removing are
+  workflows that the CLI and the page both run. `--login` becomes `--account`. With no account,
+  the window opens on Accounts.
+- 🟢 **P7.3 — Notifications.** [PENDING] The query of what needs you (D63), the Notifications
+  page and `rein notifications`, both filtered by `--account` or the page's account choice;
+  the check finds an account whose token GitHub refuses and a new release of rein. The
+  top bar's User choice becomes Account, with every account as its first entry (D62).
+- 🟢 **P7.4 — The red count.** [PENDING] In the menu bar beside the icon, and in the window's
+  menu beside Notifications, refreshed after the check, a confirmation, and each command and
+  action (D63).
+- 🟢 **P7.5 — The Actions menu.** [PENDING] One per page, in its heading (D65).
+
 ## Open points
 
 - O1 — Answered 2026-10-12 for `-p` runs: a file written by the startup hook is read only from
@@ -3129,3 +3196,5 @@ writes is read from the next session on, not in the same one.
 - (2026-10-30) P6.3 checked by you on macOS: the window, the menu bar icon and Log in through
   the window, after the fix for the white window. `task rein:check` green. Left for you: the
   commit.
+- (2026-10-30) D61 to D65 decided (Q52 a, Q53 a, Q54 a, Q56 a, Q57 a, Q58 a, and the account
+  as a filter in place of Q55 b's profile); P7 added and approved, P7.1 to P7.5.

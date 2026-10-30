@@ -64,19 +64,21 @@ like a change.
 ## The app
 
 On a desktop, rein's app can be the background process instead (D50): a window showing the
-pages of `rein ui`, an icon in the menu bar or tray with Open rein, Start at login and Quit
-rein, and the system's notifications, whose Open button shows the page they concern. It is
-`rein` built with the app, cgo and Wails; started without a command, or with `rein app`, it is
-the app, and given a command it is `rein`. One runs at a time: starting it again opens its
+pages of `rein ui`, an icon in the menu bar or tray with Open rein and Quit rein, and the
+system's notifications, whose Open button shows the page they concern. It is `rein` built
+with the app, cgo and Wails; started without a command, or with `rein app`, it is the app, and
+given a command it is `rein`. One runs at a time: starting it again opens its
 window. Closing the window leaves it in the menu bar, still the background process; Quit rein
 lets the commands running finish first. It never ends for being idle, and a `rein owner`
 already running makes way for it. Where the app is installed, in `/Applications` or
 `~/Applications` on macOS or where `REIN_APP` names it, the first command that finds no
 background process starts it with its window closed; `REIN_APP=none` leaves it out. It
 serves a `rein` of its own version only: one of another version says so and names the update,
-and the app goes on. Start at login, turned on from its menu, starts it with its window closed,
-except on macOS 13 and later, whose login items start an app without arguments, so the window
-opens there. Log in and Log out are on This machine (D58): Log in shows GitHub's code with a button that
+and the app goes on. An installed app registers itself to start at login at its first start
+(D64), with its window closed, except on macOS 13 and later, whose login items start an app
+without arguments, so the window opens there; it is turned off under System Settings, General,
+Login Items, and stays off. A build tried from elsewhere, such as `task app:try`'s, never
+registers. Log in and Log out are on This machine (D58): Log in shows GitHub's code with a button that
 opens GitHub's page in your browser, and the wait for your approval takes no lock, so other
 commands go on meanwhile; Cancel ends it. What removes or overwrites waits for you in the app's
 window (D53): `rein reset project`,

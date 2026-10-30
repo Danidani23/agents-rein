@@ -122,4 +122,21 @@ func TestTheApp(t *testing.T) {
 			t.Fatalf("the app did not stay: %q %v", identity, err)
 		}
 	})
+	t.Run("only an app installed where the CLI finds it starts at login", func(t *testing.T) {
+		for _, example := range []struct {
+			executable string
+			system     string
+			starts     bool
+		}{
+			{"/Applications/Rein.app/Contents/MacOS/rein-app", "darwin", true},
+			{"/Users/dani/Applications/Rein.app/Contents/MacOS/rein-app", "darwin", true},
+			{"/Users/dani/GitHub/agents-rein/.tmp/Rein.app/Contents/MacOS/rein-app", "darwin", false},
+			{"/Applications/Rein.app.old/Contents/MacOS/rein-app", "darwin", false},
+			{`C:\Program Files\Rein\rein.exe`, "windows", false},
+		} {
+			if startsAtLogin(example.executable, "/Users/dani", example.system) != example.starts {
+				t.Errorf("%s on %s: expected %v", example.executable, example.system, example.starts)
+			}
+		}
+	})
 }

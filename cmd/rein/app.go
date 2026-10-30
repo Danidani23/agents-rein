@@ -46,8 +46,8 @@ const openCategory = "open-page"
 // runApp is the app: the background process of rein's home, which never
 // ends while the app runs and stays for a client of another version, plus
 // a window showing the pages of rein ui, an icon in the menu bar or tray,
-// notifications, one instance at a time, and a start at login the
-// developer turns on.
+// notifications, one instance at a time, and a start at login it
+// registers once, at the first start of an installed app (D64).
 func runApp(arguments []string, errOut io.Writer) int {
 	background := len(arguments) > 0 && arguments[0] == backgroundFlag
 	home, err := localstate.Home()
@@ -142,20 +142,6 @@ func runApp(arguments []string, errOut io.Writer) int {
 	}
 	menu := app.NewMenu()
 	menu.Add("Open rein").OnClick(func(*application.Context) { show("/") })
-	enabled, _ := app.Autostart.IsEnabled()
-	menu.AddCheckbox("Start at login", enabled).OnClick(func(clicked *application.Context) {
-		item := clicked.ClickedMenuItem()
-		var err error
-		if item.Checked() {
-			err = app.Autostart.EnableWithOptions(application.AutostartOptions{Identifier: appIdentifier, Arguments: []string{backgroundFlag}})
-		} else {
-			err = app.Autostart.Disable()
-		}
-		if err != nil {
-			item.SetChecked(!item.Checked())
-			fmt.Fprintf(logFile, "rein app: start at login: %v\n", err)
-		}
-	})
 	menu.AddSeparator()
 	menu.Add("Quit rein").OnClick(func(*application.Context) { app.Quit() })
 	tray.SetMenu(menu)
@@ -180,6 +166,7 @@ func runApp(arguments []string, errOut io.Writer) int {
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 		_, _ = notifier.RequestNotificationAuthorization()
 		_ = notifier.RegisterNotificationCategory(notifications.NotificationCategory{ID: openCategory, Actions: []notifications.NotificationAction{{ID: "open", Title: "Open"}}})
+		registerLoginItem(app, orchestrator.Documents, executable, logFile)
 	})
 	go func() {
 		defer close(owned)
@@ -192,6 +179,33 @@ func runApp(arguments []string, errOut io.Writer) int {
 		return cli.ExitCrashed
 	}
 	return cli.ExitWorked
+}
+
+// loginItemDocument is the store's record that the app registered its
+// login item, so one the developer turned off in the system's settings
+// stays off (D64).
+const loginItemDocument = "login-item.yaml"
+
+// registerLoginItem registers the app to start at login with its window
+// closed, once: at the first start of an installed app.
+func registerLoginItem(app *application.App, documents ports.Documents, executable string, log io.Writer) {
+	userHome, _ := os.UserHomeDir()
+	if !startsAtLogin(executable, userHome, runtime.GOOS) {
+		return
+	}
+	_, registered, err := documents.Read(loginItemDocument)
+	if err != nil || registered {
+		return
+	}
+	err = app.Autostart.EnableWithOptions(application.AutostartOptions{Identifier: appIdentifier, Arguments: []string{backgroundFlag}})
+	if err != nil {
+		fmt.Fprintf(log, "rein app: start at login: %v\n", err)
+		return
+	}
+	err = documents.Write(loginItemDocument, []byte("registered_at: "+time.Now().UTC().Format(time.RFC3339)+"\n"))
+	if err != nil {
+		fmt.Fprintf(log, "rein app: start at login: %v\n", err)
+	}
 }
 
 // ownMachine makes the app the background process of home: a rein owner

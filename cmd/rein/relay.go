@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/Danidani23/agents-rein/internal/adapters/execute"
@@ -165,6 +166,27 @@ func startOwner(home string, socket string, executable string) error {
 	}
 }
 
+// installedAppFolders are where the app is installed on macOS.
+func installedAppFolders(userHome string) []string {
+	return []string{"/Applications/Rein.app", filepath.Join(userHome, "Applications", "Rein.app")}
+}
+
+// startsAtLogin says whether the app at executable registers itself to
+// start at login (D64): on macOS, an app installed where the CLI finds it;
+// a build tried from anywhere else, such as task app:try's, never does.
+// Other systems wait for P6.5 to fix where their packages install it.
+func startsAtLogin(executable string, userHome string, system string) bool {
+	if system != "darwin" {
+		return false
+	}
+	for _, folder := range installedAppFolders(userHome) {
+		if strings.HasPrefix(executable, folder+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 // installedApp is how to start the app with its window closed, where it is
 // installed: REIN_APP names its program or, on macOS, its bundle, and none
 // leaves it out; else the bundle in the Applications folders on macOS.
@@ -176,7 +198,7 @@ func installedApp(runner execute.Runner) (program string, arguments []string, fo
 	candidates := []string{chosen}
 	if chosen == "" && runtime.GOOS == "darwin" {
 		userHome, _ := os.UserHomeDir()
-		candidates = []string{"/Applications/Rein.app", filepath.Join(userHome, "Applications", "Rein.app")}
+		candidates = installedAppFolders(userHome)
 	}
 	for _, candidate := range candidates {
 		if candidate == "" {
