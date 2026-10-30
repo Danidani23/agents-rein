@@ -249,6 +249,29 @@ func TestTheAppWindowLeadsOnWithoutAnHTTPRedirect(t *testing.T) {
 	}
 }
 
+func TestTheAppWindowTellsWhenAnActionHasEnded(t *testing.T) {
+	// the app counts what needs you again after each action (D63)
+	home := t.TempDir()
+	state := fake.NewState()
+	state.Current.Accounts = fake.Accounts("Danidani23")
+	keychain := &fake.Keychain{Tokens: map[string]ports.Token{"Danidani23": {Login: "Danidani23", AccessToken: "token-of-Danidani23"}}}
+	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, &fake.Repository{}, state, fake.NewDocuments(), []ports.Agent{&fake.Agent{Present: true, HomePath: t.TempDir()}}, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, keychain, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
+	ended := make(chan struct{}, 1)
+	handler, err := Window(orchestration.New(services), "v0.1.0", Interrupt{}, WindowParts{Finished: func() { ended <- struct{}{} }})
+	if err != nil {
+		t.Fatalf("window: %v", err)
+	}
+	answer := visit(handler, http.MethodPost, "/actions/logout", url.Values{"login": {"Danidani23"}})
+	if answer.Code != http.StatusOK || !strings.Contains(answer.Body.String(), "url=/run") {
+		t.Fatalf("code %d body %q", answer.Code, answer.Body.String())
+	}
+	select {
+	case <-ended:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("the end of the action was not told")
+	}
+}
+
 func TestTheAppWindowAsksForConfirmations(t *testing.T) {
 	asked := ports.Confirmation{Command: "rein reset project", Caller: "a program without a terminal", Folder: "/work/shop", Summary: []string{"This will put back the agent's files rein init moved out of /work/shop."}}
 	t.Run("a question shows on the page until it is confirmed or declined", func(t *testing.T) {

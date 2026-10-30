@@ -58,10 +58,12 @@ func Open(orchestrator orchestration.Orchestrator, version string, interrupt Int
 }
 
 // WindowParts are what only the app's window has: the confirmations
-// commands wait on (D53), and the way a link out opens in the browser.
+// commands wait on (D53), the way a link out opens in the browser, and
+// what is told when an action of the window has ended.
 type WindowParts struct {
 	Confirmations *Confirmations
 	OpenLink      func(link string) error
+	Finished      func()
 }
 
 // Window is the pages for the app's own window, which reaches them through
@@ -71,10 +73,11 @@ func Window(orchestrator orchestration.Orchestrator, version string, interrupt I
 	if parts.Confirmations == nil {
 		parts.Confirmations = &Confirmations{}
 	}
-	routes, _, err := routesOf(orchestrator, version, interrupt, parts.Confirmations)
+	routes, actions, err := routesOf(orchestrator, version, interrupt, parts.Confirmations)
 	if err != nil {
 		return nil, err
 	}
+	actions.finished = parts.Finished
 	window := http.NewServeMux()
 	window.Handle("/", withoutRedirects(routes))
 	window.Handle("POST /open-link", openLink(parts.OpenLink))

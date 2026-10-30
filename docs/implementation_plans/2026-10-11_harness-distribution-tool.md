@@ -2536,9 +2536,20 @@ at login, checked by you in the app.
   P6.5. One run of the gate hung for ten minutes in the architecture test, which passed alone
   in half a second and in the next full run; not reproduced since. Checked here: the gate and
   the tests of each layer. Not checked: the page in the window, which you accepted on 2026-10-30.
-- 🟢 **P7.4 — The red count.** [PENDING] In the menu bar beside the icon, and in the window's
-  menu beside Notifications, refreshed after the check, a confirmation, and each command and
-  action (D63).
+- ✅ **P7.4 — The red count.** [EXECUTED] In the menu bar beside the icon, and in the
+  window's menu beside Notifications, refreshed after the check, a confirmation, and each
+  command and action (D63).
+
+  Built 2026-10-30, accepted by you on 2026-10-30. The window's menu counts on every page,
+  built with P7.3. In the menu bar, macOS shows the count as the tray's label, white on red,
+  through Wails' replaceable label parser (`countLabel`), so the icon stays a template the
+  system tints; the app counts again at its start, after each check, when a confirmation is
+  asked, after each command it serves and after each action of its window
+  (`web.WindowParts.Finished`). Deviations: on Windows and Linux, whose tray icons carry no
+  label, a red dot on the icon and the count in its tooltip, unchecked until a machine of
+  each is at hand; the label is a red rectangle, which is how macOS draws a coloured label,
+  not a round badge. Checked here: the gate, the app's vet for macOS and Windows and its
+  bundle. Not checked: the menu bar, which you accepted on 2026-10-30.
 - 🟢 **P7.5 — The Actions menu.** [PENDING] One per page, in its heading (D65).
 
 ## Open points

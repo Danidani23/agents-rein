@@ -15,6 +15,7 @@ import (
 	"math"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -74,9 +75,23 @@ func runApp(arguments []string, errOut io.Writer) int {
 	}
 	confirmations := &web.Confirmations{Verify: verifyOwner}
 	var app *application.App
+	var tray *application.SystemTray
+	// the count of what needs you, beside the menu bar icon (D63)
+	countAgain := func() {
+		if tray == nil {
+			return
+		}
+		notifications, err := orchestrator.Notifications(orchestration.NotificationsRequest{Waiting: confirmations.Waiting()})
+		if err != nil {
+			fmt.Fprintf(logFile, "rein app: what needs you: %v\n", err)
+			return
+		}
+		showCount(tray, len(notifications))
+	}
 	pages, err := web.Window(orchestrator, version.String(), web.Interrupt{Stop: execute.Interrupt, Running: execute.Running}, web.WindowParts{
 		Confirmations: confirmations,
 		OpenLink:      func(link string) error { return app.Browser.OpenURL(link) },
+		Finished:      countAgain,
 	})
 	if err != nil {
 		fmt.Fprintf(logFile, "rein app: %v\n", err)
@@ -88,8 +103,18 @@ func runApp(arguments []string, errOut io.Writer) int {
 		Identity: identity,
 		Accepts:  func(client string) bool { return owner.VersionOf(client) == owner.VersionOf(identity) },
 		Stays:    true,
-		Run:      runSession,
-		Log:      logFile,
+		// each command it served may have changed what needs you
+		Run: func(session owner.Session) (int, <-chan struct{}) {
+			code, finished := runSession(session)
+			go func() {
+				if finished != nil {
+					<-finished
+				}
+				countAgain()
+			}()
+			return code, finished
+		},
+		Log: logFile,
 	}
 	owned := make(chan struct{})
 	notifier := notifications.New()
@@ -102,6 +127,7 @@ func runApp(arguments []string, errOut io.Writer) int {
 		window.Show()
 		window.Focus()
 	}
+	application.SystemTrayLabelParser = countLabel
 	app = application.New(application.Options{
 		Name:        "rein",
 		Description: "Agents Rein: the settings of your AI coding agents, from your organisation's repository",
@@ -133,7 +159,7 @@ func runApp(arguments []string, errOut io.Writer) int {
 		window.Hide()
 		event.Cancel()
 	})
-	tray := app.SystemTray.New()
+	tray = app.SystemTray.New()
 	tray.SetTooltip("rein")
 	if runtime.GOOS == "darwin" {
 		tray.SetTemplateIcon(trayIcon())
@@ -148,6 +174,7 @@ func runApp(arguments []string, errOut io.Writer) int {
 	// a command waiting for a confirmation shows the window, and says so where the developer is
 	confirmations.Asked = func(identifier string, asked ports.Confirmation) {
 		show("/confirmations")
+		countAgain()
 		_ = notifier.SendNotificationWithActions(notifications.NotificationOptions{
 			ID:         "confirmation-" + identifier,
 			Title:      "rein waits for your confirmation",
@@ -172,12 +199,13 @@ func runApp(arguments []string, errOut io.Writer) int {
 		if err == nil && len(logins) == 0 {
 			show("/accounts")
 		}
+		countAgain()
 	})
 	go func() {
 		defer close(owned)
 		ownMachine(home, identity, server, logFile)
 	}()
-	go checkEveryMinute(orchestrator, executable, notifier, logFile)
+	go checkEveryMinute(orchestrator, executable, notifier, logFile, countAgain)
 	err = app.Run()
 	if err != nil {
 		fmt.Fprintf(logFile, "rein app: %v\n", err)
@@ -251,7 +279,7 @@ const (
 // checkEveryMinute runs the check while the app runs, under the machine
 // lock as any change, and tells each new finding once as a notification
 // whose Open shows the page concerned.
-func checkEveryMinute(orchestrator orchestration.Orchestrator, executable string, notifier *notifications.NotificationService, log io.Writer) {
+func checkEveryMinute(orchestrator orchestration.Orchestrator, executable string, notifier *notifications.NotificationService, log io.Writer, checked func()) {
 	asked := time.Time{}
 	for {
 		time.Sleep(checkInterval)
@@ -266,6 +294,7 @@ func checkEveryMinute(orchestrator orchestration.Orchestrator, executable string
 		ask := time.Since(asked) >= askInterval
 		result, err := orchestrator.Check(orchestration.CheckRequest{AskOrganizations: ask, ReinExecutable: executable})
 		release(err)
+		checked()
 		if err != nil {
 			fmt.Fprintf(log, "rein app: the check failed: %v\n", err)
 			continue
@@ -285,9 +314,47 @@ func checkEveryMinute(orchestrator orchestration.Orchestrator, executable string
 	}
 }
 
+// countColour is the red of the count, as the window's menu draws it.
+var countColour = color.NRGBA{R: 0xe5, G: 0x48, B: 0x4d, A: 255}
+
+// showCount puts the count of what needs you beside the menu bar icon in
+// red (D63). On macOS it is the tray's label, white on red, which keeps the
+// icon a template the system tints; a tray icon elsewhere has no label, so
+// a red dot goes on the icon and the count into its tooltip.
+func showCount(tray *application.SystemTray, count int) {
+	tooltip := "rein"
+	if count > 0 {
+		tooltip = fmt.Sprintf("rein: %d need you", count)
+	}
+	tray.SetTooltip(tooltip)
+	if runtime.GOOS != "darwin" {
+		tray.SetIcon(trayIconWith(count > 0))
+		return
+	}
+	label := ""
+	if count > 0 {
+		// the escape makes Wails ask countLabel for the colours
+		label = fmt.Sprintf("\x1b[0m %d ", count)
+	}
+	tray.SetLabel(label)
+}
+
+// countLabel colours the tray's label, the count, white on red; Wails
+// calls it for a label that holds an escape.
+func countLabel(label string) ([]application.SystemTrayLabelPart, error) {
+	text := strings.ReplaceAll(label, "\x1b[0m", "")
+	return []application.SystemTrayLabelPart{{Text: text, FgColor: "#ffffffff", BgColor: fmt.Sprintf("#%02x%02x%02xff", countColour.R, countColour.G, countColour.B)}}, nil
+}
+
 // trayIcon is a ring, drawn in black on clear so macOS can tint it as a
 // template for the menu bar.
 func trayIcon() []byte {
+	return trayIconWith(false)
+}
+
+// trayIconWith is the ring, with a red dot at its top right when
+// something needs you.
+func trayIconWith(dot bool) []byte {
 	const size = 44
 	picture := image.NewNRGBA(image.Rect(0, 0, size, size))
 	centre := float64(size-1) / 2
@@ -296,6 +363,9 @@ func trayIcon() []byte {
 			distance := math.Hypot(float64(x)-centre, float64(y)-centre)
 			if (distance > 13 && distance < 19) || distance < 5 {
 				picture.Set(x, y, color.NRGBA{A: 255})
+			}
+			if dot && math.Hypot(float64(x)-(size-9), float64(y)-8) < 8 {
+				picture.Set(x, y, countColour)
 			}
 		}
 	}

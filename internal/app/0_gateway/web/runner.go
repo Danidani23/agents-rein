@@ -34,6 +34,9 @@ type runner struct {
 	// confirmations are the questions the app's window shows; nil in a
 	// browser, where the pages show none.
 	confirmations *Confirmations
+	// finished is told when an action has ended, so the app counts what
+	// needs you again; nil in a browser.
+	finished func()
 }
 
 // run is one action: its name, its progress as the workflow reports it,
@@ -93,6 +96,9 @@ func (actions *runner) start(name string, action work) (*run, error) {
 		defer started.stop()
 		result, err := action(started)
 		started.finish(result, err)
+		if actions.finished != nil {
+			actions.finished()
+		}
 	}()
 	return started, nil
 }
