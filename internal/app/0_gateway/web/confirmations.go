@@ -46,7 +46,8 @@ type waitingConfirmation struct {
 func (confirmations *Confirmations) Confirm(ctx context.Context, asked ports.Confirmation) (confirmed bool, err error) {
 	confirmations.mutex.Lock()
 	confirmations.counter++
-	waiting := &waitingConfirmation{Identifier: strconv.Itoa(confirmations.counter), Confirmation: asked, Since: time.Now(), answer: make(chan bool, 1)}
+	asked.Asked = time.Now()
+	waiting := &waitingConfirmation{Identifier: strconv.Itoa(confirmations.counter), Confirmation: asked, Since: asked.Asked, answer: make(chan bool, 1)}
 	confirmations.waiting = append(confirmations.waiting, waiting)
 	confirmations.mutex.Unlock()
 	if confirmations.Asked != nil {
@@ -86,6 +87,15 @@ func (confirmations *Confirmations) take(identifier string) *waitingConfirmation
 }
 
 // list is every question waiting, oldest first.
+// Waiting are the confirmations asked and not answered yet (D63).
+func (confirmations *Confirmations) Waiting() []ports.Confirmation {
+	var waiting []ports.Confirmation
+	for _, listed := range confirmations.list() {
+		waiting = append(waiting, listed.Confirmation)
+	}
+	return waiting
+}
+
 func (confirmations *Confirmations) list() []waitingConfirmation {
 	if confirmations == nil {
 		return nil

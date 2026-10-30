@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
@@ -124,6 +125,10 @@ func deviceFlow(ctx context.Context, orchestrator Orchestrator, holder ports.Loc
 					}
 				}
 				err := services.Credentials.KeepLogin(token)
+				if err == nil {
+					// a refused token the check found is replaced
+					err = services.Findings.Drop(machine.FindingLoggedOut, token.Login)
+				}
 				release(err)
 				return err
 			},

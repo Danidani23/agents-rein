@@ -53,7 +53,7 @@ func projectsPage(orchestrator orchestration.Orchestrator, version string, actio
 		}
 		var record orchestration.ProjectSummary
 		for _, project := range description.Projects {
-			target := carry(view.query, "org", "user")
+			target := carry(view.query, "org", "account")
 			target.Set("project", project.Slug)
 			entry := choice{Label: project.Name, Link: link("/projects", target), Chosen: project.Slug == chosen}
 			if len(clonesHere[addressOfProject(description.Slug, project.Slug)]) > 0 {

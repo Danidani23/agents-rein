@@ -5,29 +5,36 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 )
 
 // frame is what every page shows around its content: its title, its entry
-// in the menu, the version, and the two menus of the top bar, the
-// organisation and the login the page is seen as. The choice travels in
-// the address as org and user and changes only what is shown, never the
-// active organisation or the login that acts.
+// in the menu, the version, how many things need you, and the two menus of
+// the top bar, the organisation and the account the page is narrowed to,
+// every account at first (D62). The choice travels in the address as org
+// and account and changes only what is shown, never the active
+// organisation or the account that acts.
 type frame struct {
 	Title   string
 	Current string
 	Version string
-	// MachineLink, ProjectsLink and AccountsLink are the menu's entries, the
-	// choice carried.
+	// MachineLink, ProjectsLink, AccountsLink and NotificationsLink are the
+	// menu's entries, the choice carried.
 	MachineLink         string
 	ProjectsLink        string
 	AccountsLink        string
+	NotificationsLink   string
 	OrganizationChoices []choice
 	ChosenOrganization  string
-	UserChoices         []choice
-	ChosenUser          string
+	// AccountChoices are every account and each one, ChosenAccount the one
+	// chosen, "" for every account.
+	AccountChoices []choice
+	ChosenAccount  string
+	// Notifications counts what needs you, on every account (D63).
+	Notifications int
 	// Problem says why the address asks for something this machine does
 	// not have.
 	Problem string
@@ -38,8 +45,9 @@ type frame struct {
 	// InWindow is set in the app's window, Waiting the questions there.
 	InWindow bool
 	Waiting  int
-	// organization is the chosen organisation, userLogin the chosen login,
-	// query the address's own.
+	// organization is the chosen organisation, userLogin the login whose
+	// user level the Projects page resolves, the chosen account or the one
+	// the organisation acts with; query is the address's own.
 	organization machine.OrganizationRef
 	userLogin    string
 	query        url.Values
@@ -78,8 +86,7 @@ var templateFunctions = template.FuncMap{
 }
 
 // frameOf reads the choice from the request: the organisation named, or
-// the active one; the login named, or the one that acts on the
-// organisation.
+// the active one; the account named, or every account.
 func frameOf(request *http.Request, report orchestration.StatusReport, version string, title string, current string, actions *runner) frame {
 	query := request.URL.Query()
 	shown := frame{Title: title, Current: current, Version: version, query: query, InWindow: actions.confirmations != nil, Waiting: len(actions.confirmations.list())}
@@ -87,10 +94,13 @@ func frameOf(request *http.Request, report orchestration.StatusReport, version s
 	if latest != nil {
 		shown.RunName, shown.RunActive = latest.Name, !latest.isFinished()
 	}
-	carried := carry(query, "org", "user")
+	notifications := orchestration.NotificationsOf(report, actions.confirmations.Waiting())
+	shown.Notifications = len(notifications)
+	carried := carry(query, "org", "account")
 	shown.MachineLink = link("/", carried)
 	shown.ProjectsLink = link("/projects", carried)
 	shown.AccountsLink = link("/accounts", carried)
+	shown.NotificationsLink = link("/notifications", carried)
 	named := query.Get("org")
 	for _, organization := range report.Organizations {
 		if organization.Slug == named || (named == "" && organization.Slug == report.Active) {
@@ -102,24 +112,40 @@ func frameOf(request *http.Request, report orchestration.StatusReport, version s
 	}
 	shown.ChosenOrganization = shown.organization.Slug
 	for _, organization := range report.Organizations {
-		target := carry(query, "user")
+		target := carry(query, "account")
 		target.Set("org", organization.Slug)
 		shown.OrganizationChoices = append(shown.OrganizationChoices, choice{Label: organization.Slug, Link: link(request.URL.Path, target), Chosen: organization.Slug == shown.ChosenOrganization})
 	}
-	shown.userLogin = query.Get("user")
+	shown.ChosenAccount = query.Get("account")
+	if shown.ChosenAccount != "" && !slices.Contains(report.Logins, shown.ChosenAccount) {
+		shown.Problem = shown.ChosenAccount + " is not an account on this machine"
+	}
+	shown.userLogin = shown.ChosenAccount
 	if shown.userLogin == "" {
-		shown.userLogin = shown.organization.Login
+		shown.userLogin = orchestration.ActingAccount(shown.organization, report.Accounts)
 	}
-	if query.Get("user") != "" && !slices.Contains(report.Logins, shown.userLogin) {
-		shown.Problem = shown.userLogin + " is not an account on this machine"
+	if len(report.Logins) > 0 {
+		every := carry(query, "org", "project")
+		shown.AccountChoices = append(shown.AccountChoices, choice{Label: "All accounts", Link: link(request.URL.Path, every), Note: noteOf(len(notifications)), Chosen: shown.ChosenAccount == ""})
 	}
-	shown.ChosenUser = shown.userLogin
 	for _, login := range report.Logins {
 		target := carry(query, "org", "project")
-		target.Set("user", login)
-		shown.UserChoices = append(shown.UserChoices, choice{Label: login, Link: link(request.URL.Path, target), Chosen: login == shown.ChosenUser})
+		target.Set("account", login)
+		shown.AccountChoices = append(shown.AccountChoices, choice{Label: login, Link: link(request.URL.Path, target), Note: noteOf(len(orchestration.ForAccount(notifications, login))), Chosen: login == shown.ChosenAccount})
 	}
 	return shown
+}
+
+// noteOf is the note a menu entry shows for what needs you, none for
+// nothing.
+func noteOf(count int) string {
+	switch count {
+	case 0:
+		return ""
+	case 1:
+		return "1 needs you"
+	}
+	return strconv.Itoa(count) + " need you"
 }
 
 // carry keeps the named values of the address that are set.

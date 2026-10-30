@@ -82,6 +82,8 @@ const (
 	FindingSynced = "synced"
 	// FindingFailed is an automatic sync that failed.
 	FindingFailed = "failed"
+	// FindingLoggedOut is an account whose token the host refuses (D63).
+	FindingLoggedOut = "logged-out"
 )
 
 // Finding is one thing the check found: its kind, what it is about, a

@@ -15,17 +15,19 @@ import (
 
 func newStatusCommand(environment *commandEnvironment) *cobra.Command {
 	var directory string
+	var account string
 	command := &cobra.Command{
 		Use:   "status",
 		Short: "Show the project you are in, then what rein has set up on this machine",
 		Long: "status starts with the initialised project the folder is in: its address and team, its\n" +
 			"labels, the agent sync writes for, its settings counted by kind, how many characters load\n" +
 			"into every session and into the skill listing, what sync wrote, and its proposals. Then\n" +
-			"the machine: the GitHub accounts logged in, which are your identities, the supported\n" +
-			"agents found, the files rein placed into the agent's home; the connected organisations\n" +
-			"with the active one marked; the other project clones; the imports. It changes nothing and\n" +
-			"runs without a login: a machine without one is reported, not refused.",
-		Example: "  rein status\n  rein status --path services/shop",
+			"the machine: the accounts, which are your identities, the supported agents found, the\n" +
+			"files rein placed into the agent's home; the connected organisations with the active one\n" +
+			"marked; the other project clones; the imports. --account shows one account's\n" +
+			"organisations and projects alone (D62). It changes nothing and runs without an account:\n" +
+			"a machine without one is reported, not refused.",
+		Example: "  rein status\n  rein status --path services/shop\n  rein status --account Danidani23",
 		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
 			orchestrator, err := environment.orchestrate()
@@ -40,6 +42,7 @@ func newStatusCommand(environment *commandEnvironment) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			report = orchestration.FilterByAccount(report, account)
 			here, found, err := orchestrator.ProjectHere(folder)
 			if err != nil {
 				return err
@@ -50,6 +53,7 @@ func newStatusCommand(environment *commandEnvironment) *cobra.Command {
 		},
 	}
 	command.Flags().StringVar(&directory, "path", ".", "the folder whose project comes first")
+	command.Flags().StringVar(&account, "account", "", "show one account's organisations and projects (default: every account)")
 	return command
 }
 

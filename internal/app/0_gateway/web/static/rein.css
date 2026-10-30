@@ -13,6 +13,8 @@
   --code-background: #f0f0f3;
   --done: #18794e;
   --failed: #ce2c31;
+  --badge: #ce2c31;
+  --badge-text: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -29,6 +31,8 @@
     --code-background: #212225;
     --done: #3dd68c;
     --failed: #ff9592;
+    --badge: #e5484d;
+    --badge-text: #ffffff;
   }
 }
 
@@ -528,6 +532,20 @@ button.secondary,
   border-radius: 50%;
   background: var(--accent);
   animation: pulse 1.2s ease-in-out infinite;
+}
+
+/* the red count of what needs you (D63) */
+.count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--badge);
+  color: var(--badge-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
 }
 
 @keyframes pulse {

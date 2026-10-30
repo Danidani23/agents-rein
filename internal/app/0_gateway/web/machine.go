@@ -25,7 +25,8 @@ func machinePage(orchestrator orchestration.Orchestrator, version string, action
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		view := machineViewOf(report, frameOf(request, report, version, "This machine", "machine", actions))
+		shown := frameOf(request, report, version, "This machine", "machine", actions)
+		view := machineViewOf(orchestration.FilterByAccount(report, shown.ChosenAccount), shown)
 		record, err := orchestrator.Findings.Load()
 		if err != nil {
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
@@ -155,7 +156,7 @@ func machineViewOf(report orchestration.StatusReport, shown frame) machineView {
 			organization = clone.Organization
 		}
 		project := clone.Address[strings.LastIndex(clone.Address, ".")+1:]
-		target := carry(shown.query, "user")
+		target := carry(shown.query, "account")
 		target.Set("org", organization)
 		target.Set("project", project)
 		row := projectRow{Project: project, Link: link("/projects", target), Organization: organization, Folder: shortPath(clone.ClonePath), SyncedFiles: clone.Inserts, EditedByHand: clone.Modified, Missing: clone.Missing, Snapshot: clone.Snapshot}

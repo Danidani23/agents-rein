@@ -1,0 +1,17 @@
+{{define "content"}}
+<section>
+  {{if .Notifications}}
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>What</th><th>Account</th><th>About</th><th></th><th>Since</th></tr></thead>
+      <tbody>
+      {{range .Notifications}}<tr><td class="nowrap warning">{{.Kind}}</td><td>{{if .Account}}{{.Account}}{{else}}<span class="muted">this machine</span>{{end}}</td><td><code>{{.Subject}}</code></td><td>{{if .Link}}<a href="{{.Link}}">{{.Detail}}</a>{{else}}{{.Detail}}{{end}}</td><td class="nowrap">{{.Since}}</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">Nothing needs you{{if .ChosenAccount}} on {{.ChosenAccount}}{{end}}: every account is logged in, nothing waits for a confirmation, this rein is the latest one rein knows of, and the check found nothing open.</p>
+  {{end}}
+</section>
+{{end}}

@@ -434,6 +434,41 @@ func TestAccount(t *testing.T) {
 	})
 }
 
+func TestNotificationsAndTheAccountFilter(t *testing.T) {
+	t.Run("what needs you is listed with its account, and narrowed to one", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.seedConnectedOrganization(t, 0)
+		fixture.state.Current.Organizations[0].Login = "Danidani23"
+		fixture.state.Current.Accounts = fake.Accounts("Danidani23", "octocat")
+		code, out, _ := fixture.run("notifications")
+		if code != ExitWorked || !strings.Contains(out, "1 thing needs you\n  logged-out  octocat  octocat: no token in the keychain; log in again\n") {
+			t.Fatalf("code %d out %q", code, out)
+		}
+		_, out, _ = fixture.run("notifications", "--account", "Danidani23")
+		if out != "nothing needs you\n" {
+			t.Fatalf("narrowed %q", out)
+		}
+	})
+	t.Run("status and org list show one account's organisations", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.seedConnectedOrganization(t, 1)
+		fixture.state.Current.Organizations[0].Login = "Danidani23"
+		fixture.state.Current.Accounts = fake.Accounts("Danidani23", "octocat")
+		_, out, _ := fixture.run("org", "list")
+		if out != "* acme  r1  Danidani23\n" {
+			t.Fatalf("org list %q", out)
+		}
+		_, out, _ = fixture.run("org", "list", "--account", "octocat")
+		if !strings.Contains(out, "no organisations connected") {
+			t.Fatalf("narrowed org list %q", out)
+		}
+		_, out, _ = fixture.run("status", "--account", "octocat")
+		if strings.Contains(out, "acme") || !strings.Contains(out, "  accounts     octocat (logged out)") {
+			t.Fatalf("narrowed status %q", out)
+		}
+	})
+}
+
 func TestKey(t *testing.T) {
 	fixture := newHarness(t)
 	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")

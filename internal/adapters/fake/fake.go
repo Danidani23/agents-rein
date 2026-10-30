@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -35,7 +36,9 @@ type Host struct {
 	PullRequests      []ports.PullRequest
 	FailPullRequest   bool
 	Refreshed         int
-	polls             int
+	// Refused are the access tokens the host answers with a 401.
+	Refused []string
+	polls   int
 }
 
 // Name is github, which the fake stands in for.
@@ -81,8 +84,8 @@ func (host *Host) RefreshToken(token ports.Token) (ports.Token, error) {
 
 // Identity is the account a token of this host acts as.
 func (host *Host) Identity(accessToken string) (ports.Identity, error) {
-	if accessToken == "" {
-		return ports.Identity{}, errors.New("GitHub answered 401: Bad credentials")
+	if accessToken == "" || slices.Contains(host.Refused, accessToken) {
+		return ports.Identity{}, fmt.Errorf("GitHub answered 401: Bad credentials: %w", ports.ErrTokenRefused)
 	}
 	login := strings.TrimPrefix(strings.TrimPrefix(accessToken, "renewed-"), "token-of-")
 	return ports.Identity{Login: login, Slug: strings.ToLower(login)}, nil
@@ -858,6 +861,11 @@ func (confirmer *Confirmer) Confirm(ctx context.Context, asked ports.Confirmatio
 		}
 	}
 	return confirmer.Confirmed, nil
+}
+
+// Waiting is every question asked; the fake keeps no answers.
+func (confirmer *Confirmer) Waiting() []ports.Confirmation {
+	return confirmer.Questions()
 }
 
 // Questions is what it was asked so far.

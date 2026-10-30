@@ -60,9 +60,10 @@ func newOrgConnectCommand(environment *commandEnvironment) *cobra.Command {
 }
 
 func newOrgListCommand(environment *commandEnvironment) *cobra.Command {
-	return &cobra.Command{
+	var account string
+	command := &cobra.Command{
 		Use:   "list",
-		Short: "List the connected organisations; the active one is marked",
+		Short: "List the connected organisations, each with the account it acts with; the active one is marked",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, arguments []string) error {
 			// a read never waits for the machine lock (R1, D56)
@@ -74,24 +75,27 @@ func newOrgListCommand(environment *commandEnvironment) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			organizations, active, err := orchestrator.Organizations.List()
+			report, err := orchestrator.Status()
 			if err != nil {
 				return err
 			}
-			if len(organizations) == 0 {
+			report = orchestration.FilterByAccount(report, account)
+			if len(report.Organizations) == 0 {
 				fmt.Fprintf(environment.out, "no organisations connected; run rein org connect <remote>\n")
 				return nil
 			}
-			for _, ref := range organizations {
+			for _, ref := range report.Organizations {
 				marker := " "
-				if ref.Slug == active {
+				if ref.Slug == report.Active {
 					marker = "*"
 				}
-				fmt.Fprintf(environment.out, "%s %s  %s\n", marker, ref.Slug, ref.Remote)
+				fmt.Fprintf(environment.out, "%s %s  %s  %s\n", marker, ref.Slug, ref.Remote, orchestration.ActingAccount(ref, report.Accounts))
 			}
 			return nil
 		},
 	}
+	command.Flags().StringVar(&account, "account", "", "list one account's organisations (default: every account)")
+	return command
 }
 
 func newOrgUseCommand(environment *commandEnvironment) *cobra.Command {

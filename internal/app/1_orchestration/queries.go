@@ -17,6 +17,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/2_services/proposalfiles"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/resolve"
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 // PlacementStatus is one placement and whether its target still exists.
@@ -54,6 +55,29 @@ type StatusReport struct {
 	Imports       []machine.Import
 	// Pending are the proposals waiting in the clones and the home.
 	Pending []PendingProposal
+	// Findings are what the check last found; Release is a release of rein
+	// newer than Version, this one, that the last look at the releases
+	// found, "" when none (D63).
+	Findings []machine.Finding
+	Release  string
+	Version  string
+}
+
+// NotificationsRequest is what the list of what needs you is read for:
+// Account narrows it to one account's and the machine's own; Waiting are
+// the confirmations the app's window holds, which only the app knows.
+type NotificationsRequest struct {
+	Account string
+	Waiting []ports.Confirmation
+}
+
+// Notifications is what needs you on this machine (D63), changing nothing.
+func (orchestrator Orchestrator) Notifications(request NotificationsRequest) ([]Notification, error) {
+	report, err := orchestrator.Status()
+	if err != nil {
+		return nil, err
+	}
+	return ForAccount(NotificationsOf(report, request.Waiting), request.Account), nil
 }
 
 // AccountStatus is one account of this machine: whether it is logged in,
@@ -69,7 +93,7 @@ type AccountStatus struct {
 // login: a machine without one is reported, not refused.
 func (orchestrator Orchestrator) Status() (StatusReport, error) {
 	services := orchestrator.Services
-	report := StatusReport{Home: services.Home, Agents: services.Placements.InstalledAgents()}
+	report := StatusReport{Home: services.Home, Agents: services.Placements.InstalledAgents(), Version: services.ReinVersion}
 	logins, err := services.Credentials.Logins()
 	if err != nil {
 		return StatusReport{}, err
@@ -107,6 +131,15 @@ func (orchestrator Orchestrator) Status() (StatusReport, error) {
 			}
 		}
 		report.Accounts = append(report.Accounts, status)
+	}
+	record, err := services.Findings.Load()
+	if err != nil {
+		return StatusReport{}, err
+	}
+	report.Findings = record.Findings
+	checked, found := services.Updates.Cached()
+	if found && checked.Newer {
+		report.Release = checked.Latest
 	}
 	report.ProjectClones, err = services.Organizations.ProjectClones()
 	if err != nil {

@@ -2515,10 +2515,27 @@ at login, checked by you in the app.
   on a scratch home whose `state.yaml` of version 1 moved into the store as an account, then
   logout, list, status and remove. Not checked: the device flow against GitHub and the
   Accounts page in the window, which you accepted on 2026-10-30.
-- 🟢 **P7.3 — Notifications.** [PENDING] The query of what needs you (D63), the Notifications
-  page and `rein notifications`, both filtered by `--account` or the page's account choice;
-  the check finds an account whose token GitHub refuses and a new release of rein. The
-  top bar's User choice becomes Account, with every account as its first entry (D62).
+- ✅ **P7.3 — Notifications.** [EXECUTED] The query of what needs you (D63), the
+  Notifications page and `rein notifications`, both filtered by `--account` or the page's
+  account choice; the check finds an account whose token GitHub refuses and a new release of
+  rein. The top bar's User choice becomes Account, with every account as its first entry
+  (D62).
+
+  Built 2026-10-30, accepted by you on 2026-10-30. One rule makes the list for both sides,
+  `orchestration.NotificationsOf`, and one narrows it, `ForAccount`; `FilterByAccount` narrows
+  the status to one account for `rein status --account`, `org list --account` and This
+  machine. The status now carries the check's findings and a newer release from the daily
+  look at the releases rein already kept. When the check asks the organisations it also asks
+  GitHub whose each token is; a 401 is `ports.ErrTokenRefused` and becomes a logged-out
+  finding until a login of that account drops it (`findings.Drop`). A confirmation's account
+  is the one of the clone its folder is in, and the Confirmer port lists the ones waiting.
+  Deviations: the top bar's Organisation choice still lists every organisation and the
+  Account choice still picks the user level Projects resolves, so a project can be seen as
+  another account, as before; an automatic sync done is told once and not listed, since it
+  needs nothing; a release in the window links nowhere, since the window has no Update until
+  P6.5. One run of the gate hung for ten minutes in the architecture test, which passed alone
+  in half a second and in the next full run; not reproduced since. Checked here: the gate and
+  the tests of each layer. Not checked: the page in the window, which you accepted on 2026-10-30.
 - 🟢 **P7.4 — The red count.** [PENDING] In the menu bar beside the icon, and in the window's
   menu beside Notifications, refreshed after the check, a confirmation, and each command and
   action (D63).

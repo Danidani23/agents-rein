@@ -1,6 +1,7 @@
 package orchestration
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 // CheckRequest is one run of the check. AskOrganizations asks each
@@ -32,7 +34,8 @@ const syncedFor = time.Hour
 
 // Check compares what sync wrote into each clone, and what rein placed in
 // the agents' homes, with what is there; asks each organisation whether
-// its main moved, when asked to; syncs the clones of a moved organisation
+// its main moved, when asked to, and GitHub whether each account's token
+// still works, and refreshes the daily look at rein's releases; syncs the clones of a moved organisation
 // that are set to automatic sync, under the machine lock its caller holds;
 // and keeps what it found, so each finding is told once (P5.1, D50). A
 // clone of a moved organisation that is not set to automatic sync is
@@ -159,6 +162,40 @@ func (orchestrator Orchestrator) Check(request CheckRequest) (CheckResult, error
 						}
 						syncedNow[clone.ClonePath] = true
 						found = append(found, machine.Finding{Kind: machine.FindingSynced, Subject: clone.ClonePath, Detail: fmt.Sprintf("synced with what %s changed, at %s", organization.Slug, services.Clock().Format("15:04")), Page: page})
+					}
+				}
+				return nil
+			},
+		},
+		{
+			Name: "asking GitHub whether each account's token works",
+			Do: func() error {
+				if !request.AskOrganizations {
+					for _, finding := range before.Findings {
+						if finding.Kind == machine.FindingLoggedOut {
+							found = append(found, finding)
+						}
+					}
+					return nil
+				}
+				// a newer release of rein is a notification (D63); the look is made once a day
+				_, _ = services.Updates.Check()
+				accounts, err := services.Credentials.Accounts()
+				if err != nil {
+					return err
+				}
+				for _, account := range accounts {
+					loggedIn, _, err := services.Credentials.Standing(account.Login)
+					if err != nil || !loggedIn {
+						continue
+					}
+					accessToken, err := services.Credentials.AccessToken(account.Login)
+					if err != nil {
+						continue
+					}
+					_, err = services.Credentials.Host.Identity(accessToken)
+					if errors.Is(err, ports.ErrTokenRefused) {
+						found = append(found, machine.Finding{Kind: machine.FindingLoggedOut, Subject: account.Login, Detail: "GitHub refuses its token; log in again", Page: "/accounts"})
 					}
 				}
 				return nil

@@ -172,6 +172,10 @@ func routesOf(orchestrator orchestration.Orchestrator, version string, interrupt
 	if err != nil {
 		return nil, nil, err
 	}
+	notificationsTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/notifications.html")
+	if err != nil {
+		return nil, nil, err
+	}
 	routes := http.NewServeMux()
 	routes.Handle("GET /static/", http.FileServerFS(assets))
 	actions := &runner{interrupt: interrupt, confirmations: confirmations}
@@ -186,6 +190,7 @@ func routesOf(orchestrator orchestration.Orchestrator, version string, interrupt
 	routes.Handle("GET /{$}", machinePage(orchestrator, version, actions, machineTemplate))
 	routes.Handle("GET /projects", projectsPage(orchestrator, version, actions, projectsTemplate))
 	routes.Handle("GET /accounts", accountsPage(orchestrator, version, actions, accountsTemplate))
+	routes.Handle("GET /notifications", notificationsPage(orchestrator, version, actions, notificationsTemplate))
 	routes.Handle("GET /actions/account-add", accountAddPreview(orchestrator, version, actions, actionTemplate))
 	routes.Handle("POST /actions/account-add", accountAddAction(orchestrator, version, actions, actionTemplate))
 	routes.Handle("GET /actions/account-remove", accountRemovePreview(orchestrator, version, actions, actionTemplate))

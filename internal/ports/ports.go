@@ -6,6 +6,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -71,6 +72,10 @@ type DeviceCode struct {
 type RemoteAccess struct {
 	Login string
 }
+
+// ErrTokenRefused is what the host's refusal of a token matches: the
+// developer revoked it, or the app's authorisation, on the host (D63).
+var ErrTokenRefused = errors.New("the host refuses the token")
 
 // Host is the forge that holds org repositories and identities, reached
 // through its API with a token of the app (D25). Rein never deletes a
@@ -331,15 +336,20 @@ func (joined Joined) Unwrap() error {
 type Confirmer interface {
 	// Confirm waits until the developer confirms or declines, or ctx ends.
 	Confirm(ctx context.Context, asked Confirmation) (confirmed bool, err error)
+	// Waiting are the confirmations asked and not answered yet, each with
+	// the time it was asked.
+	Waiting() []Confirmation
 }
 
 // Confirmation is what the window asks about: the command as typed, by
-// which caller, in which folder, and what it will do.
+// which caller, in which folder, and what it will do; Asked is when, once
+// it waits.
 type Confirmation struct {
 	Command string
 	Caller  string
 	Folder  string
 	Summary []string
+	Asked   time.Time
 }
 
 // State persists the machine model.

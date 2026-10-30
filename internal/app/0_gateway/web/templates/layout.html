@@ -20,13 +20,14 @@
   </a>
   <div class="switches">
     {{if .OrganizationChoices}}{{template "switch" (switchOf "Organisation" .ChosenOrganization .OrganizationChoices)}}{{end}}
-    {{if .UserChoices}}{{template "switch" (switchOf "User" .ChosenUser .UserChoices)}}{{end}}
+    {{if .AccountChoices}}{{template "switch" (switchOf "Account" (chosenOf .AccountChoices) .AccountChoices)}}{{end}}
   </div>
 </header>
 <div class="shell">
   <nav class="menu" aria-label="Pages">
     <a href="{{.MachineLink}}"{{if eq .Current "machine"}} aria-current="page"{{end}}>This machine</a>
     <a href="{{.ProjectsLink}}"{{if eq .Current "projects"}} aria-current="page"{{end}}>Projects</a>
+    <a href="{{.NotificationsLink}}"{{if eq .Current "notifications"}} aria-current="page"{{end}}>Notifications{{if .Notifications}} <span class="count" aria-label="{{.Notifications}} need you">{{.Notifications}}</span>{{end}}</a>
     <a href="{{.AccountsLink}}"{{if eq .Current "accounts"}} aria-current="page"{{end}}>Accounts</a>
     {{if .RunName}}<a href="/run" class="run-link"{{if eq .Current "run"}} aria-current="page"{{end}}>{{if .RunActive}}<span class="dot" aria-label="running"></span>{{end}}{{.RunName}}</a>{{end}}
     {{if .InWindow}}<a href="/confirmations"{{if eq .Current "confirmations"}} aria-current="page"{{end}}>{{if .Waiting}}<span class="dot" aria-label="waiting"></span>{{end}}Confirmations{{if .Waiting}} ({{.Waiting}}){{end}}</a>{{end}}

@@ -56,6 +56,30 @@ func (service Service) Load() (Record, error) {
 	return record, err
 }
 
+// Drop removes the findings of one kind about one subject, as a login
+// does for the account whose refused token it replaced.
+func (service Service) Drop(kind string, subject string) error {
+	record, err := service.Load()
+	if err != nil {
+		return err
+	}
+	var kept []machine.Finding
+	for _, finding := range record.Findings {
+		if finding.Kind != kind || finding.Subject != subject {
+			kept = append(kept, finding)
+		}
+	}
+	if len(kept) == len(record.Findings) {
+		return nil
+	}
+	record.Findings = kept
+	content, err := yaml.Marshal(record)
+	if err != nil {
+		return err
+	}
+	return service.Documents.Write(document, content)
+}
+
 // Keep replaces the findings with found, each once, and returns the ones
 // not found before, which are told; a finding found again keeps the time
 // it was first found. organizationsAsked stamps the ask.

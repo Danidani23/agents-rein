@@ -2184,3 +2184,84 @@ func TestAccounts(t *testing.T) {
 		}
 	})
 }
+
+func TestNotifications(t *testing.T) {
+	report := StatusReport{
+		Version:       "v0.1.0",
+		Release:       "v0.2.0",
+		Accounts:      []AccountStatus{{Account: machine.Account{Host: "github", Login: "Danidani23"}, LoggedIn: true}, {Account: machine.Account{Host: "github", Login: "octocat"}, Reason: "no token in the keychain"}},
+		Organizations: []machine.OrganizationRef{{ID: "id-1", Slug: "dani", Login: "Danidani23"}, {ID: "id-2", Slug: "acme", Login: "octocat"}},
+		ProjectClones: []machine.ProjectClone{{Organization: "id-1", ClonePath: "/work/shop"}, {Organization: "id-2", ClonePath: "/work/site"}},
+		Clones:        []CloneStatus{{ProjectClone: machine.ProjectClone{Organization: "id-1", ClonePath: "/work/shop"}}, {ProjectClone: machine.ProjectClone{Organization: "id-2", ClonePath: "/work/site"}}},
+		Pending:       []PendingProposal{{Path: "/work/site/.rein/proposals/a.json"}, {Path: "/home/.rein/proposals/b.json"}},
+		Findings: []machine.Finding{
+			{Kind: machine.FindingEdited, Subject: "/work/site", Detail: ".claude/rules/go.md"},
+			{Kind: machine.FindingSynced, Subject: "/work/shop", Detail: "synced"},
+			{Kind: machine.FindingPlacement, Subject: "/home/.claude/skills/x", Detail: "what it points at is gone"},
+			{Kind: machine.FindingLoggedOut, Subject: "Danidani23", Detail: "GitHub refuses its token; log in again"},
+			{Kind: machine.FindingLoggedOut, Subject: "gone-account", Detail: "GitHub refuses its token; log in again"},
+		},
+	}
+	waiting := []ports.Confirmation{{Command: "rein reset project", Caller: "an agent", Folder: "/work/shop/web"}}
+	t.Run("what needs you comes from the accounts, the window, the releases and the check, each with its account", func(t *testing.T) {
+		var listed []string
+		for _, notification := range NotificationsOf(report, waiting) {
+			listed = append(listed, notification.Kind+" "+notification.Account+" "+notification.Subject)
+		}
+		expected := []string{"logged-out octocat octocat", "logged-out Danidani23 Danidani23", "confirmation Danidani23 rein reset project", "release  rein v0.2.0", "edited octocat /work/site", "placement  /home/.claude/skills/x"}
+		if strings.Join(listed, "\n") != strings.Join(expected, "\n") {
+			t.Fatalf("listed\n%s", strings.Join(listed, "\n"))
+		}
+	})
+	t.Run("one account's list keeps the machine's own", func(t *testing.T) {
+		var listed []string
+		for _, notification := range ForAccount(NotificationsOf(report, waiting), "octocat") {
+			listed = append(listed, notification.Kind)
+		}
+		if strings.Join(listed, ",") != "logged-out,release,edited,placement" {
+			t.Fatalf("listed %v", listed)
+		}
+	})
+	t.Run("one account's report holds its organisations, their clones and proposals, and the home's", func(t *testing.T) {
+		narrowed := FilterByAccount(report, "octocat")
+		if len(narrowed.Accounts) != 1 || len(narrowed.Organizations) != 1 || narrowed.Organizations[0].Slug != "acme" || len(narrowed.Clones) != 1 || narrowed.Clones[0].ClonePath != "/work/site" || len(narrowed.Pending) != 2 {
+			t.Fatalf("narrowed %+v", narrowed)
+		}
+		if len(FilterByAccount(report, "").Organizations) != 2 {
+			t.Fatalf("no account narrowed the report")
+		}
+	})
+	t.Run("the check finds a token GitHub refuses, and a login clears it", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.host.Refused = []string{"token-of-Danidani23"}
+		result, err := fixture.orchestrator().Check(CheckRequest{AskOrganizations: true})
+		if err != nil || len(result.Findings) != 1 || result.Findings[0].Kind != machine.FindingLoggedOut || result.Findings[0].Subject != "Danidani23" {
+			t.Fatalf("findings %+v err %v", result.Findings, err)
+		}
+		notifications, err := fixture.orchestrator().Notifications(NotificationsRequest{})
+		if err != nil || len(notifications) != 1 || notifications[0].Detail != "GitHub refuses its token; log in again" || notifications[0].Page != "/accounts" {
+			t.Fatalf("notifications %+v err %v", notifications, err)
+		}
+		// between two asks the finding holds
+		result, _ = fixture.orchestrator().Check(CheckRequest{})
+		if len(result.Findings) != 1 {
+			t.Fatalf("not carried: %+v", result.Findings)
+		}
+		// the developer authorised the app again on GitHub
+		fixture.host.Refused = nil
+		_, err = fixture.orchestrator().Login(LoginRequest{})
+		notifications, _ = fixture.orchestrator().Notifications(NotificationsRequest{})
+		if err != nil || len(notifications) != 0 {
+			t.Fatalf("after the login: %+v err %v", notifications, err)
+		}
+	})
+	t.Run("a newer release found by the daily look is a notification", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.releases.Latest_ = ports.Release{Version: "v0.2.0"}
+		_, err := fixture.orchestrator().Check(CheckRequest{AskOrganizations: true})
+		notifications, _ := fixture.orchestrator().Notifications(NotificationsRequest{})
+		if err != nil || len(notifications) != 1 || notifications[0].Kind != NotificationRelease || notifications[0].Detail != "rein v0.2.0 is out; this is v0.1.0" {
+			t.Fatalf("notifications %+v err %v", notifications, err)
+		}
+	})
+}

@@ -166,7 +166,7 @@ func TestTheProjectsPageNamesWhatItCannotShow(t *testing.T) {
 	}{
 		{"projects?project=nope", "nope is not a project of dani"},
 		{"projects?org=nope", "nope is not an organisation connected here"},
-		{"projects?user=nobody", "nobody is not an account on this machine"},
+		{"projects?account=nobody", "nobody is not an account on this machine"},
 	} {
 		t.Run(unknown.query, func(t *testing.T) {
 			page, _ := serveProjects(t, "Danidani23")

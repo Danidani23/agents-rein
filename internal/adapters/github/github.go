@@ -260,6 +260,11 @@ func (err *statusError) Error() string {
 	return fmt.Sprintf("GitHub answered %d: %s", err.code, err.message)
 }
 
+// Is makes a 401 the host's refusal of the token.
+func (err *statusError) Is(target error) bool {
+	return target == ports.ErrTokenRefused && err.code == http.StatusUnauthorized
+}
+
 // api calls the REST API with the token.
 func (client Client) api(accessToken string, method string, path string, body any, into any) error {
 	var payload io.Reader
