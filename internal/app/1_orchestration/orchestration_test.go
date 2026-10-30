@@ -2004,3 +2004,57 @@ func TestProposeLabels(t *testing.T) {
 		}
 	}
 }
+
+func TestCheck(t *testing.T) {
+	t.Run("a hand edit is found and told once, and goes once it is undone", func(t *testing.T) {
+		fixture, _, folder := withSyncableProject(t)
+		_, err := fixture.orchestrator().SyncClone(SyncRequest{Directory: folder, ReinExecutable: "/bin/rein"})
+		if err != nil {
+			t.Fatalf("sync: %v", err)
+		}
+		written, _ := os.ReadFile(filepath.Join(folder, "CLAUDE.md"))
+		_ = os.WriteFile(filepath.Join(folder, "CLAUDE.md"), []byte("mine"), 0o644)
+		result, err := fixture.orchestrator().Check(CheckRequest{})
+		if err != nil || len(result.Fresh) != 1 || result.Fresh[0].Kind != machine.FindingEdited || result.Fresh[0].Detail != "CLAUDE.md" || result.Fresh[0].Subject != folder || result.Fresh[0].Page != "/projects?org=acme&project=shop" {
+			t.Fatalf("first: %+v err %v", result, err)
+		}
+		result, err = fixture.orchestrator().Check(CheckRequest{})
+		if err != nil || len(result.Findings) != 1 || len(result.Fresh) != 0 {
+			t.Fatalf("second: %+v err %v", result, err)
+		}
+		_ = os.WriteFile(filepath.Join(folder, "CLAUDE.md"), written, 0o644)
+		result, _ = fixture.orchestrator().Check(CheckRequest{})
+		if len(result.Findings) != 0 {
+			t.Fatalf("after the edit was undone: %+v", result.Findings)
+		}
+	})
+	t.Run("a moved organisation leaves a clone behind until it syncs, and syncs one set to automatic sync", func(t *testing.T) {
+		fixture, created, folder := withSyncableProject(t)
+		_, err := fixture.orchestrator().SyncClone(SyncRequest{Directory: folder, ReinExecutable: "/bin/rein"})
+		if err != nil {
+			t.Fatalf("sync: %v", err)
+		}
+		fixture.repository.RemoteHeads = map[string]string{created.Connected.OrgClonePath: "moved"}
+		result, err := fixture.orchestrator().Check(CheckRequest{})
+		if err != nil || len(result.Findings) != 0 {
+			t.Fatalf("without asking: %+v err %v", result, err)
+		}
+		result, err = fixture.orchestrator().Check(CheckRequest{AskOrganizations: true})
+		if err != nil || len(result.Fresh) != 1 || result.Fresh[0].Kind != machine.FindingBehind || result.Fresh[0].Detail != "acme changed on GitHub since this clone's last sync" {
+			t.Fatalf("behind: %+v err %v", result, err)
+		}
+		_, err = fixture.orchestrator().Organizations.SetCloneSetting(folder, machine.SettingAutoSync, true)
+		if err != nil {
+			t.Fatalf("auto-sync: %v", err)
+		}
+		result, err = fixture.orchestrator().Check(CheckRequest{AskOrganizations: true, ReinExecutable: "/bin/rein"})
+		if err != nil || len(result.Fresh) != 1 || result.Fresh[0].Kind != machine.FindingSynced || !strings.HasPrefix(result.Fresh[0].Detail, "synced with what acme changed, at ") {
+			t.Fatalf("synced: %+v err %v", result, err)
+		}
+		for _, finding := range result.Findings {
+			if finding.Kind == machine.FindingBehind {
+				t.Fatalf("the synced clone is still behind: %+v", result.Findings)
+			}
+		}
+	})
+}

@@ -91,12 +91,19 @@
   <h2>Files sync wrote</h2>
   <div class="clone-head">
     <p class="muted"><code>{{.Folder}}</code>{{if .LastSync}} · last sync {{.LastSync}}{{end}}</p>
+    <form method="post" action="/actions/auto-sync" class="inline">
+      <input type="hidden" name="folder" value="{{.ClonePath}}">
+      <input type="hidden" name="on" value="{{if .AutoSync}}off{{else}}on{{end}}">
+      <button type="submit" class="secondary">Automatic sync: {{if .AutoSync}}on, turn it off{{else}}off, turn it on{{end}}</button>
+    </form>
     <div class="buttons">
       <a class="button" href="{{.SyncLink}}">Sync</a>
       <a class="button secondary" href="/actions/sync?all=on">Sync every clone</a>
       <a class="button secondary" href="{{.ResetLink}}">Reset project</a>
     </div>
   </div>
+  {{range .Findings}}<p class="notice">{{.}}</p>
+  {{end}}
   {{if .Files}}
   <div class="table-scroll">
     <table>

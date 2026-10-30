@@ -200,6 +200,37 @@ func TestRepositoryOverABareRemote(t *testing.T) {
 	}
 }
 
+func TestTheHeadsTellWhetherMainMoved(t *testing.T) {
+	isolate(t)
+	repository := Repository{}
+	access := ports.RemoteAccess{}
+	remote := bareRemote(t)
+	source := t.TempDir()
+	_ = os.WriteFile(filepath.Join(source, "README.md"), []byte("hello\n"), 0o644)
+	err := repository.Publish(access, source, remote, "first")
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	clone := filepath.Join(t.TempDir(), "clone")
+	err = repository.Clone(access, remote, clone)
+	if err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	head, headErr := repository.Head(clone)
+	remoteHead, remoteErr := repository.RemoteHead(access, clone)
+	if headErr != nil || remoteErr != nil || head == "" || head != remoteHead {
+		t.Fatalf("head %q %v remote %q %v", head, headErr, remoteHead, remoteErr)
+	}
+	_ = os.WriteFile(filepath.Join(source, "README.md"), []byte("moved\n"), 0o644)
+	git(t, source, "commit", "-q", "-am", "second")
+	git(t, source, "push", "-q", "origin", "main")
+	moved, err := repository.RemoteHead(access, clone)
+	still, _ := repository.Head(clone)
+	if err != nil || moved == head || still != head {
+		t.Fatalf("after a push: remote %q err %v, local %q, before %q", moved, err, still, head)
+	}
+}
+
 func TestRepositoryFailuresNameWhatRan(t *testing.T) {
 	isolate(t)
 	repository := Repository{}

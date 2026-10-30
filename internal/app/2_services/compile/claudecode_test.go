@@ -15,6 +15,57 @@ func chosen(address string, kind string, id string, enforcement string, files ma
 	return resolve.Chosen{Declaration: resolve.Declaration{Address: address, Level: level, Kind: kind, ID: id, Selectors: declaration.Selectors{Enforcement: enforcement}, Files: files}}
 }
 
+func TestTheStatusLine(t *testing.T) {
+	settingsOf := func(t *testing.T, input Input) (map[string]any, []string) {
+		t.Helper()
+		output, err := ClaudeCode(input, resolve.Result{})
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+		for _, file := range output.Files {
+			if file.Path == SettingsFile {
+				var settings map[string]any
+				_ = json.Unmarshal([]byte(file.Content), &settings)
+				return settings, output.Notes
+			}
+		}
+		t.Fatalf("no %s", SettingsFile)
+		return nil, nil
+	}
+	bare := Input{OrganizationSlug: "acme", ProjectName: "Shop", ProjectSlug: "shop", ReinExecutable: "/usr/local/bin/rein"}
+	t.Run("a clone that opted in gets rein's status line, and loses it when it opts out", func(t *testing.T) {
+		opted := bare
+		opted.StatusLine = true
+		settings, _ := settingsOf(t, opted)
+		line, _ := settings["statusLine"].(map[string]any)
+		if line["type"] != "command" || line["command"] != `"/usr/local/bin/rein" check --line` {
+			t.Fatalf("status line %+v", settings["statusLine"])
+		}
+		written, _ := json.Marshal(settings)
+		bare.ExistingSettings = string(written)
+		settings, _ = settingsOf(t, bare)
+		if _, stayed := settings["statusLine"]; stayed {
+			t.Fatalf("rein's status line stayed after opting out: %+v", settings["statusLine"])
+		}
+	})
+	t.Run("a status line of the developer's own stays either way", func(t *testing.T) {
+		own := bare
+		own.ExistingSettings = `{"statusLine":{"type":"command","command":"~/.claude/statusline.sh"}}`
+		own.StatusLine = true
+		settings, notes := settingsOf(t, own)
+		line, _ := settings["statusLine"].(map[string]any)
+		if line["command"] != "~/.claude/statusline.sh" || len(notes) != 1 || !strings.Contains(notes[0], "rein check --line") {
+			t.Fatalf("status line %+v notes %v", line, notes)
+		}
+		own.StatusLine = false
+		settings, _ = settingsOf(t, own)
+		line, _ = settings["statusLine"].(map[string]any)
+		if line["command"] != "~/.claude/statusline.sh" {
+			t.Fatalf("the developer's status line went: %+v", settings)
+		}
+	})
+}
+
 func TestClaudeCode(t *testing.T) {
 	result := resolve.Result{Chosen: []resolve.Chosen{
 		chosen("organizations.acme.rules.style", "rules", "style", "required", map[string]string{"style.md": "---\nenforcement: required\n---\nHouse style.\n"}),

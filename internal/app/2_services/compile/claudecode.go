@@ -51,7 +51,14 @@ type Input struct {
 	ReinExecutable string
 	// ExistingSettings is the current settings.local.json, or empty.
 	ExistingSettings string
+	// StatusLine has the settings run rein check --line as Claude Code's
+	// status line, which the developer turned on for the clone (P5.6).
+	StatusLine bool
 }
+
+// statusLineArguments end the command of rein's status line, so sync knows
+// its own from the developer's.
+const statusLineArguments = " check --line"
 
 // File is one generated file with the address it came from, "generated"
 // for the files rein composes itself.
@@ -374,6 +381,19 @@ func mergeSettings(input Input, sets []declaration.PermissionSet, hooks []hookEn
 		hooksValue[event] = groups
 	}
 	settings["hooks"] = hooksValue
+	// rein's status line goes in where the developer asked for it, never over
+	// one of their own, and out again where they turned it off
+	current, _ := settings["statusLine"].(map[string]any)
+	currentCommand, _ := current["command"].(string)
+	reins := current == nil || strings.HasSuffix(currentCommand, statusLineArguments)
+	switch {
+	case input.StatusLine && reins && input.ReinExecutable != "":
+		settings["statusLine"] = map[string]any{"type": "command", "command": fmt.Sprintf("%q%s", input.ReinExecutable, statusLineArguments)}
+	case input.StatusLine:
+		notes = append(notes, "the status line of your own in "+SettingsFile+" stays; it can call rein check --line for rein's line")
+	case current != nil && reins:
+		delete(settings, "statusLine")
+	}
 	// rein's own tool server is approved here, beside what the developer
 	// approved, so Claude Code starts it without its once-per-project
 	// prompt: the prompt guards against a cloned .mcp.json, and this entry

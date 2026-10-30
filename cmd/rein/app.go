@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -25,6 +26,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/0_gateway/cli"
 	"github.com/Danidani23/agents-rein/internal/app/0_gateway/owner"
 	"github.com/Danidani23/agents-rein/internal/app/0_gateway/web"
+	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/ports"
 	"github.com/Danidani23/agents-rein/internal/version"
 )
@@ -179,6 +181,7 @@ func runApp(arguments []string, errOut io.Writer) int {
 		defer close(owned)
 		ownMachine(home, identity, server, logFile)
 	}()
+	go checkEveryMinute(orchestrator, executable, notifier, logFile)
 	err = app.Run()
 	if err != nil {
 		fmt.Fprintf(logFile, "rein app: %v\n", err)
@@ -211,6 +214,51 @@ func ownMachine(home string, identity string, server *owner.Server, log io.Write
 			return
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// checkInterval is how often the app runs the check while it runs, and
+// askInterval how often it asks the organisations whether their main
+// moved (D50).
+const (
+	checkInterval = time.Minute
+	askInterval   = 5 * time.Minute
+)
+
+// checkEveryMinute runs the check while the app runs, under the machine
+// lock as any change, and tells each new finding once as a notification
+// whose Open shows the page concerned.
+func checkEveryMinute(orchestrator orchestration.Orchestrator, executable string, notifier *notifications.NotificationService, log io.Writer) {
+	asked := time.Time{}
+	for {
+		time.Sleep(checkInterval)
+		if orchestrator.Lock == nil {
+			continue
+		}
+		release, err := orchestrator.Lock.Acquire(context.Background(), ports.LockHolder{Command: "rein check", Caller: "rein's app", Folder: ""}, nil)
+		if err != nil {
+			fmt.Fprintf(log, "rein app: the check did not get its turn: %v\n", err)
+			continue
+		}
+		ask := time.Since(asked) >= askInterval
+		result, err := orchestrator.Check(orchestration.CheckRequest{AskOrganizations: ask, ReinExecutable: executable})
+		release(err)
+		if err != nil {
+			fmt.Fprintf(log, "rein app: the check failed: %v\n", err)
+			continue
+		}
+		if ask {
+			asked = time.Now()
+		}
+		for index, finding := range result.Fresh {
+			_ = notifier.SendNotificationWithActions(notifications.NotificationOptions{
+				ID:         fmt.Sprintf("finding-%d-%d", time.Now().UnixNano(), index),
+				Title:      "rein: " + finding.Kind,
+				Body:       finding.Subject + ": " + finding.Detail,
+				CategoryID: openCategory,
+				Data:       map[string]any{"page": finding.Page},
+			})
+		}
 	}
 }
 

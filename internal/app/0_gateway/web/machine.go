@@ -24,7 +24,19 @@ func machinePage(orchestrator orchestration.Orchestrator, version string, action
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		render(writer, page, machineViewOf(report, frameOf(request, report, version, "This machine", "machine", actions)), http.StatusOK)
+		view := machineViewOf(report, frameOf(request, report, version, "This machine", "machine", actions))
+		record, err := orchestrator.Findings.Load()
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !record.CheckedAt.IsZero() {
+			view.CheckedAt = record.CheckedAt.Local().Format(timeLayout)
+		}
+		for _, finding := range record.Findings {
+			view.Findings = append(view.Findings, findingRow{Kind: finding.Kind, Subject: shortPath(finding.Subject), Detail: finding.Detail, Since: finding.Since.Local().Format(timeLayout), Link: finding.Page})
+		}
+		render(writer, page, view, http.StatusOK)
 	})
 }
 
@@ -40,6 +52,18 @@ type machineView struct {
 	Projects          []projectRow
 	Pending           []pendingRow
 	Imports           []importRow
+	// CheckedAt is when the check last ran, Findings what it found.
+	CheckedAt string
+	Findings  []findingRow
+}
+
+// findingRow is one thing the check found, with the page that shows it.
+type findingRow struct {
+	Kind    string
+	Subject string
+	Detail  string
+	Since   string
+	Link    string
 }
 
 // organizationRow is one connected organisation; Link is its repository on

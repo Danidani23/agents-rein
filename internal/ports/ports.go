@@ -184,6 +184,11 @@ type Repository interface {
 	PushBranch(access RemoteAccess, directory string, branch string) error
 	// DeleteRemoteBranch deletes a branch on origin.
 	DeleteRemoteBranch(access RemoteAccess, directory string, branch string) error
+	// RemoteHead is the commit main points at on origin, read without
+	// fetching it.
+	RemoteHead(access RemoteAccess, directory string) (commit string, err error)
+	// Head is the commit the clone at directory has checked out.
+	Head(directory string) (commit string, err error)
 }
 
 // Agent is one coding agent rein writes settings for.

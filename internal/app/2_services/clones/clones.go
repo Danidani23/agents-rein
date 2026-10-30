@@ -75,6 +75,20 @@ func (service Service) Preflight() error {
 	return service.Repository.Preflight()
 }
 
+// Moved says whether main on origin is past the organisation's clone at
+// orgClonePath, asking origin without fetching.
+func (service Service) Moved(access ports.RemoteAccess, orgClonePath string) (bool, error) {
+	local, err := service.Repository.Head(orgClonePath)
+	if err != nil {
+		return false, err
+	}
+	remote, err := service.Repository.RemoteHead(access, orgClonePath)
+	if err != nil {
+		return false, err
+	}
+	return remote != "" && remote != local, nil
+}
+
 // CloneTemporary clones remote into a fresh temporary folder under the org
 // clones folder and returns it.
 func (service Service) CloneTemporary(access ports.RemoteAccess, remote string) (temporaryOrgClonePath string, err error) {

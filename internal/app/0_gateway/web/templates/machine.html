@@ -4,6 +4,26 @@
 {{end}}
 
 <section>
+  <h2>What the check found</h2>
+  {{if .Findings}}
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>What</th><th>Where</th><th></th><th>Since</th></tr></thead>
+      <tbody>
+      {{range .Findings}}<tr><td class="nowrap warning">{{.Kind}}</td><td><code>{{.Subject}}</code></td><td>{{if .Link}}<a href="{{.Link}}">{{.Detail}}</a>{{else}}{{.Detail}}{{end}}</td><td class="nowrap">{{.Since}}</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else if .CheckedAt}}
+  <p class="empty">Nothing: the clones hold what sync wrote, the agent's home what rein placed, and no organisation moved.</p>
+  {{else}}
+  <p class="empty">The check has not run yet: rein's app runs it every minute, and <code>rein check</code> runs it now.</p>
+  {{end}}
+  {{if .CheckedAt}}<p class="muted">Checked {{.CheckedAt}}.</p>{{end}}
+</section>
+
+<section>
   <h2>Logins and agents</h2>
   <dl class="facts">
     <dt>Logins</dt>

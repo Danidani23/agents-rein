@@ -1296,3 +1296,56 @@ func TestTheBrowserOpensWithTheSystemsOwnCommand(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckAndTheClonesChoices(t *testing.T) {
+	fixture := newHarness(t)
+	fixture.agent.HarnessFormat = "claude-code"
+	_, _, _ = fixture.run("org", "create", "--name", "Acme", "--yes")
+	_, _, _ = fixture.run("team", "create", "--name", "Web", "--yes")
+	_, _, _ = fixture.run("project", "create", "--name", "Shop", "--team", "web", "--label", "kind:service", "--yes")
+	folder, _ := filepath.EvalSymlinks(t.TempDir())
+	_ = fake.NewProjectClone(folder, []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, nil)
+	_, _, _ = fixture.run("init", "--path", folder, "--project", "shop", "--yes")
+	_, _, _ = fixture.run("sync", "--path", folder)
+	t.Run("check finds a hand edit, marks it new once, and the line says it in the clone", func(t *testing.T) {
+		_ = os.WriteFile(filepath.Join(folder, "CLAUDE.md"), []byte("mine"), 0o644)
+		code, out, errOut := fixture.run("check")
+		if code != ExitWorked || !strings.Contains(out, "new  edited    "+folder+": CLAUDE.md") {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+		_, out, _ = fixture.run("check")
+		if strings.Contains(out, "new") {
+			t.Fatalf("told twice: %q", out)
+		}
+		_, line, _ := fixture.runFor(Caller{Folder: filepath.Join(folder, "src"), Runner: execute.NewRunner(nil)}, "check", "--line")
+		if line != "rein: 1 of sync's files differ from what it wrote; rein status names them\n" {
+			t.Fatalf("line %q", line)
+		}
+		_, line, _ = fixture.runFor(Caller{Folder: t.TempDir(), Runner: execute.NewRunner(nil)}, "check", "--line")
+		if line != "" {
+			t.Fatalf("a folder in no clone got a line: %q", line)
+		}
+	})
+	t.Run("auto-sync and status-line turn on and off per clone, and refuse a folder that is no clone", func(t *testing.T) {
+		code, out, _ := fixture.run("auto-sync", "on", "--path", folder)
+		if code != ExitWorked || !strings.Contains(out, "auto-sync on for "+folder+": the check syncs it when its organisation changes") || !fixture.state.Current.ProjectClones[0].AutoSync {
+			t.Fatalf("on: code %d out %q", code, out)
+		}
+		_, out, _ = fixture.run("auto-sync")
+		if !strings.Contains(out, folder) || !strings.Contains(out, "on") {
+			t.Fatalf("list %q", out)
+		}
+		code, out, _ = fixture.run("status-line", "on", "--all")
+		if code != ExitWorked || !strings.Contains(out, "the next rein sync writes the status line") || !fixture.state.Current.ProjectClones[0].StatusLine {
+			t.Fatalf("status-line: code %d out %q", code, out)
+		}
+		code, _, errOut := fixture.run("auto-sync", "on", "--path", t.TempDir())
+		if code != ExitRefused || !strings.Contains(errOut, "is not a project clone rein initialised") {
+			t.Fatalf("no clone: code %d err %q", code, errOut)
+		}
+		code, _, errOut = fixture.run("auto-sync", "maybe")
+		if code != ExitRefused || !strings.Contains(errOut, "auto-sync takes on or off, not maybe") {
+			t.Fatalf("maybe: code %d err %q", code, errOut)
+		}
+	})
+}

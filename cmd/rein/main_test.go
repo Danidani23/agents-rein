@@ -370,6 +370,28 @@ func TestWiring(t *testing.T) {
 		if git("--git-dir", remote, "rev-list", "--count", "main") != "4" {
 			t.Fatalf("the binding was not pushed")
 		}
+		// the check asks the organisation's repository through real git
+		code, out, errOut = run("check")
+		if code != cli.ExitWorked || !strings.Contains(out, "nothing found") {
+			t.Fatalf("check: code %d out %q err %q", code, out, errOut)
+		}
+		elsewhere := filepath.Join(t.TempDir(), "elsewhere")
+		git("clone", "-q", remote, elsewhere)
+		// a commit that changes no declaration still moves main
+		_ = os.WriteFile(filepath.Join(elsewhere, "NOTES.md"), []byte("Arrived later.\n"), 0o644)
+		git("-C", elsewhere, "add", "NOTES.md")
+		git("-C", elsewhere, "commit", "-q", "-m", "a later note")
+		git("-C", elsewhere, "push", "-q", "origin", "main")
+		code, out, errOut = run("check")
+		if code != cli.ExitWorked || !strings.Contains(out, "new  behind    "+project+": acme changed on GitHub since this clone's last sync") {
+			t.Fatalf("check behind: code %d out %q err %q", code, out, errOut)
+		}
+		_, _, _ = run("auto-sync", "on", "--path", project)
+		code, out, errOut = run("check")
+		if code != cli.ExitWorked || !strings.Contains(out, "new  synced    "+project+": synced with what acme changed, at ") || strings.Contains(out, "behind") {
+			t.Fatalf("check synced: code %d out %q err %q", code, out, errOut)
+		}
+		_, _, _ = run("auto-sync", "off", "--path", project)
 		arguments := filepath.Join(t.TempDir(), "claude-arguments")
 		t.Setenv("REIN_TEST_CLAUDE_ARGUMENTS", arguments)
 		code, out, errOut = run("distill", "--path", project, "--model", "sonnet")

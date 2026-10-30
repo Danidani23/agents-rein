@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 )
 
 // post sends a form from the page's own origin, as the browser does.
@@ -159,6 +160,38 @@ func TestAnActionIsRefusedOutsideWhatThisMachineHas(t *testing.T) {
 		_ = response.Body.Close()
 		if response.StatusCode != http.StatusForbidden || page.actions.latest() != nil {
 			t.Fatalf("status %d", response.StatusCode)
+		}
+	})
+}
+
+func TestTheCheckInThePages(t *testing.T) {
+	t.Run("this machine shows what the check found, and the clone what concerns it", func(t *testing.T) {
+		page, orchestrator := serveProjects(t, "Danidani23")
+		client, root := signIn(t, page)
+		_, body := get(t, client, root)
+		containsAll(t, body, "What the check found", "The check has not run yet")
+		folder := cloneOf(t, orchestrator)
+		_, err := orchestrator.Findings.Keep([]machine.Finding{{Kind: machine.FindingBehind, Subject: folder, Detail: "dani changed on GitHub since this clone's last sync", Page: "/projects?org=dani&project=shop"}}, true)
+		if err != nil {
+			t.Fatalf("keep: %v", err)
+		}
+		_, body = get(t, client, root)
+		containsAll(t, body, "behind", `<a href="/projects?org=dani&amp;project=shop">dani changed on GitHub since this clone&#39;s last sync</a>`, "Checked ")
+		_, body = get(t, client, root+"projects?org=dani&project=shop")
+		containsAll(t, body, `<p class="notice">dani changed on GitHub since this clone&#39;s last sync</p>`, "Automatic sync: off, turn it on")
+	})
+	t.Run("the switch turns a clone's automatic sync on and leads back", func(t *testing.T) {
+		page, orchestrator := serveProjects(t, "Danidani23")
+		client, root := signIn(t, page)
+		folder := cloneOf(t, orchestrator)
+		response, body := post(t, client, root, "actions/auto-sync", url.Values{"folder": {folder}, "on": {"on"}})
+		clones, _ := orchestrator.Organizations.ProjectClones()
+		if response.StatusCode != http.StatusSeeOther || !clones[0].AutoSync {
+			t.Fatalf("status %d body %q clones %+v", response.StatusCode, body, clones)
+		}
+		response, _ = post(t, client, root, "actions/auto-sync", url.Values{"folder": {t.TempDir()}, "on": {"on"}})
+		if response.StatusCode != http.StatusNotFound {
+			t.Fatalf("a folder that is no clone: status %d", response.StatusCode)
 		}
 	})
 }

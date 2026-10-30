@@ -47,7 +47,52 @@ type ProjectClone struct {
 	Fingerprint   string    `yaml:"fingerprint,omitempty"`
 	LastSync      string    `yaml:"last_sync,omitempty"`
 	InitializedAt time.Time `yaml:"initialized_at,omitempty"`
+	// AutoSync has the app's check sync the clone when its organisation
+	// changed (D48); StatusLine has sync write the check's line into
+	// Claude Code's status line there (P5.6). Both are the developer's
+	// choice, off until turned on.
+	AutoSync   bool `yaml:"auto_sync,omitempty"`
+	StatusLine bool `yaml:"status_line,omitempty"`
 }
+
+// The kinds of finding of the check (P5.1).
+const (
+	// FindingEdited is a file sync wrote that was edited by hand since.
+	FindingEdited = "edited"
+	// FindingMissing is a file sync wrote that is gone.
+	FindingMissing = "missing"
+	// FindingPlacement is a link rein made in an agent's home whose target
+	// is gone.
+	FindingPlacement = "placement"
+	// FindingBehind is a clone whose organisation changed since its last
+	// sync.
+	FindingBehind = "behind"
+	// FindingSynced is a clone the check synced because its organisation
+	// changed and it is set to automatic sync.
+	FindingSynced = "synced"
+	// FindingFailed is an automatic sync that failed.
+	FindingFailed = "failed"
+)
+
+// Finding is one thing the check found: its kind, what it is about, a
+// clone's folder or a path, what it says, the page of rein's window that
+// shows it, and since when it holds.
+type Finding struct {
+	Kind    string    `yaml:"kind"`
+	Subject string    `yaml:"subject"`
+	Detail  string    `yaml:"detail"`
+	Page    string    `yaml:"page,omitempty"`
+	Since   time.Time `yaml:"since"`
+}
+
+// CloneSetting is one of the developer's choices for a project clone.
+type CloneSetting string
+
+// The choices a project clone has.
+const (
+	SettingAutoSync   CloneSetting = "auto-sync"
+	SettingStatusLine CloneSetting = "status-line"
+)
 
 // Import is a level unpacked on this machine by the import of 2026-10-15,
 // kept so reset can remove what it left.

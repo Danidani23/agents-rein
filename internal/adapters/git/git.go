@@ -20,11 +20,17 @@ var askpassVariables = []string{"GIT_ASKPASS", "SSH_ASKPASS", "SSH_ASKPASS_REQUI
 // the login's token (D25). A remote without a login, a local path, gets no
 // helper.
 func (repository Repository) network(access ports.RemoteAccess, directory string, arguments ...string) error {
+	_, err := repository.networkResult(access, directory, arguments...)
+	return err
+}
+
+// networkResult is network with what git printed.
+func (repository Repository) networkResult(access ports.RemoteAccess, directory string, arguments ...string) (execute.Result, error) {
 	options := execute.Options{Directory: directory, Timeout: execute.NetworkTimeout, Unset: append([]string{"GIT_CONFIG_COUNT"}, askpassVariables...)}
 	if access.Login != "" {
 		executable, err := os.Executable()
 		if err != nil {
-			return err
+			return execute.Result{}, err
 		}
 		options.Environment = []string{
 			"REIN_LOGIN=" + access.Login,
@@ -33,8 +39,7 @@ func (repository Repository) network(access ports.RemoteAccess, directory string
 			"GIT_CONFIG_KEY_1=credential.helper", "GIT_CONFIG_VALUE_1=!" + strconv.Quote(executable) + " git-credential",
 		}
 	}
-	_, err := repository.Runner.RunWith(options, "git", arguments...)
-	return err
+	return repository.Runner.RunWith(options, "git", arguments...)
 }
 
 // Repository runs git on this machine, for the caller its Runner names.
@@ -106,6 +111,26 @@ func (repository Repository) ResetToRemote(directory string) error {
 // Root is the repository's top folder.
 func (repository Repository) Root(directory string) (string, error) {
 	result, err := repository.Runner.Run(directory, "git", "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(result.Stdout), nil
+}
+
+// RemoteHead is the commit of main on origin, by ls-remote, which fetches
+// nothing.
+func (repository Repository) RemoteHead(access ports.RemoteAccess, directory string) (string, error) {
+	result, err := repository.networkResult(access, directory, "ls-remote", "origin", "refs/heads/main")
+	if err != nil {
+		return "", err
+	}
+	commit, _, _ := strings.Cut(strings.TrimSpace(result.Stdout), "\t")
+	return commit, nil
+}
+
+// Head is the commit checked out in directory.
+func (repository Repository) Head(directory string) (string, error) {
+	result, err := repository.Runner.Run(directory, "git", "rev-parse", "HEAD")
 	if err != nil {
 		return "", err
 	}

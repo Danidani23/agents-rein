@@ -15,6 +15,7 @@ import (
 
 	"github.com/Danidani23/agents-rein/internal/app/2_services/clones"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/credentials"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/findings"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/hosting"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/judge"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/ledger"
@@ -43,6 +44,7 @@ type Services struct {
 	Records       records.Service
 	WorkingCopy   workingcopy.Service
 	Ledger        ledger.Service
+	Findings      findings.Service
 	ProposalFiles proposalfiles.Service
 	Proposals     proposals.Service
 	Judge         judge.Service
@@ -81,6 +83,7 @@ func NewServices(home string, host ports.Host, repository ports.Repository, stat
 		Records:       records.Service{Repository: repository},
 		WorkingCopy:   workingcopy.Service{Repository: repository},
 		Ledger:        ledger.Service{Documents: documents, Clock: time.Now},
+		Findings:      findings.Service{Documents: documents, Clock: time.Now},
 		ProposalFiles: proposalfiles.Service{Home: home, Clock: time.Now},
 		Proposals:     proposals.Service{Repository: repository, Host: host},
 		Judge:         judge.Service{Judge: judgeBackend},

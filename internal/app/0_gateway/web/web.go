@@ -154,6 +154,7 @@ func routesOf(orchestrator orchestration.Orchestrator, version string, interrupt
 	routes.Handle("POST /actions/sync", syncAction(orchestrator, version, actions, actionTemplate))
 	routes.Handle("GET /actions/reset-project", resetPreview(orchestrator, version, actions, actionTemplate))
 	routes.Handle("POST /actions/reset-project", resetAction(orchestrator, version, actions, actionTemplate))
+	routes.Handle("POST /actions/auto-sync", autoSyncAction(orchestrator))
 	routes.Handle("GET /run", runPage(orchestrator, version, actions, runTemplate))
 	routes.Handle("GET /run/events", runEvents(actions))
 	routes.Handle("POST /run/cancel", cancelRun(actions))

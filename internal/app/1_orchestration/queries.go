@@ -3,6 +3,7 @@ package orchestration
 import (
 	"fmt"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -307,6 +308,54 @@ type ResetPlan struct {
 	ProposalsFolder string
 	// Store is rein's store, with the state, the ledger and the snapshots.
 	Store string
+}
+
+// CheckLine is one line about the clone folder is in, from what the check
+// last found, for Claude Code's status line (P5.6); "" when the folder is
+// in no clone or nothing was found for it. It changes nothing.
+func (orchestrator Orchestrator) CheckLine(folder string) (string, error) {
+	clones, err := orchestrator.Organizations.ProjectClones()
+	if err != nil {
+		return "", err
+	}
+	clonePath := ""
+	for _, clone := range clones {
+		inside := folder == clone.ClonePath || strings.HasPrefix(folder, clone.ClonePath+string(filepath.Separator))
+		if inside && len(clone.ClonePath) > len(clonePath) {
+			clonePath = clone.ClonePath
+		}
+	}
+	if clonePath == "" {
+		return "", nil
+	}
+	record, err := orchestrator.Findings.Load()
+	if err != nil {
+		return "", err
+	}
+	var said []string
+	differing := 0
+	for _, finding := range record.Findings {
+		if finding.Subject != clonePath {
+			continue
+		}
+		switch finding.Kind {
+		case machine.FindingSynced:
+			said = append(said, finding.Detail+"; /clear loads it")
+		case machine.FindingFailed:
+			said = append(said, finding.Detail)
+		case machine.FindingBehind:
+			said = append(said, finding.Detail+"; rein sync writes it")
+		case machine.FindingEdited, machine.FindingMissing:
+			differing++
+		}
+	}
+	if differing > 0 {
+		said = append(said, fmt.Sprintf("%d of sync's files differ from what it wrote; rein status names them", differing))
+	}
+	if len(said) == 0 {
+		return "", nil
+	}
+	return "rein: " + strings.Join(said, " · "), nil
 }
 
 // StoredDocument is one document of rein's store, by its name and size.

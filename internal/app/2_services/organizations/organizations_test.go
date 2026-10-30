@@ -74,4 +74,22 @@ func TestService(t *testing.T) {
 			t.Fatalf("removed %v clones %v err %v state %+v", removed, orgClonePaths, err, state.Current)
 		}
 	})
+	t.Run("a clone's settings turn on and off, and a folder that is no clone is said so", func(t *testing.T) {
+		state := fake.NewState()
+		state.Current.ProjectClones = []machine.ProjectClone{{Organization: "id-1", ClonePath: "/work/shop"}, {Organization: "id-1", ClonePath: "/work/web"}}
+		service := Service{State: state}
+		found, err := service.SetCloneSetting("/work/shop", machine.SettingAutoSync, true)
+		if err != nil || !found || !state.Current.ProjectClones[0].AutoSync || state.Current.ProjectClones[1].AutoSync {
+			t.Fatalf("auto-sync on: found %v err %v clones %+v", found, err, state.Current.ProjectClones)
+		}
+		_, _ = service.SetCloneSetting("/work/shop", machine.SettingStatusLine, true)
+		_, _ = service.SetCloneSetting("/work/shop", machine.SettingAutoSync, false)
+		if state.Current.ProjectClones[0].AutoSync || !state.Current.ProjectClones[0].StatusLine {
+			t.Fatalf("clones %+v", state.Current.ProjectClones)
+		}
+		found, err = service.SetCloneSetting("/nowhere", machine.SettingAutoSync, true)
+		if err != nil || found {
+			t.Fatalf("no clone: found %v err %v", found, err)
+		}
+	})
 }

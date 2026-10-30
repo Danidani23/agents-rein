@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
@@ -262,6 +263,43 @@ func begin(writer http.ResponseWriter, request *http.Request, actions *runner, p
 	view := refused()
 	view.Problem = problem
 	render(writer, page, view, status)
+}
+
+// autoSyncAction turns a clone's automatic sync on or off, as rein
+// auto-sync does (D48), after waiting for its turn at the machine lock as
+// any change does (D56), and leads back to the page it came from.
+func autoSyncAction(orchestrator orchestration.Orchestrator) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		folder := request.FormValue("folder")
+		switched := request.FormValue("on")
+		if switched != "on" && switched != "off" {
+			http.Error(writer, "automatic sync is on or off", http.StatusBadRequest)
+			return
+		}
+		release := func(error) {}
+		if orchestrator.Lock != nil {
+			var err error
+			release, err = orchestrator.Lock.Acquire(request.Context(), ports.LockHolder{Command: "rein auto-sync " + switched, Caller: "the page", Folder: folder}, nil)
+			if err != nil {
+				http.Error(writer, err.Error(), http.StatusConflict)
+				return
+			}
+		}
+		found, err := orchestrator.Organizations.SetCloneSetting(folder, machine.SettingAutoSync, switched == "on")
+		release(err)
+		switch {
+		case err != nil:
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+		case !found:
+			http.Error(writer, folder+" is not a project clone rein initialised on this machine", http.StatusNotFound)
+		default:
+			back := request.Referer()
+			if back == "" {
+				back = "/projects"
+			}
+			http.Redirect(writer, request, back, http.StatusSeeOther)
+		}
+	})
 }
 
 // syncCommand is the CLI's command a sync from the page does.

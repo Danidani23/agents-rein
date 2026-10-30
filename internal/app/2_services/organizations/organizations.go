@@ -118,6 +118,31 @@ func (service Service) MarkSynced(clonePath string) error {
 	return service.State.Save(state)
 }
 
+// SetCloneSetting turns a choice on or off for the clone at clonePath and
+// says whether there was such a clone.
+func (service Service) SetCloneSetting(clonePath string, setting machine.CloneSetting, on bool) (found bool, err error) {
+	state, err := service.State.Load()
+	if err != nil {
+		return false, err
+	}
+	for index := range state.ProjectClones {
+		if state.ProjectClones[index].ClonePath != clonePath {
+			continue
+		}
+		found = true
+		switch setting {
+		case machine.SettingAutoSync:
+			state.ProjectClones[index].AutoSync = on
+		case machine.SettingStatusLine:
+			state.ProjectClones[index].StatusLine = on
+		}
+	}
+	if !found {
+		return false, nil
+	}
+	return true, service.State.Save(state)
+}
+
 // UnregisterProjectClone forgets a clone: the compensation of a failed init.
 func (service Service) UnregisterProjectClone(clonePath string) error {
 	state, err := service.State.Load()

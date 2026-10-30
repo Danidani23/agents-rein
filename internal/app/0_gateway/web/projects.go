@@ -10,6 +10,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/address"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/declaration"
+	"github.com/Danidani23/agents-rein/internal/app/2_services/machine"
 	"github.com/Danidani23/agents-rein/internal/app/2_services/resolve"
 )
 
@@ -76,13 +77,24 @@ func projectsPage(orchestrator orchestration.Orchestrator, version string, actio
 			return
 		}
 		detail := detailOf(resolution, record, view.userLogin)
+		checked, err := orchestrator.Findings.Load()
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		for _, clone := range clonesHere[resolution.Address] {
 			files, err := orchestrator.SyncedFiles(clone.ClonePath)
 			if err != nil {
 				http.Error(writer, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			detail.Clones = append(detail.Clones, cloneFilesOf(clone, files, description.Slug))
+			listed := cloneFilesOf(clone, files, description.Slug)
+			for _, finding := range checked.Findings {
+				if finding.Subject == clone.ClonePath && finding.Kind != machine.FindingEdited && finding.Kind != machine.FindingMissing {
+					listed.Findings = append(listed.Findings, finding.Detail)
+				}
+			}
+			detail.Clones = append(detail.Clones, listed)
 		}
 		view.Detail = &detail
 		render(writer, page, view, http.StatusOK)
@@ -172,6 +184,11 @@ type cloneFiles struct {
 	Files     []fileRow
 	SyncLink  string
 	ResetLink string
+	// ClonePath is the folder the switch of AutoSync names; Findings what
+	// the check found of the clone beside its files.
+	ClonePath string
+	AutoSync  bool
+	Findings  []string
 }
 
 // fileRow is one file sync wrote; Changed marks one edited by hand or
@@ -304,7 +321,7 @@ func levelNameOf(level string) string {
 // cloneFilesOf is one clone's files as the page lists them, the
 // declaration each came from named within the organisation.
 func cloneFilesOf(clone orchestration.CloneStatus, files []orchestration.SyncedFile, organizationSlug string) cloneFiles {
-	listed := cloneFiles{Folder: shortPath(clone.ClonePath), LastSync: localTimeOf(clone.LastSync), SyncLink: "/actions/sync?folder=" + url.QueryEscape(clone.ClonePath), ResetLink: "/actions/reset-project?folder=" + url.QueryEscape(clone.ClonePath)}
+	listed := cloneFiles{Folder: shortPath(clone.ClonePath), LastSync: localTimeOf(clone.LastSync), SyncLink: "/actions/sync?folder=" + url.QueryEscape(clone.ClonePath), ResetLink: "/actions/reset-project?folder=" + url.QueryEscape(clone.ClonePath), ClonePath: clone.ClonePath, AutoSync: clone.AutoSync}
 	for _, file := range files {
 		listed.Files = append(listed.Files, fileRow{Path: file.Path, From: strings.TrimPrefix(file.Address, address.Organizations+"."+organizationSlug+"."), Written: file.WrittenAt.Local().Format(timeLayout), State: file.State, Changed: file.State != orchestration.SyncedAsWritten})
 	}

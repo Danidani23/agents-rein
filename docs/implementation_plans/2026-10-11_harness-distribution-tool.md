@@ -2177,7 +2177,7 @@ before the commit. Amended 2026-10-28 by D50 and D54: the check runs inside the 
 the system's scheduler, so P5 is built with the app, after P6.1 to P6.3, and the notifications
 are the app's.
 
-- 🟢 **P5.1 — One run of the check.** [PENDING] The command the scheduler starts, named when
+- ✅ **P5.1 — One run of the check.** [EXECUTED] The command the scheduler starts, named when
   the item is designed. It compares the clones' rein folders and the agent's home with the
   ledger and the placements, time and size first and a hash only for what changed; every few
   minutes it asks whether each organisation's main branch moved; it syncs the projects set to
@@ -2185,9 +2185,24 @@ are the app's.
   so each finding is told once, and prints it when run by hand. Tested over the fakes.
   Amended 2026-10-28 (D50): the app runs it every minute while it runs, and the owner keeps
   what it found; run by hand, it still prints.
-- 🟢 **P5.2 — The automatic-sync setting, from the CLI and the page.** [PENDING] Off, every
+
+  Built 2026-10-29 as `rein check`, accepted by you on 2026-10-30: the
+  `Check` workflow, the `findings` service, which keeps `check.yaml` in rein's store, and
+  `Clones.Moved`, over the new `RemoteHead` and `Head` of the repository port, `git ls-remote
+  origin refs/heads/main` against `git rev-parse HEAD`. The app runs it every minute under the
+  machine lock, asks the organisations every five, and notifies each new finding with Open.
+  Deviations: a clone of a moved organisation that is not set to automatic sync is a finding,
+  behind, until its next sync; an automatic sync stays a finding for an hour, so the status
+  line can say that `/clear` loads it; every file sync wrote is hashed at each run, rather than
+  its time and size first, since the files are few and small; the finding kinds live in the
+  `machine` library, which the gateways may name.
+- ✅ **P5.2 — The automatic-sync setting, from the CLI and the page.** [EXECUTED] Off, every
   project, or chosen projects (Q20 M1), kept in the machine's state per project clone (D48),
   which is the encrypted store from P6.2 on (D51).
+
+  Built 2026-10-29, accepted by you on 2026-10-30: `rein auto-sync [on|off]`
+  with `--path` or `--all`, and a switch per clone on the Projects page, which waits for its
+  turn at the machine lock as any change; kept as `auto_sync` on the clone in the state.
 - ⏸️ **P5.3 — Turning the check on and off.** [DEFERRED] By a command the developer runs (D49): a
   launchd agent with `StartInterval` on macOS, a systemd user timer on Linux, a Task Scheduler
   task on Windows, written and removed by rein; `rein reset machine` removes it too. Dropped
@@ -2198,15 +2213,24 @@ are the app's.
   synced and that `/clear` loads the rest in an open session, or what changed in which folder.
   Dropped 2026-10-28 by D50: the app's native notifications say the same, with a button that
   opens the page concerned (P6.3).
-- 🟢 **P5.5 — The findings in the page.** [PENDING] This machine and the Projects page show
+- ✅ **P5.5 — The findings in the page.** [EXECUTED] This machine and the Projects page show
   what the check found and since when, and the setting of P5.2.
-- 🟢 **P5.6 — The findings in Claude Code's status line.** [PENDING] Added 2026-10-28 by the
+
+  Built 2026-10-29, accepted by you on 2026-10-30: This machine lists every finding with since when
+  and a link to its page, and when the check last ran; a clone on the Projects page shows what
+  concerns it beside its files, and its switch.
+- ✅ **P5.6 — The findings in Claude Code's status line.** [EXECUTED] Added 2026-10-28 by the
   user (Q24 a, Q25 both). A command prints one line of what the check found, such as the
   organisation having changed and `/clear` loading it, for Claude Code's status line, which
   runs a command and shows its output at the foot of the session
   ([docs](https://code.claude.com/docs/en/statusline)). Two ways in: rein writes the status
   line into a clone's settings when the developer opts in, since it would replace one of
   their own; or the developer's own status line script calls the command.
+
+  Built 2026-10-29, accepted by you on 2026-10-30: `rein check --line`
+  prints one line for the clone the folder is in, from what the check last found, and takes
+  no lock; `rein status-line on` has the next sync write it as the clone's `statusLine`, never
+  over one of the developer's own, which sync names in a note, and `off` takes it out.
 - ⏸️ **P5.7 — Notifications from the open page.** [DEFERRED] Added 2026-10-28 by the user
   (Q24 a). While a tab of `rein ui` is open, it shows the check's new findings through the
   browser's notifications, which a page on 127.0.0.1 may ask for, being a secure context
@@ -3046,6 +3070,12 @@ writes is read from the next session on, not in the same one.
   to it. `task rein:check` green with `go vet -tags app`; the window's and the CLI's tests
   under the race detector. Touch ID and Windows Hello looked into with their sources, P6.8
   added for the choice.
+- (2026-10-29) P5.1, P5.2, P5.5 and P5.6 built, waiting for your check with the app: `rein
+  check`, `rein auto-sync`, `rein status-line` and `rein check --line`; the check in the app
+  every minute with notifications; the findings and the switch in the pages. `task
+  rein:check` green; tests over the fakes for the workflow, the service, the commands and the
+  pages, and an end-to-end test over real git in which a push leaves the clone behind and
+  automatic sync then syncs it.
 - (2026-10-30) P6.3 checked by you on macOS: the window, the menu bar icon and Log in through
   the window, after the fix for the white window. `task rein:check` green. Left for you: the
   commit.

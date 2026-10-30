@@ -186,7 +186,7 @@ func syncOne(orchestrator Orchestrator, clone machine.ProjectClone, request Sync
 			continue
 		}
 		synced.Agent = agent.Name()
-		input := compile.Input{OrganizationSlug: organization.Slug, ProjectName: tree.Projects[projectSlug].Name, ProjectSlug: projectSlug, Teams: context.Teams, UserSlug: context.UserSlug, ReinExecutable: request.ReinExecutable, ExistingSettings: services.WorkingCopy.ReadFile(clone.ClonePath, compile.SettingsFile)}
+		input := compile.Input{OrganizationSlug: organization.Slug, ProjectName: tree.Projects[projectSlug].Name, ProjectSlug: projectSlug, Teams: context.Teams, UserSlug: context.UserSlug, ReinExecutable: request.ReinExecutable, StatusLine: clone.StatusLine, ExistingSettings: services.WorkingCopy.ReadFile(clone.ClonePath, compile.SettingsFile)}
 		output, err := compile.ClaudeCode(input, resolution)
 		if err != nil {
 			return synced, err

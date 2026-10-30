@@ -214,6 +214,29 @@ type Repository struct {
 	Current        string
 	Deleted        []string
 	RemoteDeleted  []string
+	// RemoteHeads and Heads are the commits RemoteHead and Head answer, by
+	// clone folder; a folder not named answers "same".
+	RemoteHeads map[string]string
+	Heads       map[string]string
+}
+
+// RemoteHead is the commit RemoteHeads names for directory.
+func (repository *Repository) RemoteHead(access ports.RemoteAccess, directory string) (string, error) {
+	if repository.Fail {
+		return "", errors.New("ls-remote failed")
+	}
+	if commit, found := repository.RemoteHeads[directory]; found {
+		return commit, nil
+	}
+	return "same", nil
+}
+
+// Head is the commit Heads names for directory.
+func (repository *Repository) Head(directory string) (string, error) {
+	if commit, found := repository.Heads[directory]; found {
+		return commit, nil
+	}
+	return "same", nil
 }
 
 // originMarker is the file in a fake clone that names its remote, as
