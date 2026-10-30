@@ -54,7 +54,10 @@ type commandEnvironment struct {
 	// process's working folder.
 	folder string
 	// runner runs programs for the caller and reads its environment.
-	runner      execute.Runner
+	runner execute.Runner
+	// confirmer is the app's window, where a command that removes or
+	// overwrites waits; nil without the app.
+	confirmer   ports.Confirmer
 	orchestrate Orchestrate
 	// arguments and ctx are the command as typed and the context that ends
 	// when its caller is let go, set when it starts.
@@ -198,6 +201,47 @@ func (environment *commandEnvironment) orchestrateLocked() (orchestrator orchest
 	environment.setReleaseLock(acquired)
 	orchestrator.Progress = environment.printProgress
 	return orchestrator, release, nil
+}
+
+// confirmChange asks before a command that removes or overwrites (D53,
+// R4). Where the app is the background process, the app's window asks,
+// whatever --yes says: an agent types --yes as easily as a person, but
+// cannot answer in the window; the terminal says where it waits, and
+// Ctrl-C stops waiting. Without the app, the terminal asks question, with
+// explanation behind its help, unless yes, or there is no question to ask
+// there. Declined is a refusal: nothing changed.
+func (environment *commandEnvironment) confirmChange(summary []string, question string, explanation string, yes bool) error {
+	if environment.confirmer != nil {
+		holder := environment.lockHolder()
+		fmt.Fprintf(environment.errOut, "%s\n", environment.style().Yellow("waiting for your confirmation in rein's window; Ctrl-C stops waiting"))
+		ctx := environment.ctx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		confirmed, err := environment.confirmer.Confirm(ctx, ports.Confirmation{Command: holder.Command, Caller: holder.Caller, Folder: holder.Folder, Summary: summary})
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			return refusal.New("declined in rein's window; nothing changed")
+		}
+		return nil
+	}
+	if yes || question == "" {
+		return nil
+	}
+	prompter := environment.prompter()
+	if !prompter.CanAsk() {
+		return refusal.New("no terminal to confirm on; pass --yes")
+	}
+	confirmed, err := prompter.Confirm(question, explanation)
+	if err != nil {
+		return refusal.New(err.Error())
+	}
+	if !confirmed {
+		return refusal.New("nothing changed")
+	}
+	return nil
 }
 
 // lockHolder is the command as the machine lock tells others of it: as

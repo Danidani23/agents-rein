@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -193,35 +194,112 @@ func TestTheAppWindowServesThePagesWithoutAToken(t *testing.T) {
 	state := fake.NewState()
 	state.Current.Logins = []string{"Danidani23"}
 	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, &fake.Repository{}, state, fake.NewDocuments(), []ports.Agent{&fake.Agent{Present: true, HomePath: t.TempDir()}}, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, &fake.Keychain{}, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
-	handler, err := Window(orchestration.New(services), "v0.1.0", Interrupt{})
+	handler, err := Window(orchestration.New(services), "v0.1.0", Interrupt{}, &Confirmations{})
 	if err != nil {
 		t.Fatalf("window: %v", err)
 	}
 	request := httptest.NewRequest(http.MethodGet, "http://wails.localhost/", nil)
 	answer := httptest.NewRecorder()
 	handler.ServeHTTP(answer, request)
-	if answer.Code != http.StatusOK || !strings.Contains(answer.Body.String(), "Danidani23") {
+	if answer.Code != http.StatusOK || !strings.Contains(answer.Body.String(), "Danidani23") || !strings.Contains(answer.Body.String(), "Shown by rein's app") {
 		t.Fatalf("code %d body %q", answer.Code, answer.Body.String())
 	}
 }
 
-func TestTheAppWindowLeadsOnWithoutAnHTTPRedirect(t *testing.T) {
-	// the window's webview shows a redirect as an empty page, so Log in turned it white
+// windowOf is the app window's pages over the fake adapters, with its
+// confirmations.
+func windowOf(t *testing.T) (http.Handler, *Confirmations) {
+	t.Helper()
 	home := t.TempDir()
 	state := fake.NewState()
 	state.Current.Logins = []string{"Danidani23"}
 	services := orchestration.NewServices(home, &fake.Host{Login: "Danidani23"}, &fake.Repository{}, state, fake.NewDocuments(), []ports.Agent{&fake.Agent{Present: true, HomePath: t.TempDir()}}, &fake.Judge{Unavailable: "no judge"}, &fake.Lock{}, &fake.Keychain{}, &fake.Releases{Latest_: ports.Release{Version: "v0.1.0"}}, "v0.1.0", filepath.Join(home, "bin", "rein"))
-	handler, err := Window(orchestration.New(services), "v0.1.0", Interrupt{})
+	asked := &Confirmations{}
+	handler, err := Window(orchestration.New(services), "v0.1.0", Interrupt{}, asked)
 	if err != nil {
 		t.Fatalf("window: %v", err)
 	}
-	request := httptest.NewRequest(http.MethodPost, "http://wails.localhost/run/cancel", nil)
+	return handler, asked
+}
+
+// visit sends one request to the window's pages.
+func visit(handler http.Handler, method string, target string, form url.Values) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(method, "http://wails.localhost"+target, strings.NewReader(form.Encode()))
+	if form != nil {
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
 	answer := httptest.NewRecorder()
 	handler.ServeHTTP(answer, request)
+	return answer
+}
+
+func TestTheAppWindowLeadsOnWithoutAnHTTPRedirect(t *testing.T) {
+	// the window's webview shows a redirect as an empty page, so Log in turned it white
+	handler, _ := windowOf(t)
+	answer := visit(handler, http.MethodPost, "/run/cancel", url.Values{})
 	body := answer.Body.String()
 	if answer.Code != http.StatusOK || answer.Header().Get("Location") != "" || !strings.Contains(body, `<meta http-equiv="refresh" content="0; url=/run">`) || !strings.Contains(body, `<a href="/run">`) {
 		t.Fatalf("code %d location %q body %q", answer.Code, answer.Header().Get("Location"), body)
 	}
+}
+
+func TestTheAppWindowAsksForConfirmations(t *testing.T) {
+	asked := ports.Confirmation{Command: "rein reset project", Caller: "a program without a terminal", Folder: "/work/shop", Summary: []string{"This will put back the agent's files rein init moved out of /work/shop."}}
+	t.Run("a question shows on the page until it is confirmed or declined", func(t *testing.T) {
+		for _, decision := range []string{"confirm", "decline"} {
+			handler, confirmations := windowOf(t)
+			told := make(chan string, 1)
+			confirmations.Asked = func(identifier string, question ports.Confirmation) { told <- question.Command }
+			answers := make(chan bool, 1)
+			go func() {
+				confirmed, _ := confirmations.Confirm(context.Background(), asked)
+				answers <- confirmed
+			}()
+			if command := <-told; command != "rein reset project" {
+				t.Fatalf("told %q", command)
+			}
+			page := visit(handler, http.MethodGet, "/confirmations", nil).Body.String()
+			for _, expected := range []string{"<code>rein reset project</code>", "From a program without a terminal in <code>/work/shop</code>", "This will put back", "Confirmations (1)"} {
+				if !strings.Contains(page, expected) {
+					t.Fatalf("the page lacks %q: %s", expected, page)
+				}
+			}
+			answered := visit(handler, http.MethodPost, "/confirmations/answer", url.Values{"identifier": {"1"}, "decision": {decision}})
+			if answered.Code != http.StatusOK || !strings.Contains(answered.Body.String(), `url=/confirmations`) || <-answers != (decision == "confirm") {
+				t.Fatalf("%s: code %d", decision, answered.Code)
+			}
+			if page := visit(handler, http.MethodGet, "/confirmations", nil).Body.String(); !strings.Contains(page, "Nothing waits for your confirmation") {
+				t.Fatalf("the answered question stayed: %s", page)
+			}
+		}
+	})
+	t.Run("a caller that gives up takes its question off the page", func(t *testing.T) {
+		handler, confirmations := windowOf(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		returned := make(chan error, 1)
+		go func() {
+			_, err := confirmations.Confirm(ctx, asked)
+			returned <- err
+		}()
+		for len(confirmations.list()) == 0 {
+			time.Sleep(time.Millisecond)
+		}
+		cancel()
+		if err := <-returned; !errors.Is(err, context.Canceled) {
+			t.Fatalf("err %v", err)
+		}
+		if page := visit(handler, http.MethodGet, "/confirmations", nil).Body.String(); !strings.Contains(page, "Nothing waits") {
+			t.Fatalf("the question stayed: %s", page)
+		}
+	})
+	t.Run("rein ui in a browser has no confirmations, which an agent with its token could answer", func(t *testing.T) {
+		page := servePage(t, true)
+		client, root := signIn(t, page)
+		response, _ := get(t, client, root+"confirmations")
+		if response.StatusCode != http.StatusNotFound {
+			t.Fatalf("status %d", response.StatusCode)
+		}
+	})
 }
 
 func TestTheMachinePageShowsWhatStatusReports(t *testing.T) {

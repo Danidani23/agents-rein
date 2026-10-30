@@ -44,7 +44,7 @@ type Page struct {
 // Open listens on a free port of 127.0.0.1 and makes the token of this run.
 // version is what rein version prints; interrupt is what Cancel does.
 func Open(orchestrator orchestration.Orchestrator, version string, interrupt Interrupt) (*Page, error) {
-	routes, actions, err := routesOf(orchestrator, version, interrupt)
+	routes, actions, err := routesOf(orchestrator, version, interrupt, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -58,9 +58,10 @@ func Open(orchestrator orchestration.Orchestrator, version string, interrupt Int
 
 // Window is the pages for the app's own window, which reaches them through
 // its webview and never over a port, so no other page or machine can, and
-// no token guards them (D50).
-func Window(orchestrator orchestration.Orchestrator, version string, interrupt Interrupt) (http.Handler, error) {
-	routes, _, err := routesOf(orchestrator, version, interrupt)
+// no token guards them (D50). Only they show the confirmations commands
+// wait on (D53).
+func Window(orchestrator orchestration.Orchestrator, version string, interrupt Interrupt, confirmations *Confirmations) (http.Handler, error) {
+	routes, _, err := routesOf(orchestrator, version, interrupt, confirmations)
 	if err != nil {
 		return nil, err
 	}
@@ -117,8 +118,9 @@ func (writer *leadingOn) Unwrap() http.ResponseWriter {
 	return writer.ResponseWriter
 }
 
-// routesOf is every page and action, with the runner of the actions.
-func routesOf(orchestrator orchestration.Orchestrator, version string, interrupt Interrupt) (http.Handler, *runner, error) {
+// routesOf is every page and action, with the runner of the actions; the
+// window's routes, when confirmations is set, also the confirmations.
+func routesOf(orchestrator orchestration.Orchestrator, version string, interrupt Interrupt, confirmations *Confirmations) (http.Handler, *runner, error) {
 	machineTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/machine.html")
 	if err != nil {
 		return nil, nil, err
@@ -137,7 +139,15 @@ func routesOf(orchestrator orchestration.Orchestrator, version string, interrupt
 	}
 	routes := http.NewServeMux()
 	routes.Handle("GET /static/", http.FileServerFS(assets))
-	actions := &runner{interrupt: interrupt}
+	actions := &runner{interrupt: interrupt, confirmations: confirmations}
+	if confirmations != nil {
+		confirmationsTemplate, err := template.New("layout.html").Funcs(templateFunctions).ParseFS(assets, "templates/layout.html", "templates/confirmations.html")
+		if err != nil {
+			return nil, nil, err
+		}
+		routes.Handle("GET /confirmations", confirmationsPage(orchestrator, version, actions, confirmationsTemplate))
+		routes.Handle("POST /confirmations/answer", answerConfirmation(actions))
+	}
 	routes.Handle("GET /{$}", machinePage(orchestrator, version, actions, machineTemplate))
 	routes.Handle("GET /projects", projectsPage(orchestrator, version, actions, projectsTemplate))
 	routes.Handle("GET /actions/sync", syncPreview(orchestrator, version, actions, actionTemplate))

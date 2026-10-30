@@ -320,6 +320,23 @@ func (joined Joined) Unwrap() error {
 	return joined.Outcome
 }
 
+// Confirmer asks the developer in the app's window before a command that
+// removes or overwrites (D53, R4): an agent can type such a command, even
+// with --yes, but cannot answer there.
+type Confirmer interface {
+	// Confirm waits until the developer confirms or declines, or ctx ends.
+	Confirm(ctx context.Context, asked Confirmation) (confirmed bool, err error)
+}
+
+// Confirmation is what the window asks about: the command as typed, by
+// which caller, in which folder, and what it will do.
+type Confirmation struct {
+	Command string
+	Caller  string
+	Folder  string
+	Summary []string
+}
+
 // State persists the machine model.
 type State interface {
 	Load() (machine.State, error)

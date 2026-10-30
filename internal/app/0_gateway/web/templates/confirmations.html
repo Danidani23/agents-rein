@@ -1,0 +1,23 @@
+{{define "content"}}
+<section>
+{{if .Questions}}
+  {{range .Questions}}
+  <article class="confirmation">
+    <h2><code>{{.Command}}</code></h2>
+    <p class="lead">From {{.Caller}} in <code>{{.Folder}}</code>, waiting since {{.Since.Format "15:04:05"}}.</p>
+    {{range .Summary}}<p>{{.}}</p>
+    {{end}}
+    <form method="post" action="/confirmations/answer" class="confirm">
+      <input type="hidden" name="identifier" value="{{.Identifier}}">
+      <div class="buttons">
+        <button type="submit" name="decision" value="confirm">Confirm</button>
+        <button type="submit" name="decision" value="decline" class="secondary">Decline</button>
+      </div>
+    </form>
+  </article>
+  {{end}}
+{{else}}
+  <p class="lead">Nothing waits for your confirmation. A reset of a project or of this machine, or a sync with --force, run from a terminal or by an agent, waits here until you confirm it; the terminal says so.</p>
+{{end}}
+</section>
+{{end}}

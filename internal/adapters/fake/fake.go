@@ -804,6 +804,37 @@ func (documents *Documents) Where() string {
 	return "the test's store"
 }
 
+// Confirmer is the app's window: it answers Confirmed to every question
+// and keeps what it was asked; with Hold set it waits for Hold to close,
+// or for the caller to give up.
+type Confirmer struct {
+	Confirmed bool
+	Hold      chan struct{}
+	Asked     []ports.Confirmation
+	mutex     sync.Mutex
+}
+
+func (confirmer *Confirmer) Confirm(ctx context.Context, asked ports.Confirmation) (bool, error) {
+	confirmer.mutex.Lock()
+	confirmer.Asked = append(confirmer.Asked, asked)
+	confirmer.mutex.Unlock()
+	if confirmer.Hold != nil {
+		select {
+		case <-confirmer.Hold:
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
+	}
+	return confirmer.Confirmed, nil
+}
+
+// Questions is what it was asked so far.
+func (confirmer *Confirmer) Questions() []ports.Confirmation {
+	confirmer.mutex.Lock()
+	defer confirmer.mutex.Unlock()
+	return append([]ports.Confirmation(nil), confirmer.Asked...)
+}
+
 // Releases is a fake source of rein's releases: Latest_ is what Latest
 // returns, Files what Download returns by URL, Fail an error for both.
 type Releases struct {

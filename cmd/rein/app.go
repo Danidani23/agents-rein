@@ -25,6 +25,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/app/0_gateway/cli"
 	"github.com/Danidani23/agents-rein/internal/app/0_gateway/owner"
 	"github.com/Danidani23/agents-rein/internal/app/0_gateway/web"
+	"github.com/Danidani23/agents-rein/internal/ports"
 	"github.com/Danidani23/agents-rein/internal/version"
 )
 
@@ -69,11 +70,13 @@ func runApp(arguments []string, errOut io.Writer) int {
 		fmt.Fprintf(logFile, "rein app: %v\n", err)
 		return cli.ExitCrashed
 	}
-	pages, err := web.Window(orchestrator, version.String(), web.Interrupt{Stop: execute.Interrupt, Running: execute.Running})
+	confirmations := &web.Confirmations{}
+	pages, err := web.Window(orchestrator, version.String(), web.Interrupt{Stop: execute.Interrupt, Running: execute.Running}, confirmations)
 	if err != nil {
 		fmt.Fprintf(logFile, "rein app: %v\n", err)
 		return cli.ExitCrashed
 	}
+	appConfirmer = confirmations
 	identity := buildIdentity()
 	server := &owner.Server{
 		Identity: identity,
@@ -150,6 +153,17 @@ func runApp(arguments []string, errOut io.Writer) int {
 	menu.AddSeparator()
 	menu.Add("Quit rein").OnClick(func(*application.Context) { app.Quit() })
 	tray.SetMenu(menu)
+	// a command waiting for a confirmation shows the window, and says so where the developer is
+	confirmations.Asked = func(identifier string, asked ports.Confirmation) {
+		show("/confirmations")
+		_ = notifier.SendNotificationWithActions(notifications.NotificationOptions{
+			ID:         "confirmation-" + identifier,
+			Title:      "rein waits for your confirmation",
+			Body:       asked.Command + " in " + asked.Folder + ", from " + asked.Caller,
+			CategoryID: openCategory,
+			Data:       map[string]any{"page": "/confirmations"},
+		})
+	}
 	notifier.OnNotificationResponse(func(result notifications.NotificationResult) {
 		if result.Error != nil {
 			return

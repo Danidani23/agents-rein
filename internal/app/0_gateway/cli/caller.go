@@ -6,24 +6,27 @@ import (
 	"io"
 
 	"github.com/Danidani23/agents-rein/internal/adapters/execute"
+	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
 // Caller is who a command runs for: the streams, whether a person types at
 // a terminal, the folder relative paths start from, and the runner of its
 // programs, which carries its environment and stops on its Ctrl-C. Run
 // makes this process the caller; the background process makes one for
-// each command it is sent (D55).
+// each command it is sent (D55). Confirmer is the app's window, where the
+// app is the background process (D53).
 type Caller struct {
-	In       io.Reader
-	Out      io.Writer
-	ErrOut   io.Writer
-	Terminal bool
-	Folder   string
-	Runner   execute.Runner
+	In        io.Reader
+	Out       io.Writer
+	ErrOut    io.Writer
+	Terminal  bool
+	Folder    string
+	Runner    execute.Runner
+	Confirmer ports.Confirmer
 }
 
 func newEnvironment(caller Caller, orchestrate Orchestrate) *commandEnvironment {
-	return &commandEnvironment{in: caller.In, out: caller.Out, errOut: caller.ErrOut, terminal: caller.Terminal, folder: caller.Folder, runner: caller.Runner, orchestrate: orchestrate}
+	return &commandEnvironment{in: caller.In, out: caller.Out, errOut: caller.ErrOut, terminal: caller.Terminal, folder: caller.Folder, runner: caller.Runner, confirmer: caller.Confirmer, orchestrate: orchestrate}
 }
 
 // RunFor executes rein with arguments for a caller other than this

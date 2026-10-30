@@ -69,32 +69,25 @@ func runReset(environment *commandEnvironment, yes bool) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(environment.out, "This will:\n")
-	fmt.Fprintf(environment.out, "- put back %d initialised projects and commit the put-back in each:\n", len(plan.ProjectClones))
+	summary := []string{"This will:", fmt.Sprintf("- put back %d initialised projects and commit the put-back in each:", len(plan.ProjectClones))}
 	for _, project := range plan.ProjectClones {
-		fmt.Fprintf(environment.out, "    %s  (%s)\n", project.ClonePath, project.Address)
+		summary = append(summary, fmt.Sprintf("    %s  (%s)", project.ClonePath, project.Address))
 	}
-	fmt.Fprintf(environment.out, "- remove %d placements rein made in your agent's home; your own files are untouched\n", len(plan.Placements))
+	summary = append(summary, fmt.Sprintf("- remove %d placements rein made in your agent's home; your own files are untouched", len(plan.Placements)))
 	for _, placed := range plan.Placements {
-		fmt.Fprintf(environment.out, "    %s\n", placed.Path)
+		summary = append(summary, "    "+placed.Path)
 	}
 	if len(plan.Imports) > 0 {
-		fmt.Fprintf(environment.out, "- remove %d imports under %s\n", len(plan.Imports), plan.ImportsFolder)
+		summary = append(summary, fmt.Sprintf("- remove %d imports under %s", len(plan.Imports), plan.ImportsFolder))
 	}
-	fmt.Fprintf(environment.out, "- forget %d organisations and delete their clones under %s; the remotes stay\n", len(plan.Organizations), plan.OrgClonesFolder)
-	fmt.Fprintf(environment.out, "- remove the proposals under %s, and erase rein's store %s, with the ledger and the snapshots, and its key; your logins stay\n", plan.ProposalsFolder, plan.Store)
-	if !yes {
-		prompter := environment.prompter()
-		if !prompter.CanAsk() {
-			return refusal.New("no terminal to confirm on; pass --yes")
-		}
-		confirmed, err := prompter.Confirm("Continue?", resetExplanation)
-		if err != nil {
-			return refusal.New(err.Error())
-		}
-		if !confirmed {
-			return refusal.New("nothing changed")
-		}
+	summary = append(summary, fmt.Sprintf("- forget %d organisations and delete their clones under %s; the remotes stay", len(plan.Organizations), plan.OrgClonesFolder))
+	summary = append(summary, fmt.Sprintf("- remove the proposals under %s, and erase rein's store %s, with the ledger and the snapshots, and its key; your logins stay", plan.ProposalsFolder, plan.Store))
+	for _, line := range summary {
+		fmt.Fprintf(environment.out, "%s\n", line)
+	}
+	err = environment.confirmChange(summary, "Continue?", resetExplanation, yes)
+	if err != nil {
+		return err
 	}
 	result, err := orchestrator.ResetMachine(plan)
 	for _, project := range result.ProjectClones {

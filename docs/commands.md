@@ -73,8 +73,13 @@ background process starts it with its window closed; `REIN_APP=none` leaves it o
 serves a `rein` of its own version only: one of another version says so and names the update,
 and the app goes on. Start at login, turned on from its menu, starts it with its window closed,
 except on macOS 13 and later, whose login items start an app without arguments, so the window
-opens there. `task app:try` runs a local build on a scratch home under `.tmp/`, never your
-`~/.rein` or your keychain. The release of the app is P6.5 on the
+opens there. What removes or overwrites waits for you in the app's window (D53): `rein reset project`,
+`rein reset machine` and `rein sync --force`, from a terminal or an agent, show on its
+Confirmations page with what they will do, and a notification says so; the command waits,
+says where, and runs once you confirm, or ends with nothing changed once you decline or press
+Ctrl-C. `--yes` does not skip it, since an agent types `--yes` as easily as you do. Without the
+app, the terminal asks as before. `task app:try` runs a local build on a scratch home under
+`.tmp/`, never your `~/.rein` or your keychain. The release of the app is P6.5 on the
 [board](implementation_plans/2026-10-11_harness-distribution-tool.md).
 
 ## The MCP server

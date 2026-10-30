@@ -60,6 +60,13 @@ func runSync(environment *commandEnvironment, request orchestration.SyncRequest,
 	if err != nil {
 		return err
 	}
+	if request.Force {
+		// a sync with --force overwrites what was edited by hand, so the app's window confirms it (D53)
+		err = environment.confirmChange([]string{fmt.Sprintf("This will sync %s and overwrite the files edited by hand there, after keeping them in a snapshot.", syncTarget(request))}, "", "", false)
+		if err != nil {
+			return hookOrError(environment, hook, err)
+		}
+	}
 	result, err := orchestrator.SyncClone(request)
 	for _, synced := range result.Clones {
 		printSynced(environment, synced, hook)
@@ -69,6 +76,14 @@ func runSync(environment *commandEnvironment, request orchestration.SyncRequest,
 		printNudge(environment, orchestrator)
 	}
 	return hookOrError(environment, hook, err)
+}
+
+// syncTarget names what a sync covers, as its confirmation says it.
+func syncTarget(request orchestration.SyncRequest) string {
+	if request.All {
+		return "every project clone on this machine"
+	}
+	return request.Directory
 }
 
 // printNudge prints the one line about a newer rein, when there is one and

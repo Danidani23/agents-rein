@@ -31,6 +31,9 @@ type runner struct {
 	mutex     sync.Mutex
 	current   *run
 	interrupt Interrupt
+	// confirmations are the questions the app's window shows; nil in a
+	// browser, where the pages show none.
+	confirmations *Confirmations
 }
 
 // run is one action: its name, its progress as the workflow reports it,

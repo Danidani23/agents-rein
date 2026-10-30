@@ -28,13 +28,15 @@
     <a href="{{.MachineLink}}"{{if eq .Current "machine"}} aria-current="page"{{end}}>This machine</a>
     <a href="{{.ProjectsLink}}"{{if eq .Current "projects"}} aria-current="page"{{end}}>Projects</a>
     {{if .RunName}}<a href="/run" class="run-link"{{if eq .Current "run"}} aria-current="page"{{end}}>{{if .RunActive}}<span class="dot" aria-label="running"></span>{{end}}{{.RunName}}</a>{{end}}
+    {{if .InWindow}}<a href="/confirmations"{{if eq .Current "confirmations"}} aria-current="page"{{end}}>{{if .Waiting}}<span class="dot" aria-label="waiting"></span>{{end}}Confirmations{{if .Waiting}} ({{.Waiting}}){{end}}</a>{{end}}
     <span class="version">{{.Version}}</span>
   </nav>
   <main>
     <h1>{{.Title}}</h1>
 {{if .Problem}}    <p class="notice">{{.Problem}}.</p>
 {{end}}{{template "content" .}}
-    <p class="page-note">Served from this machine at 127.0.0.1 by <code>rein ui</code>; Ctrl-C in its terminal stops it.</p>
+    {{if .InWindow}}<p class="page-note">Shown by rein's app, the background process of this machine; Quit rein in its menu ends it.</p>
+    {{else}}<p class="page-note">Served from this machine at 127.0.0.1 by <code>rein ui</code>; Ctrl-C in its terminal stops it.</p>{{end}}
   </main>
 </div>
 </body>

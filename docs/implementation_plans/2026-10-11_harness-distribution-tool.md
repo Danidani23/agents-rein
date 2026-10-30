@@ -2312,10 +2312,30 @@ keychain and the signing, is checked by you on your machine before the commit.
   every two seconds until the action ends. Checked by you on 2026-10-30: the window, the menu
   bar icon and its menu, and Log in through the window. Not checked: the notifications, whose
   senders are P6.4 and P5, and the start at login.
-- 🟢 **P6.4 — Confirmation in the app.** [PENDING] A reset of a project or of the machine, or a
+- ✅ **P6.4 — Confirmation in the app.** [EXECUTED] A reset of a project or of the machine, or a
   sync with `--force`, asked from the command line waits for a confirmation in the app's
   window, and the CLI says where it waits (D53). Touch ID and Windows Hello are looked into
   here, with their sources. Without the app, the terminal question asks as today.
+
+  Built 2026-10-29, accepted by you on 2026-10-30. The port is
+  `ports.Confirmer`; the window's `web.Confirmations` implements it with a Confirmations page,
+  which only the window serves, never `rein ui` in a browser, whose token an agent can read in
+  the terminal; the CLI's `confirmChange` asks it for each of the three commands, through the
+  `Caller` the app gives each command it runs. A question shows the window at the page and
+  sends a notification with Open, the first sender of P6.3's notifications. Deviations:
+  `--yes` does not skip the window, since an agent types it as easily as a person; `sync
+  --force`, which never asked in the terminal, asks in the window; Ctrl-C while waiting ends
+  the command with nothing changed. Looked into: Touch ID through Apple's LocalAuthentication,
+  whose policy of the device owner authenticates "in macOS with Touch ID, Apple Watch, or the
+  user's password", since macOS 10.11
+  ([Apple](https://developer.apple.com/documentation/localauthentication/lapolicy/deviceownerauthentication)),
+  evaluated by `LAContext.evaluatePolicy`
+  ([Apple](https://developer.apple.com/documentation/localauthentication/lacontext/evaluatepolicy(_:localizedreason:reply:)));
+  Windows Hello through `UserConsentVerifier`, which "performs a verification" with "a
+  Microsoft Passport PIN, Windows Hello biometric, or fingerprint reader", where a desktop app
+  calls `RequestVerificationForWindowAsync` of `IUserConsentVerifierInterop` with its window's
+  handle ([Microsoft](https://learn.microsoft.com/en-us/uwp/api/windows.security.credentials.ui.userconsentverifier)).
+  Both stand behind a click in the window; not built here, P6.8 holds the choice.
 - 🟢 **P6.5 — The app's release.** [PENDING] Built on GitHub's macOS, Windows and Linux
   runners; signed and notarised on macOS, signed through Artifact Signing on Windows, packaged
   as `.deb`, `.rpm` and AppImage on Linux; released together with `rein`. Needs from you
@@ -2349,6 +2369,14 @@ keychain and the signing, is checked by you on your machine before the commit.
   its clone; a lock file naming this very process is taken over as left behind, since only
   the first in line asks for it. The waiting has no time limit: Ctrl-C, Cancel on the page,
   or Claude Code ending a hook it waited too long for, leaves the line.
+
+- 💬 **P6.8 — The confirmation passes the system's own authentication.** [PENDING] Added
+  2026-10-29 from what P6.4 looked into. Confirm in the window asks for Touch ID on macOS and
+  Windows Hello on Windows before the command runs, so a program that clicks for the developer
+  cannot confirm either. Options: (a) both, through cgo on macOS and Windows' COM interface
+  from Go, which the app's Wails already links (`go-ole`); (b) macOS only, the platform
+  checked by you; (c) neither, the click stays enough. Recommended: (b), then Windows with
+  P6.5's signing. Blocks nothing.
 
 ## Open points
 
@@ -3012,6 +3040,12 @@ writes is read from the next session on, not in the same one.
   `task rein:check` green, now with `go vet -tags app` on macOS and Windows; the owner's tests
   five times under the race detector. Left for you: `task app:try`, then the window, the menu
   bar icon and its three items; the commit after that.
+- (2026-10-29) P6.4 built, waiting for your check with P6.3: a reset of a project or of the
+  machine, or a sync with `--force`, waits for a confirmation in the app's window, `--yes`
+  included, and says where it waits; the window shows the question and a notification leads
+  to it. `task rein:check` green with `go vet -tags app`; the window's and the CLI's tests
+  under the race detector. Touch ID and Windows Hello looked into with their sources, P6.8
+  added for the choice.
 - (2026-10-30) P6.3 checked by you on macOS: the window, the menu bar icon and Log in through
   the window, after the fix for the white window. `task rein:check` green. Left for you: the
   commit.

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Danidani23/agents-rein/internal/adapters/execute"
+	"github.com/Danidani23/agents-rein/internal/adapters/fake"
 	"github.com/Danidani23/agents-rein/internal/ports"
 )
 
@@ -137,6 +138,70 @@ func TestRunFor(t *testing.T) {
 		}
 		if code != ExitInterrupted || fixture.lock.Acquired != 0 {
 			t.Fatalf("code %d acquired %d", code, fixture.lock.Acquired)
+		}
+	})
+}
+
+func TestConfirmationInTheAppsWindow(t *testing.T) {
+	t.Run("a reset waits for the window even with --yes, and runs once confirmed", func(t *testing.T) {
+		fixture := newHarness(t)
+		confirmer := &fake.Confirmer{Confirmed: true}
+		folder := t.TempDir()
+		code, out, errOut := fixture.runFor(Caller{Folder: folder, Runner: execute.NewRunner(nil), Confirmer: confirmer}, "reset", "project", "--yes")
+		asked := confirmer.Questions()
+		if len(asked) != 1 || asked[0].Command != "rein reset project --yes" || asked[0].Caller != "a program without a terminal" || asked[0].Folder != folder || !strings.Contains(asked[0].Summary[0], "This will put back the agent's files rein init moved out of "+folder) {
+			t.Fatalf("asked %+v", asked)
+		}
+		if !strings.Contains(errOut, "waiting for your confirmation in rein's window; Ctrl-C stops waiting") || strings.Contains(errOut, "declined") {
+			t.Fatalf("code %d out %q err %q", code, out, errOut)
+		}
+	})
+	t.Run("declined in the window is a refusal, and nothing changed", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.seedConnectedOrganization(t, 1)
+		code, _, errOut := fixture.runFor(Caller{Folder: t.TempDir(), Runner: execute.NewRunner(nil), Confirmer: &fake.Confirmer{}}, "reset", "machine", "--yes")
+		if code != ExitRefused || !strings.Contains(errOut, "declined in rein's window; nothing changed") || len(fixture.state.Current.Organizations) != 1 {
+			t.Fatalf("code %d err %q organizations %v", code, errOut, fixture.state.Current.Organizations)
+		}
+	})
+	t.Run("a sync with --force asks the window, and without the app it asks nothing", func(t *testing.T) {
+		fixture := newHarness(t)
+		confirmer := &fake.Confirmer{}
+		code, _, errOut := fixture.runFor(Caller{Folder: t.TempDir(), Runner: execute.NewRunner(nil), Confirmer: confirmer}, "sync", "--force")
+		if code != ExitRefused || len(confirmer.Questions()) != 1 || !strings.Contains(confirmer.Questions()[0].Summary[0], "overwrite the files edited by hand") {
+			t.Fatalf("with the app: code %d err %q asked %v", code, errOut, confirmer.Questions())
+		}
+		_, _, errOut = fixture.runFor(Caller{Folder: t.TempDir(), Runner: execute.NewRunner(nil)}, "sync", "--force")
+		if strings.Contains(errOut, "confirmation") {
+			t.Fatalf("without the app: err %q", errOut)
+		}
+	})
+	t.Run("a Ctrl-C while the window waits ends the command, nothing changed", func(t *testing.T) {
+		fixture := newHarness(t)
+		fixture.seedConnectedOrganization(t, 1)
+		confirmer := &fake.Confirmer{Confirmed: true, Hold: make(chan struct{})}
+		var outBuffer, errBuffer lockedBuffer
+		caller := Caller{In: strings.NewReader(""), Out: &outBuffer, ErrOut: &errBuffer, Folder: t.TempDir(), Runner: execute.NewRunner(nil), Confirmer: confirmer}
+		interrupts := make(chan struct{}, 1)
+		ended := make(chan (<-chan struct{}), 1)
+		codes := make(chan int, 1)
+		go func() {
+			code, finished := RunFor(caller, []string{"reset", "machine", "--yes"}, interrupts, fixture.orchestrate)
+			ended <- finished
+			codes <- code
+		}()
+		for len(confirmer.Questions()) == 0 {
+			time.Sleep(time.Millisecond)
+		}
+		interrupts <- struct{}{}
+		finished := <-ended
+		select {
+		case <-finished:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("the command still waits for the window")
+		}
+		if code := <-codes; code != ExitInterrupted || len(fixture.state.Current.Organizations) != 1 {
+			t.Fatalf("code %d organizations %v", code, fixture.state.Current.Organizations)
 		}
 	})
 }

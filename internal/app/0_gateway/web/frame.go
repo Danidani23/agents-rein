@@ -34,6 +34,9 @@ type frame struct {
 	// still runs; the menu leads to it.
 	RunName   string
 	RunActive bool
+	// InWindow is set in the app's window, Waiting the questions there.
+	InWindow bool
+	Waiting  int
 	// organization is the chosen organisation, userLogin the chosen login,
 	// query the address's own.
 	organization machine.OrganizationRef
@@ -78,7 +81,7 @@ var templateFunctions = template.FuncMap{
 // organisation.
 func frameOf(request *http.Request, report orchestration.StatusReport, version string, title string, current string, actions *runner) frame {
 	query := request.URL.Query()
-	shown := frame{Title: title, Current: current, Version: version, query: query}
+	shown := frame{Title: title, Current: current, Version: version, query: query, InWindow: actions.confirmations != nil, Waiting: len(actions.confirmations.list())}
 	latest := actions.latest()
 	if latest != nil {
 		shown.RunName, shown.RunActive = latest.Name, !latest.isFinished()

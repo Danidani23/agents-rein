@@ -15,6 +15,7 @@ import (
 	"github.com/Danidani23/agents-rein/internal/adapters/terminal"
 	"github.com/Danidani23/agents-rein/internal/app/0_gateway/cli"
 	"github.com/Danidani23/agents-rein/internal/app/0_gateway/owner"
+	"github.com/Danidani23/agents-rein/internal/ports"
 	"github.com/Danidani23/agents-rein/internal/version"
 )
 
@@ -224,12 +225,17 @@ func serveAsOwner(errOut io.Writer) int {
 	return cli.ExitWorked
 }
 
+// appConfirmer is the app's window, which confirms what removes or
+// overwrites (D53); nil unless this process is the app.
+var appConfirmer ports.Confirmer
+
 // runSession runs one command the background process was sent, for its
 // caller: in the caller's folder, with the caller's environment, its
-// programs stopped by the caller's Ctrl-C.
+// programs stopped by the caller's Ctrl-C, its confirmations in the app's
+// window where this process is the app.
 func runSession(session owner.Session) (int, <-chan struct{}) {
 	runner := execute.NewRunner(session.Environment)
-	caller := cli.Caller{In: session.In, Out: session.Out, ErrOut: session.ErrOut, Terminal: session.Terminal, Folder: session.Folder, Runner: runner}
+	caller := cli.Caller{In: session.In, Out: session.Out, ErrOut: session.ErrOut, Terminal: session.Terminal, Folder: session.Folder, Runner: runner, Confirmer: appConfirmer}
 	return cli.RunFor(caller, session.Arguments, session.Interrupts, wireFor(runner, session.Executable))
 }
 

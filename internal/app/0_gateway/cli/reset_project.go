@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Danidani23/agents-rein/internal/app/1_orchestration"
-	"github.com/Danidani23/agents-rein/internal/app/2_services/refusal"
 )
 
 func newResetProjectCommand(environment *commandEnvironment) *cobra.Command {
@@ -44,19 +43,12 @@ func runResetProject(environment *commandEnvironment, request orchestration.Rest
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(environment.out, "This will put back the agent's files rein init moved out of %s, take the rein block out of\n.gitignore, forget the clone on this machine, and commit the put-back.\n", request.Directory)
-	if !yes {
-		prompter := environment.prompter()
-		if !prompter.CanAsk() {
-			return refusal.New("no terminal to confirm on; pass --yes")
-		}
-		confirmed, err := prompter.Confirm("Continue?", "The files come back from their snapshots in rein's store exactly as they were. The commit holds only the files that were tracked and .gitignore; pushing it is yours. The snapshots stay until rein reset machine.")
-		if err != nil {
-			return refusal.New(err.Error())
-		}
-		if !confirmed {
-			return refusal.New("nothing changed")
-		}
+	summary := fmt.Sprintf("This will put back the agent's files rein init moved out of %s, take the rein block out of\n.gitignore, forget the clone on this machine, and commit the put-back.", request.Directory)
+	fmt.Fprintf(environment.out, "%s\n", summary)
+	explanation := "The files come back from their snapshots in rein's store exactly as they were. The commit holds only the files that were tracked and .gitignore; pushing it is yours. The snapshots stay until rein reset machine."
+	err = environment.confirmChange([]string{summary, explanation}, "Continue?", explanation, yes)
+	if err != nil {
+		return err
 	}
 	result, err := orchestrator.RestoreProject(request)
 	if err != nil {
