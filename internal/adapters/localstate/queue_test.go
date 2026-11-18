@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -153,7 +154,9 @@ func TestQueue(t *testing.T) {
 		queue := newQueue(t)
 		other := Store{Home: queue.Store.Home}
 		lock := other.Home + "/" + lockFile
-		err := os.WriteFile(lock, []byte("1"), 0o644)
+		// the go command that runs this test lives on every system; pid 1 is no process on Windows
+		living := os.Getppid()
+		err := os.WriteFile(lock, []byte(strconv.Itoa(living)), 0o644)
 		if err != nil {
 			t.Fatalf("write: %v", err)
 		}
@@ -161,7 +164,7 @@ func TestQueue(t *testing.T) {
 		defer cancel()
 		first := ask(ctx, queue, "rein sync", "/work/shop")
 		told := first.waitUntilTold(t, 1)
-		if told[0].Holder.Process != 1 {
+		if told[0].Holder.Process != living {
 			t.Fatalf("told %+v", told)
 		}
 		first.waitReturned(t)
