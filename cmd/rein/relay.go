@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -166,9 +167,11 @@ func startOwner(home string, socket string, executable string) error {
 	}
 }
 
-// installedAppFolders are where the app is installed on macOS.
+// installedAppFolders are where the app is installed on macOS, joined
+// with macOS's slash whatever system asks, so a test of macOS holds on
+// every system.
 func installedAppFolders(userHome string) []string {
-	return []string{"/Applications/Rein.app", filepath.Join(userHome, "Applications", "Rein.app")}
+	return []string{"/Applications/Rein.app", path.Join(userHome, "Applications", "Rein.app")}
 }
 
 // startsAtLogin says whether the app at executable registers itself to

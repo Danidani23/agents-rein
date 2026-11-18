@@ -2186,29 +2186,31 @@ func TestAccounts(t *testing.T) {
 }
 
 func TestNotifications(t *testing.T) {
+	// the folders as this system writes them, so a folder inside a clone is found on Windows too
+	native := filepath.FromSlash
 	report := StatusReport{
 		Version:       "v0.1.0",
 		Release:       "v0.2.0",
 		Accounts:      []AccountStatus{{Account: machine.Account{Host: "github", Login: "Danidani23"}, LoggedIn: true}, {Account: machine.Account{Host: "github", Login: "octocat"}, Reason: "no token in the keychain"}},
 		Organizations: []machine.OrganizationRef{{ID: "id-1", Slug: "dani", Login: "Danidani23"}, {ID: "id-2", Slug: "acme", Login: "octocat"}},
-		ProjectClones: []machine.ProjectClone{{Organization: "id-1", ClonePath: "/work/shop"}, {Organization: "id-2", ClonePath: "/work/site"}},
-		Clones:        []CloneStatus{{ProjectClone: machine.ProjectClone{Organization: "id-1", ClonePath: "/work/shop"}}, {ProjectClone: machine.ProjectClone{Organization: "id-2", ClonePath: "/work/site"}}},
-		Pending:       []PendingProposal{{Path: "/work/site/.rein/proposals/a.json"}, {Path: "/home/.rein/proposals/b.json"}},
+		ProjectClones: []machine.ProjectClone{{Organization: "id-1", ClonePath: native("/work/shop")}, {Organization: "id-2", ClonePath: native("/work/site")}},
+		Clones:        []CloneStatus{{ProjectClone: machine.ProjectClone{Organization: "id-1", ClonePath: native("/work/shop")}}, {ProjectClone: machine.ProjectClone{Organization: "id-2", ClonePath: native("/work/site")}}},
+		Pending:       []PendingProposal{{Path: native("/work/site/.rein/proposals/a.json")}, {Path: native("/home/.rein/proposals/b.json")}},
 		Findings: []machine.Finding{
-			{Kind: machine.FindingEdited, Subject: "/work/site", Detail: ".claude/rules/go.md"},
-			{Kind: machine.FindingSynced, Subject: "/work/shop", Detail: "synced"},
-			{Kind: machine.FindingPlacement, Subject: "/home/.claude/skills/x", Detail: "what it points at is gone"},
+			{Kind: machine.FindingEdited, Subject: native("/work/site"), Detail: ".claude/rules/go.md"},
+			{Kind: machine.FindingSynced, Subject: native("/work/shop"), Detail: "synced"},
+			{Kind: machine.FindingPlacement, Subject: native("/home/.claude/skills/x"), Detail: "what it points at is gone"},
 			{Kind: machine.FindingLoggedOut, Subject: "Danidani23", Detail: "GitHub refuses its token; log in again"},
 			{Kind: machine.FindingLoggedOut, Subject: "gone-account", Detail: "GitHub refuses its token; log in again"},
 		},
 	}
-	waiting := []ports.Confirmation{{Command: "rein reset project", Caller: "an agent", Folder: "/work/shop/web"}}
+	waiting := []ports.Confirmation{{Command: "rein reset project", Caller: "an agent", Folder: native("/work/shop/web")}}
 	t.Run("what needs you comes from the accounts, the window, the releases and the check, each with its account", func(t *testing.T) {
 		var listed []string
 		for _, notification := range NotificationsOf(report, waiting) {
 			listed = append(listed, notification.Kind+" "+notification.Account+" "+notification.Subject)
 		}
-		expected := []string{"logged-out octocat octocat", "logged-out Danidani23 Danidani23", "confirmation Danidani23 rein reset project", "release  rein v0.2.0", "edited octocat /work/site", "placement  /home/.claude/skills/x"}
+		expected := []string{"logged-out octocat octocat", "logged-out Danidani23 Danidani23", "confirmation Danidani23 rein reset project", "release  rein v0.2.0", "edited octocat " + native("/work/site"), "placement  " + native("/home/.claude/skills/x")}
 		if strings.Join(listed, "\n") != strings.Join(expected, "\n") {
 			t.Fatalf("listed\n%s", strings.Join(listed, "\n"))
 		}
@@ -2224,7 +2226,7 @@ func TestNotifications(t *testing.T) {
 	})
 	t.Run("one account's report holds its organisations, their clones and proposals, and the home's", func(t *testing.T) {
 		narrowed := FilterByAccount(report, "octocat")
-		if len(narrowed.Accounts) != 1 || len(narrowed.Organizations) != 1 || narrowed.Organizations[0].Slug != "acme" || len(narrowed.Clones) != 1 || narrowed.Clones[0].ClonePath != "/work/site" || len(narrowed.Pending) != 2 {
+		if len(narrowed.Accounts) != 1 || len(narrowed.Organizations) != 1 || narrowed.Organizations[0].Slug != "acme" || len(narrowed.Clones) != 1 || narrowed.Clones[0].ClonePath != native("/work/site") || len(narrowed.Pending) != 2 {
 			t.Fatalf("narrowed %+v", narrowed)
 		}
 		if len(FilterByAccount(report, "").Organizations) != 2 {
